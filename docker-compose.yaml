@@ -1,0 +1,21 @@
+services:
+  claude-sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        HOST_HOME: ${HOME}
+    container_name: claude-sandbox
+    stdin_open: true
+    tty: true
+    volumes:
+      # Map local .claude to node user's home
+      - ${HOME}/.claude:/home/node/.claude
+      # Map to same absolute path as host for plugin compatibility
+      - ${HOME}/.claude:${HOME}/.claude
+      - ${HOME}/.claude-mem:${HOME}/.claude-mem
+      # Workspace for your projects
+      - ${HOME}/playground:/workspace
+      - ${HOME}/.claude-mem:/home/node/.claude-mem
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
