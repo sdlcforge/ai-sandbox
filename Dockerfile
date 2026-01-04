@@ -36,7 +36,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   sudo \
   unzip \
   vim \
-  wget \
   zsh \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -118,5 +117,9 @@ RUN chmod +x /usr/local/bin/init-firewall.sh && \
   chmod 0440 /etc/sudoers.d/node-firewall
 
 USER ${USERNAME}
+
+RUN echo "export PATH=\$PATH:/home/${USERNAME}/.bun/bin" >> /home/${USERNAME}/.zshenv
+RUN echo "PROMPT='%F{red}%~%f %# '" >> /home/${USERNAME}/.zshrc
+RUN echo "source /home/${USERNAME}/.nvm/nvm.sh" >> /home/${USERNAME}/.zshrc
 
 CMD ["/bin/zsh"]

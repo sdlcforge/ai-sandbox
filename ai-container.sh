@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-CMD=${1:-up}
+CMD=${1:-start}
 
-TOOL_CACHE_DIR=./.tool-cache
+export TOOL_CACHE_DIR=./.tool-cache
 mkdir -p ${TOOL_CACHE_DIR}
 
 export HOST_ARCH=$(uname -m)
@@ -39,7 +39,7 @@ function download_tool() {
     fi
 }
 
-if [ "${CMD}" == "up" ]; then
+if [ "${CMD}" == "up" ] || [ "${CMD}" == "start" ]; then
     download_tool "https://go.dev/dl/${GO_TAR}" "${GO_TAR}"
     download_tool "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/${GIT_DELTA_DEB}" "${GIT_DELTA_DEB}"
     download_tool "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" "${NVM_INSTALL_SH}"
@@ -56,16 +56,11 @@ if [ "${CMD}" == "up" ]; then
     # done
 
     # docker compose --project-name ai-sandbox-${CONTAINER_ID} up
-    docker compose up
-elif [ "${CMD}" == "down" ]; then
-    docker compose down
-elif [ "${CMD}" == "logs" ]; then
-    docker compose logs -f
-elif [ "${CMD}" == "attach" ]; then
+fi
+
+if [ "${CMD}" == "start" ]; then
+    docker compose up -d
     docker compose exec ai-sandbox zsh
-elif [ "${CMD}" == "status" ]; then
-    docker compose ps
 else
-    echo "Invalid command: ${CMD}"
-    exit 1
+    docker compose "$@"
 fi
