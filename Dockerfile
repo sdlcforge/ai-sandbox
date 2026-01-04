@@ -1,13 +1,25 @@
-FROM node:20
-
-ARG TZ
-ENV TZ="$TZ"
+FROM ubuntu:latest
 
 ARG CLAUDE_CODE_VERSION=latest
+ARG HOST_ARCH
+ARG HOST_HOME
+ARG HOST_TZ
+ARG GO_VERSION
+ARG USERNAME=appuser
+ARG USER_GROUP=appgroup
+ARG GO_TAR
+ARG GIT_DELTA_DEB
+ARG NVM_INSTALL_SH
+ARG BUN_INSTALL_SH
+ARG ZSH_IN_DOCKER_SH
+
+ENV TZ="$HOST_TZ"
 
 # Install basic development tools and iptables/ipset
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  aggregate \  
+  aggregate \
+  ca-certificates \
+  curl \
   dnsutils \
   fzf \
   gh \
@@ -19,64 +31,40 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   jq \
   less \
   man-db \
-  nano \
   procps \
   sudo \
   unzip \
   vim \
+  wget \
   zsh \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Ensure default node user has access to /usr/local/share
-RUN mkdir -p /usr/local/share/npm-global && \
-  chown -R node:node /usr/local/share
+WORKDIR /root
 
-ARG USERNAME=node
+# Install latest go globally as root
+COPY ${GO_TAR} /root/${GO_TAR}
+RUN tar -xzf ${GO_TAR} -C /usr/local && rm ${GO_TAR}
+RUN ln -s /usr/local/go/bin/go /usr/local/bin/go
+
+COPY ${GIT_DELTA_DEB} /root/${GIT_DELTA_DEB}
+RUN dpkg -i ${GIT_DELTA_DEB} && rm ${GIT_DELTA_DEB}
+
+# Create a new non-root user and group
+# -m ensures a home directory is created
+RUN groupadd -r ${USER_GROUP} && useradd -r -g ${USER_GROUP} -m ${USERNAME}
+
+# set up location location for absolute directory references
+RUN mkdir -p ${HOST_HOME}/ && chown -R ${USERNAME}:${USER_GROUP} ${HOST_HOME}
+RUN mkdir -p /commandhistory && chown -R ${USERNAME}:${USER_GROUP} /commandhistory
 
 # Persist bash history.
 RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
-  && mkdir /commandhistory \
   && touch /commandhistory/.bash_history \
   && chown -R $USERNAME /commandhistory
 
-# Set `DEVCONTAINER` environment variable to help with orientation
-ENV DEVCONTAINER=true
-
-# Create workspace directory and set permissions
-RUN mkdir -p /workspace && \
-  chown -R node:node /workspace
-
-# Create host home directory structure for absolute path compatibility
-# This allows plugins with absolute paths to resolve correctly
-ARG HOST_HOME=/Users/zane
-RUN mkdir -p ${HOST_HOME}/.claude && \
-  chown -R node:node ${HOST_HOME}
-
-WORKDIR /workspace
-
-ARG GIT_DELTA_VERSION=0.18.2
-RUN ARCH=$(dpkg --print-architecture) && \
-  wget "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
-  sudo dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
-  rm "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"
-
-# Set up non-root user
-USER node
-
-# Install global packages
-ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
-ENV PATH=$PATH:/usr/local/share/npm-global/bin
-
-# Set the default shell to zsh rather than sh
-ENV SHELL=/bin/zsh
-
-# Set the default editor and visual
-ENV EDITOR=nano
-ENV VISUAL=nano
-
 # Default powerline10k theme
-ARG ZSH_IN_DOCKER_VERSION=1.2.0
-RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v${ZSH_IN_DOCKER_VERSION}/zsh-in-docker.sh)" -- \
+COPY ${ZSH_IN_DOCKER_SH} /root/${ZSH_IN_DOCKER_SH}
+RUN bash ${ZSH_IN_DOCKER_SH} -- \
   -p git \
   -p fzf \
   -a "source /usr/share/doc/fzf/examples/key-bindings.zsh" \
@@ -84,9 +72,42 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
   -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
   -x
 
-# Install Claude
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+USER ${USERNAME}
+WORKDIR /home/${USERNAME}
 
+COPY ${NVM_INSTALL_SH} /home/${USERNAME}/${NVM_INSTALL_SH}
+RUN bash ${NVM_INSTALL_SH} && rm ${NVM_INSTALL_SH}
+RUN bash -c "source /home/${USERNAME}/.nvm/nvm.sh && nvm install --lts"
+
+COPY ${BUN_INSTALL_SH} /home/${USERNAME}/${BUN_INSTALL_SH}
+RUN bash ${BUN_INSTALL_SH} && rm ${BUN_INSTALL_SH}
+
+# Set `DEVCONTAINER` environment variable to help with orientation
+ENV DEVCONTAINER=true
+
+# Create workspace directory and set permissions
+RUN mkdir -p /home/${USERNAME}/workspace
+
+# Create host home directory structure for absolute path compatibility
+# This allows plugins with absolute paths to resolve correctly
+RUN ln -s /home/${USERNAME}/.claude ${HOST_HOME}/.claude && \
+  ln -s /home/${USERNAME}/.claude-mem ${HOST_HOME}/.claude-mem
+
+WORKDIR /home/${USERNAME}/workspace
+
+# Install global packages
+# ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
+#ENV PATH=$PATH:/usr/local/share/npm-global/bin
+
+# Set the default shell to zsh rather than sh
+ENV SHELL=/bin/zsh
+
+# Set the default editor and visual
+ENV EDITOR=vim
+ENV VISUAL=vim
+
+# Install Claude
+RUN /home/${USERNAME}/.bun/bin/bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/
@@ -94,6 +115,7 @@ USER root
 RUN chmod +x /usr/local/bin/init-firewall.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
-USER node
+
+USER ${USERNAME}
 
 CMD ["/bin/zsh"]

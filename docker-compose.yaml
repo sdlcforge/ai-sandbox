@@ -1,21 +1,33 @@
 services:
-  claude-sandbox:
+  ai-sandbox:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        HOST_HOME: ${HOME}
+        # Host environment variables
+        HOST_ARCH: ${HOST_ARCH}
+        HOST_HOME: ${HOST_HOME}
+        HOST_TZ: ${HOST_TZ}
+        USERNAME: ${USERNAME}
+        # Tool versions
+        GIT_DELTA_VERSION: ${GIT_DELTA_VERSION}
+        GO_VERSION: ${GO_VERSION}
+        NVM_VERSION: ${NVM_VERSION}
+        ZSH_IN_DOCKER_VERSION: ${ZSH_IN_DOCKER_VERSION}
+        BUN_INSTALL_SH: ${BUN_INSTALL_SH}
+        GO_TAR: ${GO_TAR}
+        GIT_DELTA_DEB: ${GIT_DELTA_DEB}
+        NVM_INSTALL_SH: ${NVM_INSTALL_SH}
+        ZSH_IN_DOCKER_SH: ${ZSH_IN_DOCKER_SH}
     container_name: claude-sandbox
     stdin_open: true
     tty: true
     volumes:
       # Map local .claude to node user's home
-      - ${HOME}/.claude:/home/node/.claude
+      - ${HOST_HOME}/.claude:/home/${USERNAME}/.claude
       # Map to same absolute path as host for plugin compatibility
-      - ${HOME}/.claude:${HOME}/.claude
-      - ${HOME}/.claude-mem:${HOME}/.claude-mem
+      - ${HOST_HOME}/.claude-mem:/home/${USERNAME}/.claude-mem
       # Workspace for your projects
-      - ${HOME}/playground:/workspace
-      - ${HOME}/.claude-mem:/home/node/.claude-mem
+      - ${HOST_HOME}/playground:/home/${USERNAME}/workspace
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
