@@ -1,6 +1,7 @@
 FROM ubuntu:latest
 
 ARG CLAUDE_CODE_VERSION=latest
+ARG TOOL_CACHE_DIR
 ARG HOST_ARCH
 ARG HOST_HOME
 ARG HOST_TZ
@@ -42,11 +43,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /root
 
 # Install latest go globally as root
-COPY ${GO_TAR} /root/${GO_TAR}
+COPY ${TOOL_CACHE_DIR}/${GO_TAR} /root/${GO_TAR}
 RUN tar -xzf ${GO_TAR} -C /usr/local && rm ${GO_TAR}
 RUN ln -s /usr/local/go/bin/go /usr/local/bin/go
 
-COPY ${GIT_DELTA_DEB} /root/${GIT_DELTA_DEB}
+COPY ${TOOL_CACHE_DIR}/${GIT_DELTA_DEB} /root/${GIT_DELTA_DEB}
 RUN dpkg -i ${GIT_DELTA_DEB} && rm ${GIT_DELTA_DEB}
 
 # Create a new non-root user and group
@@ -63,7 +64,7 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
   && chown -R $USERNAME /commandhistory
 
 # Default powerline10k theme
-COPY ${ZSH_IN_DOCKER_SH} /root/${ZSH_IN_DOCKER_SH}
+COPY ${TOOL_CACHE_DIR}/${ZSH_IN_DOCKER_SH} /root/${ZSH_IN_DOCKER_SH}
 RUN bash ${ZSH_IN_DOCKER_SH} -- \
   -p git \
   -p fzf \
@@ -75,11 +76,11 @@ RUN bash ${ZSH_IN_DOCKER_SH} -- \
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
-COPY ${NVM_INSTALL_SH} /home/${USERNAME}/${NVM_INSTALL_SH}
+COPY ${TOOL_CACHE_DIR}/${NVM_INSTALL_SH} /home/${USERNAME}/${NVM_INSTALL_SH}
 RUN bash ${NVM_INSTALL_SH} && rm ${NVM_INSTALL_SH}
 RUN bash -c "source /home/${USERNAME}/.nvm/nvm.sh && nvm install --lts"
 
-COPY ${BUN_INSTALL_SH} /home/${USERNAME}/${BUN_INSTALL_SH}
+COPY ${TOOL_CACHE_DIR}/${BUN_INSTALL_SH} /home/${USERNAME}/${BUN_INSTALL_SH}
 RUN bash ${BUN_INSTALL_SH} && rm ${BUN_INSTALL_SH}
 
 # Set `DEVCONTAINER` environment variable to help with orientation

@@ -19,7 +19,8 @@ services:
         GIT_DELTA_DEB: ${GIT_DELTA_DEB}
         NVM_INSTALL_SH: ${NVM_INSTALL_SH}
         ZSH_IN_DOCKER_SH: ${ZSH_IN_DOCKER_SH}
-    container_name: claude-sandbox
+        TOOL_CACHE_DIR: ${TOOL_CACHE_DIR}
+    container_name: ai-sandbox
     stdin_open: true
     tty: true
     volumes:

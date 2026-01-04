@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+CMD=${1:-up}
+
+TOOL_CACHE_DIR=./.tool-cache
+mkdir -p ${TOOL_CACHE_DIR}
+
 export HOST_ARCH=$(uname -m)
 export HOST_HOME=${HOME}
 export HOST_TZ=$(date +%Z)
@@ -21,33 +26,46 @@ export NVM_INSTALL_SH=nvm-install-${NVM_VERSION}.sh
 export BUN_INSTALL_SH=bun-install-${BUN_VERSION}.sh
 export ZSH_IN_DOCKER_SH=zsh-in-docker-${ZSH_IN_DOCKER_VERSION}.sh
 
+export DOCKER_DEFAULT_PLATFORM=linux/${HOST_ARCH}
+
 function download_tool() {
     local url=$1
     local file=$2
-    if [ ! -f "${file}" ]; then
+    if [ ! -f "${TOOL_CACHE_DIR}/${file}" ]; then
         echo "Downloading ${file}..."
-        curl --progress-bar -f -SL ${url} -o ${file}
+        curl --progress-bar -f -SL ${url} -o ${TOOL_CACHE_DIR}/${file}
     else
         echo "${file} already exists, skipping download"
     fi
 }
 
-download_tool "https://go.dev/dl/${GO_TAR}" "${GO_TAR}"
-download_tool "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/${GIT_DELTA_DEB}" "${GIT_DELTA_DEB}"
-download_tool "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" "${NVM_INSTALL_SH}"
-download_tool "https://bun.com/install" "${BUN_INSTALL_SH}"
-download_tool "https://github.com/deluan/zsh-in-docker/releases/download/${ZSH_IN_DOCKER_VERSION}/zsh-in-docker.sh" "${ZSH_IN_DOCKER_SH}"
+if [ "${CMD}" == "up" ]; then
+    download_tool "https://go.dev/dl/${GO_TAR}" "${GO_TAR}"
+    download_tool "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/${GIT_DELTA_DEB}" "${GIT_DELTA_DEB}"
+    download_tool "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" "${NVM_INSTALL_SH}"
+    download_tool "https://bun.com/install" "${BUN_INSTALL_SH}"
+    download_tool "https://github.com/deluan/zsh-in-docker/releases/download/${ZSH_IN_DOCKER_VERSION}/zsh-in-docker.sh" "${ZSH_IN_DOCKER_SH}"
 
-# ALPHABET="abcdefghijklmnopqrstuvwxyz"
-# ID_LEN=4
-#CONTAINER_ID=""
-#
-# for i in $(seq 1 ${ID_LEN}); do
-#     CHAR="${ALPHABET:$(( RANDOM % ${#ALPHABET} )):1}"
-#     CONTAINER_ID="${CONTAINER_ID}${CHAR}"
-# done
+    # ALPHABET="abcdefghijklmnopqrstuvwxyz"
+    # ID_LEN=4
+    #CONTAINER_ID=""
+    #
+    # for i in $(seq 1 ${ID_LEN}); do
+    #     CHAR="${ALPHABET:$(( RANDOM % ${#ALPHABET} )):1}"
+    #     CONTAINER_ID="${CONTAINER_ID}${CHAR}"
+    # done
 
-export DOCKER_DEFAULT_PLATFORM=linux/${HOST_ARCH}
-
-# docker compose --project-name ai-sandbox-${CONTAINER_ID} up
-docker compose up
+    # docker compose --project-name ai-sandbox-${CONTAINER_ID} up
+    docker compose up
+elif [ "${CMD}" == "down" ]; then
+    docker compose down
+elif [ "${CMD}" == "logs" ]; then
+    docker compose logs -f
+elif [ "${CMD}" == "attach" ]; then
+    docker compose exec ai-sandbox zsh
+elif [ "${CMD}" == "status" ]; then
+    docker compose ps
+else
+    echo "Invalid command: ${CMD}"
+    exit 1
+fi
