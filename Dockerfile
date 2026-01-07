@@ -75,6 +75,7 @@ RUN bash ${ZSH_IN_DOCKER_SH} -- \
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
+COPY ${TOOL_CACHE_DIR}/.claude.json /home/${USERNAME}/.claude.json
 COPY ${TOOL_CACHE_DIR}/${NVM_INSTALL_SH} /home/${USERNAME}/${NVM_INSTALL_SH}
 RUN bash ${NVM_INSTALL_SH} && rm ${NVM_INSTALL_SH}
 RUN bash -c "source /home/${USERNAME}/.nvm/nvm.sh && nvm install --lts"

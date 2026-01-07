@@ -26,7 +26,8 @@ services:
     volumes:
       # Map local .claude to node user's home
       - ${HOST_HOME}/.claude:/home/${USERNAME}/.claude
-      - ${HOST_HOME}/.claude.json:/home/${USERNAME}/.claude.json
+      # v This does not work because claude (or a hook) tries to copy and overwrite it, which breaks things
+      # - ${HOST_HOME}/.claude.json:/home/${USERNAME}/.claude.json
       # Map to same absolute path as host for plugin compatibility
       - ${HOST_HOME}/.claude-mem:/home/${USERNAME}/.claude-mem
       # Workspace for your projects

@@ -39,12 +39,15 @@ function download_tool() {
     fi
 }
 
-if [ "${CMD}" == "up" ] || [ "${CMD}" == "start" ]; then
+if [ "${CMD}" == "up" ] || [ "${CMD}" == "start" || "${CMD}" == "build" ]; then
     download_tool "https://go.dev/dl/${GO_TAR}" "${GO_TAR}"
     download_tool "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/${GIT_DELTA_DEB}" "${GIT_DELTA_DEB}"
     download_tool "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" "${NVM_INSTALL_SH}"
     download_tool "https://bun.com/install" "${BUN_INSTALL_SH}"
     download_tool "https://github.com/deluan/zsh-in-docker/releases/download/${ZSH_IN_DOCKER_VERSION}/zsh-in-docker.sh" "${ZSH_IN_DOCKER_SH}"
+
+    # Copy .claude.json into build context (Docker COPY can't access files outside context)
+    cp ${HOST_HOME}/.claude.json ${TOOL_CACHE_DIR}/.claude.json
 
     # ALPHABET="abcdefghijklmnopqrstuvwxyz"
     # ID_LEN=4
