@@ -91,7 +91,8 @@ RUN mkdir -p /home/${USERNAME}/workspace
 # Create host home directory structure for absolute path compatibility
 # This allows plugins with absolute paths to resolve correctly
 RUN ln -s /home/${USERNAME}/.claude ${HOST_HOME}/.claude && \
-  ln -s /home/${USERNAME}/.claude-mem ${HOST_HOME}/.claude-mem
+  ln -s /home/${USERNAME}/.claude-mem ${HOST_HOME}/.claude-mem && \
+  ln -s /home/${USERNAME}/workspace ${HOST_HOME}/playground
 
 WORKDIR /home/${USERNAME}/workspace
 
