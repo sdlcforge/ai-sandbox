@@ -30,6 +30,7 @@ services:
       # - ${HOST_HOME}/.claude.json:/home/${USERNAME}/.claude.json
       # Map to same absolute path as host for plugin compatibility
       - ${HOST_HOME}/.claude-mem:/home/${USERNAME}/.claude-mem
+      - ${HOST_HOME}/.local:/home/${USERNAME}/.local
       # Workspace for your projects
       - ${HOST_HOME}/playground:/home/${USERNAME}/workspace
     environment:
