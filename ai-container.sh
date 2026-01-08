@@ -39,7 +39,7 @@ function download_tool() {
     fi
 }
 
-if [ "${CMD}" == "up" ] || [ "${CMD}" == "start" || "${CMD}" == "build" ]; then
+if [ "${CMD}" == "up" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; then
     download_tool "https://go.dev/dl/${GO_TAR}" "${GO_TAR}"
     download_tool "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/${GIT_DELTA_DEB}" "${GIT_DELTA_DEB}"
     download_tool "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" "${NVM_INSTALL_SH}"
@@ -63,6 +63,8 @@ fi
 
 if [ "${CMD}" == "start" ]; then
     docker compose up -d
+    docker compose exec ai-sandbox zsh
+elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
     docker compose exec ai-sandbox zsh
 else
     docker compose "$@"
