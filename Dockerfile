@@ -120,7 +120,7 @@ RUN chmod +x /usr/local/bin/init-firewall.sh && \
 
 USER ${USERNAME}
 
-RUN echo "export PATH=\$PATH:/home/${USERNAME}/.bun/bin" >> /home/${USERNAME}/.zshenv
+RUN echo "export PATH=\$PATH:/home/${USERNAME}/.bun/bin:/home/${USERNAME}/.local/bin" >> /home/${USERNAME}/.zshenv
 RUN echo "PROMPT='%F{red}%~%f %# '" >> /home/${USERNAME}/.zshrc
 RUN echo "source /home/${USERNAME}/.nvm/nvm.sh" >> /home/${USERNAME}/.zshrc
 
