@@ -1,22 +1,6 @@
 FROM ubuntu:latest
 
-ARG CLAUDE_CODE_VERSION=latest
-ARG TOOL_CACHE_DIR
-ARG HOST_ARCH
-ARG HOST_HOME
-ARG HOST_TZ
-ARG GO_VERSION
-ARG USERNAME=appuser
-ARG USER_GROUP=appgroup
-ARG GO_TAR
-ARG GIT_DELTA_DEB
-ARG NVM_INSTALL_SH
-ARG BUN_INSTALL_SH
-ARG ZSH_IN_DOCKER_SH
-
-ENV TZ="$HOST_TZ"
-
-# Install basic development tools and iptables/ipset
+# === LAYER 1: Base packages (no ARGs, most stable) ===
 RUN apt-get update && apt-get install -y --no-install-recommends \
   aggregate \
   ca-certificates \
@@ -39,30 +23,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   zsh \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# === LAYER 2: Timezone (rarely changes) ===
+ARG HOST_TZ
+ENV TZ="$HOST_TZ"
+
 WORKDIR /root
 
-# Install latest go globally as root
+# === LAYER 3: Go installation ===
+ARG TOOL_CACHE_DIR
+ARG GO_TAR
 COPY ${TOOL_CACHE_DIR}/${GO_TAR} /root/${GO_TAR}
 RUN tar -xzf ${GO_TAR} -C /usr/local && rm ${GO_TAR}
 RUN ln -s /usr/local/go/bin/go /usr/local/bin/go
 
+# === LAYER 4: Git Delta ===
+ARG GIT_DELTA_DEB
 COPY ${TOOL_CACHE_DIR}/${GIT_DELTA_DEB} /root/${GIT_DELTA_DEB}
 RUN dpkg -i ${GIT_DELTA_DEB} && rm ${GIT_DELTA_DEB}
 
-# Create a new non-root user and group
-# -m ensures a home directory is created
-RUN groupadd -r ${USER_GROUP} && useradd -r -g ${USER_GROUP} -m ${USERNAME}
-
-# set up location location for absolute directory references
-RUN mkdir -p ${HOST_HOME}/ && chown -R ${USERNAME}:${USER_GROUP} ${HOST_HOME}
-RUN mkdir -p /commandhistory && chown -R ${USERNAME}:${USER_GROUP} /commandhistory
-
-# Persist bash history.
-RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
-  && touch /commandhistory/.bash_history \
-  && chown -R $USERNAME /commandhistory
-
-# Default powerline10k theme
+# === LAYER 5: Zsh-in-docker (root setup) ===
+ARG ZSH_IN_DOCKER_SH
 COPY ${TOOL_CACHE_DIR}/${ZSH_IN_DOCKER_SH} /root/${ZSH_IN_DOCKER_SH}
 RUN bash ${ZSH_IN_DOCKER_SH} -- \
   -p git \
@@ -72,56 +52,54 @@ RUN bash ${ZSH_IN_DOCKER_SH} -- \
   -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
   -x
 
-USER ${USERNAME}
-WORKDIR /home/${USERNAME}
+# === LAYER 6: User creation (changes per machine) ===
+ARG HOST_USER
+ARG HOST_HOME
+RUN groupadd -r ${HOST_USER} && useradd -r -g ${HOST_USER} -d ${HOST_HOME} -m ${HOST_USER}
+RUN mkdir -p /commandhistory && chown -R ${HOST_USER}:${HOST_USER} /commandhistory
+RUN touch /commandhistory/.bash_history && chown -R ${HOST_USER} /commandhistory
 
-COPY ${TOOL_CACHE_DIR}/.claude.json /home/${USERNAME}/.claude.json
-COPY ${TOOL_CACHE_DIR}/${NVM_INSTALL_SH} /home/${USERNAME}/${NVM_INSTALL_SH}
+USER ${HOST_USER}
+WORKDIR ${HOST_HOME}
+
+# === LAYER 7: NVM + Node ===
+ARG NVM_INSTALL_SH
+COPY ${TOOL_CACHE_DIR}/${NVM_INSTALL_SH} ${HOST_HOME}/${NVM_INSTALL_SH}
 RUN bash ${NVM_INSTALL_SH} && rm ${NVM_INSTALL_SH}
-RUN bash -c "source /home/${USERNAME}/.nvm/nvm.sh && nvm install --lts"
+RUN bash -c "source ${HOST_HOME}/.nvm/nvm.sh && nvm install --lts"
 
-COPY ${TOOL_CACHE_DIR}/${BUN_INSTALL_SH} /home/${USERNAME}/${BUN_INSTALL_SH}
+# === LAYER 8: Bun ===
+ARG BUN_INSTALL_SH
+COPY ${TOOL_CACHE_DIR}/${BUN_INSTALL_SH} ${HOST_HOME}/${BUN_INSTALL_SH}
 RUN bash ${BUN_INSTALL_SH} && rm ${BUN_INSTALL_SH}
 
-# Set `DEVCONTAINER` environment variable to help with orientation
+# === LAYER 9: Workspace & environment setup ===
+RUN mkdir -p ${HOST_HOME}/playground
 ENV DEVCONTAINER=true
-
-# Create workspace directory and set permissions
-RUN mkdir -p /home/${USERNAME}/workspace
-
-# Create host home directory structure for absolute path compatibility
-# This allows plugins with absolute paths to resolve correctly
-RUN ln -s /home/${USERNAME}/.claude ${HOST_HOME}/.claude && \
-  ln -s /home/${USERNAME}/.claude-mem ${HOST_HOME}/.claude-mem && \
-  ln -s /home/${USERNAME}/workspace ${HOST_HOME}/playground
-
-WORKDIR /home/${USERNAME}/workspace
-
-# Install global packages
-# ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
-#ENV PATH=$PATH:/usr/local/share/npm-global/bin
-
-# Set the default shell to zsh rather than sh
 ENV SHELL=/bin/zsh
-
-# Set the default editor and visual
 ENV EDITOR=vim
 ENV VISUAL=vim
 
-# Install Claude
-RUN /home/${USERNAME}/.bun/bin/bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+WORKDIR ${HOST_HOME}/playground
 
-# Copy and set up firewall script
+# === LAYER 10: Claude Code (changes most frequently) ===
+ARG CLAUDE_CODE_VERSION=latest
+RUN ${HOST_HOME}/.bun/bin/bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+
+# === LAYER 11: Firewall setup (root) ===
 COPY init-firewall.sh /usr/local/bin/
 USER root
 RUN chmod +x /usr/local/bin/init-firewall.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 
-USER ${USERNAME}
+# === LAYER 12: Shell config ===
+USER ${HOST_USER}
+RUN echo "export PATH=\$PATH:${HOST_HOME}/.bun/bin:${HOST_HOME}/.local/bin" >> ${HOST_HOME}/.zshenv
+RUN echo "PROMPT='%F{red}%~%f %# '" >> ${HOST_HOME}/.zshrc
+RUN echo "source ${HOST_HOME}/.nvm/nvm.sh" >> ${HOST_HOME}/.zshrc
 
-RUN echo "export PATH=\$PATH:/home/${USERNAME}/.bun/bin:/home/${USERNAME}/.local/bin" >> /home/${USERNAME}/.zshenv
-RUN echo "PROMPT='%F{red}%~%f %# '" >> /home/${USERNAME}/.zshrc
-RUN echo "source /home/${USERNAME}/.nvm/nvm.sh" >> /home/${USERNAME}/.zshrc
+# === LAYER 13: Copy claude.json (may change often) ===
+COPY ${TOOL_CACHE_DIR}/.claude.json ${HOST_HOME}/.claude.json
 
 CMD ["/bin/zsh"]

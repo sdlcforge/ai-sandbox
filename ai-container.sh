@@ -10,7 +10,7 @@ mkdir -p ${TOOL_CACHE_DIR}
 export HOST_ARCH=$(uname -m)
 export HOST_HOME=${HOME}
 export HOST_TZ=$(date +%Z)
-export USERNAME=appuser
+export HOST_USER=${USER}
 
 export BUN_VERSION=$(curl -sL https://api.github.com/repos/oven-sh/bun/releases/latest | jq -r .name | cut -d' ' -f2)
 export GIT_DELTA_VERSION=$(curl -sL https://api.github.com/repos/dandavison/delta/releases/latest | jq -r .name)
