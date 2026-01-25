@@ -113,6 +113,7 @@ USER ${HOST_USER}
 RUN echo "export PATH=\$PATH:${HOST_HOME}/.bun/bin:${HOST_HOME}/.local/bin" >> ${HOST_HOME}/.zshenv
 RUN echo "PROMPT='%F{red}%~%f %# '" >> ${HOST_HOME}/.zshrc
 RUN echo "source ${HOST_HOME}/.nvm/nvm.sh" >> ${HOST_HOME}/.zshrc
+RUN echo "alias claude-unchained='claude --dangerously-skip-permissions'" >> ${HOST_HOME}/.zshrc
 
 # === LAYER 12b: Git config ===
 ARG GIT_USER_NAME
