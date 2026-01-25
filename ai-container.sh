@@ -17,10 +17,6 @@ if ! check_docker; then
     check_docker || exit 1
 fi
 
-# Ensure claude-mem is configured for container access
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"${SCRIPT_DIR}/scripts/check-claude-mem-settings.sh"
-
 # Parse --no-chromium flag
 NO_CHROMIUM=false
 ARGS=()
@@ -33,6 +29,26 @@ for arg in "$@"; do
 done
 
 CMD=${ARGS[0]:-start}
+
+# Ensure claude-mem is configured for container access
+if [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    "${SCRIPT_DIR}/scripts/check-claude-mem-settings.sh"
+fi
+
+# Check if claude-mem is running on the host (would cause database corruption if container also runs it)
+if [ "${CMD}" == "start" ] && claude-mem status 2>/dev/null | grep -q "is running"; then
+    echo ""
+    echo "WARNING: claude-mem is currently running on the host."
+    echo "Running claude-mem in both the host and container can cause database corruption."
+    echo ""
+    echo "Please:"
+    echo "  1. Exit any Claude Code sessions on the host"
+    echo "  2. Run 'claude-mem stop' to stop the host instance"
+    echo "  3. Then run this script again"
+    echo ""
+    exit 1
+fi
 
 # Validate --no-chromium only used with build command
 if [ "$NO_CHROMIUM" = "true" ] && [ "$CMD" != "build" ]; then
@@ -48,7 +64,7 @@ else
 fi
 
 # XQuartz setup for macOS (required for GUI apps in container)
-if [ "$(uname)" = "Darwin" ]; then
+if [ "${CMD}" == "start" ] && [ "$(uname)" = "Darwin" ]; then
     if ! pgrep -xi "XQuartz" > /dev/null; then
         if [ -d "/Applications/Utilities/XQuartz.app" ]; then
             echo "XQuartz is installed but not running."
