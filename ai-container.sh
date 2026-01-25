@@ -103,14 +103,25 @@ export NVM_VERSION=$(curl -fsL https://api.github.com/repos/nvm-sh/nvm/releases/
     basename $(ls -1 .tool-cache/nvm-install-*.sh | sort -V | tail -n1 | cut -d'-' -f4) '.sh')
 export ZSH_IN_DOCKER_VERSION=$(curl -fsL https://api.github.com/repos/deluan/zsh-in-docker/releases/latest | jq -r .name || \
     basename $(ls -1 .tool-cache/zsh-in-docker-*.sh | sort -V | tail -n1 | cut -d'-' -f5) '.sh')
+export S6_OVERLAY_VERSION=$(curl -fsL https://api.github.com/repos/just-containers/s6-overlay/releases/latest | jq -r .tag_name | sed 's/^v//' || \
+    basename $(ls -1 .tool-cache/s6-overlay-noarch-*.tar.xz | sort -V | tail -n1) | sed 's/s6-overlay-noarch-\(.*\)\.tar\.xz/\1/')
 
 # Download tools; for some reason this can be really slow when run from the Dockerfile, so we do it here; this also
 # caches the files, which is useful for development and other edge cases
+export S6_NOARCH_TAR=s6-overlay-noarch-${S6_OVERLAY_VERSION}.tar.xz
+# Map HOST_ARCH to s6-overlay naming convention (arm64 -> aarch64)
+S6_ARCH=$([[ "$HOST_ARCH" == "arm64" ]] && echo "aarch64" || echo "$HOST_ARCH")
+export S6_ARCH_TAR=s6-overlay-${S6_ARCH}-${S6_OVERLAY_VERSION}.tar.xz
 export GO_TAR=${GO_VERSION}.linux-${HOST_ARCH}.tar.gz
 export GIT_DELTA_DEB=git-delta_${GIT_DELTA_VERSION}_${HOST_ARCH}.deb
 export NVM_INSTALL_SH=nvm-install-${NVM_VERSION}.sh
 export BUN_INSTALL_SH=bun-install-${BUN_VERSION}.sh
 export ZSH_IN_DOCKER_SH=zsh-in-docker-${ZSH_IN_DOCKER_VERSION}.sh
+
+# Map HOST_ARCH to s6-overlay naming convention (arm64 -> aarch64)
+S6_ARCH=$([ "$HOST_ARCH" = "x86_64" ] && echo "x86_64" || echo "aarch64")
+export S6_NOARCH_TAR=s6-overlay-noarch-${S6_OVERLAY_VERSION}.tar.xz
+export S6_ARCH_TAR=s6-overlay-${S6_ARCH}-${S6_OVERLAY_VERSION}.tar.xz
 
 export DOCKER_DEFAULT_PLATFORM=linux/${HOST_ARCH}
 
@@ -131,6 +142,8 @@ if [ "${CMD}" == "up" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; t
     download_tool "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" "${NVM_INSTALL_SH}"
     download_tool "https://bun.com/install" "${BUN_INSTALL_SH}"
     download_tool "https://github.com/deluan/zsh-in-docker/releases/download/${ZSH_IN_DOCKER_VERSION}/zsh-in-docker.sh" "${ZSH_IN_DOCKER_SH}"
+    download_tool "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" "${S6_NOARCH_TAR}"
+    download_tool "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" "${S6_ARCH_TAR}"
 
     # Copy .claude.json into build context (Docker COPY can't access files outside context)
     cp ${HOST_HOME}/.claude.json ${TOOL_CACHE_DIR}/.claude.json
@@ -149,11 +162,11 @@ fi
 
 if [ "${CMD}" == "start" ]; then
     docker compose ${COMPOSE_FILES} up -d
-    docker compose ${COMPOSE_FILES} exec ai-sandbox zsh
+    docker compose ${COMPOSE_FILES} exec -u ${HOST_USER} ai-sandbox zsh
 elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
-    docker compose ${COMPOSE_FILES} exec ai-sandbox zsh
+    docker compose ${COMPOSE_FILES} exec -u ${HOST_USER} ai-sandbox zsh
 elif [ "${CMD}" == "build" ]; then
-    docker compose ${COMPOSE_FILES} build --ssh default=${SSH_AUTH_SOCK}
+    docker compose ${COMPOSE_FILES} build --ssh default=${SSH_AUTH_SOCK} # --progress=plain
 else
     docker compose ${COMPOSE_FILES} "${ARGS[@]}"
 fi

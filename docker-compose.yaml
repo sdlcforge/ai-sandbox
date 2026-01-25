@@ -10,6 +10,8 @@ services:
         HOST_TZ: ${HOST_TZ}
         HOST_USER: ${HOST_USER}
         # Tool versions
+        S6_NOARCH_TAR: ${S6_NOARCH_TAR}
+        S6_ARCH_TAR: ${S6_ARCH_TAR}
         GIT_DELTA_VERSION: ${GIT_DELTA_VERSION}
         GO_VERSION: ${GO_VERSION}
         NVM_VERSION: ${NVM_VERSION}
@@ -33,10 +35,8 @@ services:
       - ${HOST_HOME}/.local:${HOST_HOME}/.local
       - ${HOST_HOME}/playground:${HOST_HOME}/playground
       - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
-      - ./entrypoint.sh:/entrypoint.sh
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - DISPLAY=host.docker.internal:0
     ports:
       - "37777:37777"
     dns:

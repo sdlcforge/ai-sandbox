@@ -1,0 +1,4 @@
+#!/command/with-contenv bash
+# Setup SSH socket ownership for the host user; this allows the container to access the host's SSH agent.
+echo -n "Setting ownership for ${SSH_AUTH_SOCK} to ${HOST_USER}:${HOST_USER}: "
+chown ${HOST_USER}:${HOST_USER} ${SSH_AUTH_SOCK} && echo "success" || { echo "failed" >&2; exit 1; }

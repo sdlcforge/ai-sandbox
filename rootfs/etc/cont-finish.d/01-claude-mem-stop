@@ -1,0 +1,18 @@
+#!/command/with-contenv bash
+# Graceful shutdown: stop claude-mem to prevent database corruption
+export PATH=$PATH:/Users/${HOST_USER}/.local/bin:/Users/${HOST_USER}/.bun/bin
+if type claude-mem >/dev/null 2>&1; then
+    echo "[shutdown] Stopping claude-mem gracefully..."
+    sudo -u "${HOST_USER}" env PATH="${PATH}" claude-mem stop 2>&1
+    STATUS=$?
+
+    if [ $STATUS -ne 0 ]; then
+        echo "[shutdown] claude-mem shutdown failed"
+    else
+        echo "[shutdown] claude-mem shutdown complete"
+    fi
+    exit $STATUS
+else
+    echo "[shutdown] claude-mem not found"
+    exit 0
+fi

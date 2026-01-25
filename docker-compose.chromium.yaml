@@ -10,4 +10,6 @@ services:
     build:
       args:
         INSTALL_CHROMIUM: "true"
+    environment:
+      - DISPLAY=host.docker.internal:0
     shm_size: '2gb'

@@ -22,8 +22,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   sudo \
   unzip \
   vim \
+  xz-utils \
   zsh \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# === LAYER 1b: s6-overlay (init system for graceful shutdown) ===
+ARG TOOL_CACHE_DIR
+ARG S6_NOARCH_TAR
+ARG S6_ARCH_TAR
+COPY ${TOOL_CACHE_DIR}/${S6_NOARCH_TAR} /root/${S6_NOARCH_TAR}
+COPY ${TOOL_CACHE_DIR}/${S6_ARCH_TAR} /root/${S6_ARCH_TAR}
+RUN tar -xf /root/${S6_NOARCH_TAR} -C /
+RUN tar -C / -xf /root/${S6_ARCH_TAR}
+RUN rm /root/${S6_NOARCH_TAR} /root/${S6_ARCH_TAR}
 
 # === LAYER 2: Timezone (rarely changes) ===
 ARG HOST_TZ
@@ -34,10 +45,9 @@ ENV SSH_AUTH_SOCK="$SSH_AUTH_SOCK"
 WORKDIR /root
 
 # === LAYER 3: Go installation ===
-ARG TOOL_CACHE_DIR
 ARG GO_TAR
 COPY ${TOOL_CACHE_DIR}/${GO_TAR} /root/${GO_TAR}
-RUN tar -xzf ${GO_TAR} -C /usr/local && rm ${GO_TAR}
+RUN tar -xf ${GO_TAR} -C /usr/local && rm ${GO_TAR}
 RUN ln -s /usr/local/go/bin/go /usr/local/bin/go
 
 # === LAYER 4: Git Delta ===
@@ -146,5 +156,15 @@ RUN git config --global user.name "${GIT_USER_NAME}" && \
 # === LAYER 13: Copy claude.json (may change often) ===
 COPY ${TOOL_CACHE_DIR}/.claude.json ${HOST_HOME}/.claude.json
 
-ENTRYPOINT ["/usr/bin/sudo", "-E", "/entrypoint.sh"]
-CMD ["/bin/zsh"]
+# === LAYER 14: s6-overlay scripts ===
+USER root
+COPY rootfs/ /
+RUN chmod +x /etc/cont-init.d/* /etc/cont-finish.d/*
+
+# s6-overlay environment configuration
+ENV S6_CMD_USE_TERMINAL=1
+ENV S6_KILL_FINISH_MAXTIME=10000
+
+ENTRYPOINT ["/init"]
+# With S6-overlay, it is important to use 'docker compose exec -u ${HOST_USER} zsh'; if we add 'USER ${HOST_USER}'
+# here, then '/init' will run as that user, even if it appears after 'ENTRYPOINT ["/init"]'.
