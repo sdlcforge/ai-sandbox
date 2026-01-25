@@ -1,0 +1,26 @@
+{
+  "name": "ai-container",
+  "version": "1.0.0-alpha.0",
+  "description": "Replicates local Claude setup in an isolated Docker container for convenience and safety.",
+  "keywords": [
+    "ai",
+    "docker",
+    "claude",
+    "container"
+  ],
+  "homepage": "https://github.com/sdlcforge/ai-sandbox#readme",
+  "bugs": {
+    "url": "https://github.com/sdlcforge/ai-sandbox/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sdlcforge/ai-sandbox.git"
+  },
+  "license": "Apache-2.0",
+  "author": "Zane Rockenbaugh <zane@liquid-labs.com>",
+  "type": "commonjs",
+  "main": "''",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
