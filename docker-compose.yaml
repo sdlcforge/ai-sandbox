@@ -44,5 +44,4 @@ services:
       - 8.8.4.4
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    shm_size: '2gb' # Shared memory for Chromium in Docker
   

@@ -21,7 +21,31 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 "${SCRIPT_DIR}/scripts/check-claude-mem-settings.sh"
 
-CMD=${1:-start}
+# Parse --no-chromium flag
+NO_CHROMIUM=false
+ARGS=()
+for arg in "$@"; do
+  if [ "$arg" = "--no-chromium" ]; then
+    NO_CHROMIUM=true
+  else
+    ARGS+=("$arg")
+  fi
+done
+
+CMD=${ARGS[0]:-start}
+
+# Validate --no-chromium only used with build command
+if [ "$NO_CHROMIUM" = "true" ] && [ "$CMD" != "build" ]; then
+  echo "Error: --no-chromium can only be used with 'build' command"
+  exit 1
+fi
+
+# Set compose files (Chromium is included by default)
+if [ "$NO_CHROMIUM" = "true" ]; then
+  COMPOSE_FILES="-f docker-compose.yaml"
+else
+  COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.chromium.yaml"
+fi
 
 # XQuartz setup for macOS (required for GUI apps in container)
 if [ "$(uname)" = "Darwin" ]; then
@@ -124,12 +148,12 @@ if [ "${CMD}" == "up" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; t
 fi
 
 if [ "${CMD}" == "start" ]; then
-    docker compose up -d
-    docker compose exec ai-sandbox zsh
+    docker compose ${COMPOSE_FILES} up -d
+    docker compose ${COMPOSE_FILES} exec ai-sandbox zsh
 elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
-    docker compose exec ai-sandbox zsh
+    docker compose ${COMPOSE_FILES} exec ai-sandbox zsh
 elif [ "${CMD}" == "build" ]; then
-    docker compose build --ssh default=${SSH_AUTH_SOCK}
+    docker compose ${COMPOSE_FILES} build --ssh default=${SSH_AUTH_SOCK}
 else
-    docker compose "$@"
+    docker compose ${COMPOSE_FILES} "${ARGS[@]}"
 fi
