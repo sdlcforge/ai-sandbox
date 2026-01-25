@@ -36,6 +36,8 @@ services:
       - ./entrypoint.sh:/entrypoint.sh
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    ports:
+      - "37777:37777"
     dns:
       - 8.8.8.8
       - 8.8.4.4
