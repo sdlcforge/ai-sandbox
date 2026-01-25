@@ -1,6 +1,13 @@
 FROM ubuntu:latest
 
 # === LAYER 1: Base packages (no ARGs, most stable) ===
+# Ubuntu 22.04 and 24.04 have made 'chromium-browser' as a dummy package that tries to use the Snap version. But that
+# does not work in a container, so we need to install it from the PPA.
+# 1. Install software-properties-common to add the PPA
+RUN apt-get update && apt-get install -y software-properties-common
+# 2. Add the xtradeb PPA (provides native .deb packages)
+RUN add-apt-repository ppa:xtradeb/apps -y
+# 3. Now when we install chromium, it will be the native package from the PPA.
 RUN apt-get update && apt-get install -y --no-install-recommends \
   aggregate \
   ca-certificates \
@@ -17,11 +24,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   less \
   man-db \
   procps \
+  python3 \
   ssh \
   sudo \
   unzip \
   vim \
   zsh \
+  # X11 client libraries (for GUI apps via XQuartz)
+  libx11-6 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxext6 \
+  libxfixes3 \
+  libxrandr2 \
+  libxrender1 \
+  libxtst6 \
+  libxss1 \
+  libnss3 \
+  libatk1.0-0 \
+  libatk-bridge2.0-0 \
+  libcups2 \
+  libdrm2 \
+  libgbm1 \
+  libasound2t64 \
+  libpango-1.0-0 \
+  libcairo2 \
+  fonts-liberation \
+  # Browser
+  chromium \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # === LAYER 2: Timezone (rarely changes) ===
@@ -114,6 +144,7 @@ RUN echo "export PATH=\$PATH:${HOST_HOME}/.bun/bin:${HOST_HOME}/.local/bin" >> $
 RUN echo "PROMPT='%F{red}%~%f %# '" >> ${HOST_HOME}/.zshrc
 RUN echo "source ${HOST_HOME}/.nvm/nvm.sh" >> ${HOST_HOME}/.zshrc
 RUN echo "alias claude-unchained='claude --dangerously-skip-permissions'" >> ${HOST_HOME}/.zshrc
+RUN echo "alias chromium='chromium --no-sandbox'" >> ${HOST_HOME}/.zshrc
 
 # === LAYER 12b: Git config ===
 ARG GIT_USER_NAME

@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(./ai-container.sh build:*)",
-      "Bash(docker compose run:*)"
+      "Bash(docker compose run:*)",
+      "Bash(chmod:*)",
+      "Bash(/Users/zane/playground/ai-notes/scripts/check-claude-mem-settings.sh:*)"
     ]
   }
 }

@@ -36,9 +36,13 @@ services:
       - ./entrypoint.sh:/entrypoint.sh
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DISPLAY=host.docker.internal:0
     ports:
       - "37777:37777"
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    shm_size: '2gb' # Shared memory for Chromium in Docker
   

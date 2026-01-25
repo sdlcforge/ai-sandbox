@@ -28,6 +28,9 @@ iptables -A OUTPUT -p tcp -d .githubassets.com --dport 443 -j ACCEPT          # 
 iptables -A OUTPUT -p tcp -d anthropic.com --dport 443 -j ACCEPT           # Allow HTTPS to anthropic.com
 iptables -A OUTPUT -p tcp -d .anthropic.com --dport 443 -j ACCEPT          # Allow HTTPS to *.anthropic.com subdomains
 
+# Allow localhost connections for claude-mem MCP server
+iptables -A OUTPUT -p tcp -d 127.0.0.1 --dport 37777 -j ACCEPT             # Allow connections to claude-mem server on localhost
+
 # 4. Restore Docker internal DNS NAT rules
 if [ -n "$DOCKER_DNS_RULES" ]; then
     echo "$DOCKER_DNS_RULES" | while read -r rule; do
