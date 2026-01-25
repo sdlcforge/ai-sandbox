@@ -2,6 +2,21 @@
 
 set -euo pipefail
 
+function check_docker() {
+    echo -n "Checking docker is running... "
+    if ! docker info > /dev/null 2>&1; then
+        echo "NOT running; bailing out."
+        return 1
+    fi
+    echo "confirmed."
+    return 0
+}
+
+if ! check_docker; then
+    docker desktop start
+    check_docker || exit 1
+fi
+
 CMD=${1:-start}
 
 export TOOL_CACHE_DIR=./.tool-cache
@@ -12,11 +27,22 @@ export HOST_HOME=${HOME}
 export HOST_TZ=$(date +%Z)
 export HOST_USER=${USER}
 
-export BUN_VERSION=$(curl -sL https://api.github.com/repos/oven-sh/bun/releases/latest | jq -r .name | cut -d' ' -f2)
-export GIT_DELTA_VERSION=$(curl -sL https://api.github.com/repos/dandavison/delta/releases/latest | jq -r .name)
-export GO_VERSION=$(curl -sL https://go.dev/dl/?mode=json | jq -r '.[0].version')
-export NVM_VERSION=$(curl -sL https://api.github.com/repos/nvm-sh/nvm/releases/latest | jq -r .name)
-export ZSH_IN_DOCKER_VERSION=$(curl -sL https://api.github.com/repos/deluan/zsh-in-docker/releases/latest | jq -r .name)
+export GIT_USER_NAME="$(git config --global user.name)"
+export GIT_USER_EMAIL="$(git config --global user.email)"
+
+# The dynamic queries can fail due to rate limiting, network issues, etc.; if so, then we defealut to the most recent
+#cached version.
+# Note, many of he cut fields uisng '-' are offset by 1 because of the '-' in the '.tool-cache' directory name.
+export BUN_VERSION=$(curl -fsL https://api.github.com/repos/oven-sh/bun/releases/latest | jq -r .name | cut -d' ' -f2 || \
+    basename $(ls -1 .tool-cache/bun-install-*.sh | sort -V | tail -n1 | cut -d'-' -f4) '.sh')
+export GIT_DELTA_VERSION=$(curl -fsL https://api.github.com/repos/dandavison/delta/releases/latest | jq -r .name || \
+    ls -1 .tool-cache/git-delta_*_${HOST_ARCH}.deb | sort -V | tail -n1 | cut -d'_' -f2)
+export GO_VERSION=$(curl -fsL https://go.dev/dl/?mode=json | jq -r '.[0].version' || \
+    basename $(ls -1 .tool-cache/go*.linux-${HOST_ARCH}.tar.gz | sort -V | tail -n1 | cut -d'-' -f2) '.linux')
+export NVM_VERSION=$(curl -fsL https://api.github.com/repos/nvm-sh/nvm/releases/latest | jq -r .name || \
+    basename $(ls -1 .tool-cache/nvm-install-*.sh | sort -V | tail -n1 | cut -d'-' -f4) '.sh')
+export ZSH_IN_DOCKER_VERSION=$(curl -fsL https://api.github.com/repos/deluan/zsh-in-docker/releases/latest | jq -r .name || \
+    basename $(ls -1 .tool-cache/zsh-in-docker-*.sh | sort -V | tail -n1 | cut -d'-' -f5) '.sh')
 
 # Download tools; for some reason this can be really slow when run from the Dockerfile, so we do it here; this also
 # caches the files, which is useful for development and other edge cases
@@ -66,6 +92,8 @@ if [ "${CMD}" == "start" ]; then
     docker compose exec ai-sandbox zsh
 elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
     docker compose exec ai-sandbox zsh
+elif [ "${CMD}" == "build" ]; then
+    docker compose build --ssh default=${SSH_AUTH_SOCK}
 else
     docker compose "$@"
 fi

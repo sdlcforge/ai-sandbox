@@ -20,6 +20,9 @@ services:
         NVM_INSTALL_SH: ${NVM_INSTALL_SH}
         ZSH_IN_DOCKER_SH: ${ZSH_IN_DOCKER_SH}
         TOOL_CACHE_DIR: ${TOOL_CACHE_DIR}
+        GIT_USER_NAME: ${GIT_USER_NAME}
+        GIT_USER_EMAIL: ${GIT_USER_EMAIL}
+        SSH_AUTH_SOCK: "${SSH_AUTH_SOCK}"
     container_name: ai-sandbox
     stdin_open: true
     tty: true
@@ -29,5 +32,11 @@ services:
       - ${HOST_HOME}/.claude-mem:${HOST_HOME}/.claude-mem
       - ${HOST_HOME}/.local:${HOST_HOME}/.local
       - ${HOST_HOME}/playground:${HOST_HOME}/playground
+      - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
+      - ./entrypoint.sh:/entrypoint.sh
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+  

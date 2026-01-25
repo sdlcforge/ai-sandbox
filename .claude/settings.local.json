@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./ai-container.sh build:*)",
+      "Bash(docker compose run:*)"
+    ]
+  }
+}

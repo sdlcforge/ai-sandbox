@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   less \
   man-db \
   procps \
+  ssh \
   sudo \
   unzip \
   vim \
@@ -26,6 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # === LAYER 2: Timezone (rarely changes) ===
 ARG HOST_TZ
 ENV TZ="$HOST_TZ"
+ARG SSH_AUTH_SOCK
+ENV SSH_AUTH_SOCK="$SSH_AUTH_SOCK"
 
 WORKDIR /root
 
@@ -54,6 +57,7 @@ RUN bash ${ZSH_IN_DOCKER_SH} -- \
 
 # === LAYER 6: User creation (changes per machine) ===
 ARG HOST_USER
+ENV HOST_USER=${HOST_USER}
 ARG HOST_HOME
 RUN groupadd -r ${HOST_USER} && useradd -r -g ${HOST_USER} -d ${HOST_HOME} -m ${HOST_USER}
 RUN mkdir -p /commandhistory && chown -R ${HOST_USER}:${HOST_USER} /commandhistory
@@ -93,13 +97,31 @@ RUN chmod +x /usr/local/bin/init-firewall.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 
+# === LAYER 11.b: Allow the user to sudo entrypoint script without a password ===
+RUN usermod -aG sudo ${HOST_USER}
+# RUN echo >> /etc/sudoers
+# RUN echo '${HOST_USER} ALL=(ALL) NOPASSWD: /entrypoint.sh' >> /etc/sudoers
+# DEBUG
+RUN chmod a+r /etc/sudoers
+# RUN echo "#includedir /etc/sudoers.d" >> /etc/sudoers
+# RUN echo "${HOST_USER} ALL=(ALL) NOPASSWD: /entrypoint.sh" >> /etc/sudoers.d/entrypoint_script
+RUN echo "${HOST_USER} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/entrypoint_script
+#RUN chmod 0440 /etc/sudoers.d/entrypoint_script
+
 # === LAYER 12: Shell config ===
 USER ${HOST_USER}
 RUN echo "export PATH=\$PATH:${HOST_HOME}/.bun/bin:${HOST_HOME}/.local/bin" >> ${HOST_HOME}/.zshenv
 RUN echo "PROMPT='%F{red}%~%f %# '" >> ${HOST_HOME}/.zshrc
 RUN echo "source ${HOST_HOME}/.nvm/nvm.sh" >> ${HOST_HOME}/.zshrc
 
+# === LAYER 12b: Git config ===
+ARG GIT_USER_NAME
+ARG GIT_USER_EMAIL
+RUN git config --global user.name "${GIT_USER_NAME}" && \
+    git config --global user.email "${GIT_USER_EMAIL}"
+
 # === LAYER 13: Copy claude.json (may change often) ===
 COPY ${TOOL_CACHE_DIR}/.claude.json ${HOST_HOME}/.claude.json
 
+ENTRYPOINT ["/usr/bin/sudo", "-E", "/entrypoint.sh"]
 CMD ["/bin/zsh"]
