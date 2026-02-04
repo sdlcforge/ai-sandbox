@@ -5,16 +5,20 @@ set -euo pipefail
 function check_docker() {
     echo -n "Checking docker is running... "
     if ! docker info > /dev/null 2>&1; then
-        echo "NOT running; bailing out."
+        if [ "$1" != "" ]; then
+            echo "$1"
+        else
+            echo "NOT running."
+        fi
         return 1
     fi
     echo "confirmed."
     return 0
 }
 
-if ! check_docker; then
+if ! check_docker "starting..."; then
     docker desktop start
-    check_docker || exit 1
+    check_docker "bailing out." || exit 1
 fi
 
 # Parse --no-chromium flag
@@ -30,9 +34,18 @@ done
 
 CMD=${ARGS[0]:-start}
 
+# Resolve symlinks to find the actual script directory
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    # If SOURCE was a relative symlink, resolve it relative to the symlink's directory
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
 # Ensure claude-mem is configured for container access
 if [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     "${SCRIPT_DIR}/scripts/check-claude-mem-settings.sh"
 fi
 
@@ -58,9 +71,9 @@ fi
 
 # Set compose files (Chromium is included by default)
 if [ "$NO_CHROMIUM" = "true" ]; then
-  COMPOSE_FILES="-f docker-compose.yaml"
+  COMPOSE_FILES="-f ${SCRIPT_DIR}/docker-compose.yaml"
 else
-  COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.chromium.yaml"
+  COMPOSE_FILES="-f ${SCRIPT_DIR}/docker-compose.yaml -f ${SCRIPT_DIR}/docker-compose.chromium.yaml"
 fi
 
 # XQuartz setup for macOS (required for GUI apps in container)
@@ -97,6 +110,9 @@ fi
 
 export TOOL_CACHE_DIR=./.tool-cache
 mkdir -p ${TOOL_CACHE_DIR}
+
+# Capture current directory for use when starting shell in container
+export START_DIR="${PWD}"
 
 export HOST_ARCH=$(uname -m)
 export HOST_HOME=${HOME}
@@ -176,11 +192,16 @@ if [ "${CMD}" == "up" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; t
     # docker compose --project-name ai-sandbox-${CONTAINER_ID} up
 fi
 
+function start_shell() {
+    docker compose ${COMPOSE_FILES} exec -u ${HOST_USER} ai-sandbox bash -c \
+        "if [ -d \"${START_DIR}\" ]; then cd \"${START_DIR}\" && exec zsh; else exec zsh; fi"
+}
+
 if [ "${CMD}" == "start" ]; then
     docker compose ${COMPOSE_FILES} up -d
-    docker compose ${COMPOSE_FILES} exec -u ${HOST_USER} ai-sandbox zsh
+    start_shell
 elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
-    docker compose ${COMPOSE_FILES} exec -u ${HOST_USER} ai-sandbox zsh
+    start_shell
 elif [ "${CMD}" == "build" ]; then
     docker compose ${COMPOSE_FILES} build --ssh default=${SSH_AUTH_SOCK} # --progress=plain
 else
