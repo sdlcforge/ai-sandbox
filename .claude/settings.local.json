@@ -4,7 +4,9 @@
       "Bash(./ai-container.sh build:*)",
       "Bash(docker compose run:*)",
       "Bash(chmod:*)",
-      "Bash(/Users/zane/playground/ai-notes/scripts/check-claude-mem-settings.sh:*)"
+      "Bash(/Users/zane/playground/ai-notes/scripts/check-claude-mem-settings.sh:*)",
+      "WebFetch(domain:darkghosthunter.medium.com)",
+      "Bash(ls:*)"
     ]
   }
 }
