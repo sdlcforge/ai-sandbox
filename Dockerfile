@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   iptables \
   jq \
   less \
+  make \
   man-db \
   procps \
   python3 \
