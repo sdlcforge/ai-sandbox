@@ -9,6 +9,8 @@ services:
         HOST_HOME: ${HOST_HOME}
         HOST_TZ: ${HOST_TZ}
         HOST_USER: ${HOST_USER}
+        HOST_UID: ${HOST_UID}
+        HOST_GID: ${HOST_GID}
         # Tool versions
         S6_NOARCH_TAR: ${S6_NOARCH_TAR}
         S6_ARCH_TAR: ${S6_ARCH_TAR}

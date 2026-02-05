@@ -6,7 +6,8 @@
       "Bash(chmod:*)",
       "Bash(/Users/zane/playground/ai-notes/scripts/check-claude-mem-settings.sh:*)",
       "WebFetch(domain:darkghosthunter.medium.com)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git log:*)"
     ]
   }
 }

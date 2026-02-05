@@ -71,7 +71,12 @@ RUN bash ${ZSH_IN_DOCKER_SH} -- \
 ARG HOST_USER
 ENV HOST_USER=${HOST_USER}
 ARG HOST_HOME
-RUN groupadd -r ${HOST_USER} && useradd -r -g ${HOST_USER} -d ${HOST_HOME} -m ${HOST_USER}
+ARG HOST_UID
+ARG HOST_GID
+COPY scripts/create-user.sh /tmp/create-user.sh
+RUN chmod +x /tmp/create-user.sh && \
+    /tmp/create-user.sh "${HOST_USER}" "${HOST_HOME}" "${HOST_UID}" "${HOST_GID}" && \
+    rm /tmp/create-user.sh
 RUN mkdir -p /commandhistory && chown -R ${HOST_USER}:${HOST_USER} /commandhistory
 RUN touch /commandhistory/.bash_history && chown -R ${HOST_USER} /commandhistory
 

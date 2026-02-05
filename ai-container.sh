@@ -118,6 +118,8 @@ export HOST_ARCH=$(uname -m)
 export HOST_HOME=${HOME}
 export HOST_TZ=$(date +%Z)
 export HOST_USER=${USER}
+export HOST_UID=$(id -u)
+export HOST_GID=$(id -g)
 
 export GIT_USER_NAME="$(git config --global user.name)"
 export GIT_USER_EMAIL="$(git config --global user.email)"
