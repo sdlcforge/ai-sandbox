@@ -32,7 +32,7 @@ for arg in "$@"; do
   fi
 done
 
-CMD=${ARGS[0]:-start}
+CMD=${ARGS[0]:-""}
 
 # Resolve symlinks to find the actual script directory
 SOURCE="${BASH_SOURCE[0]}"
@@ -45,12 +45,12 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
 # Ensure claude-mem is configured for container access
-if [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; then
+if [ -z "${CMD}" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; then
     "${SCRIPT_DIR}/scripts/check-claude-mem-settings.sh"
 fi
 
 # Check if claude-mem is running on the host (would cause database corruption if container also runs it)
-if [ "${CMD}" == "start" ] && claude-mem status 2>/dev/null | grep -q "is running"; then
+if ([ -z "${CMD}" ] || [ "${CMD}" == "start" ]) && claude-mem status 2>/dev/null | grep -q "is running"; then
     echo ""
     echo "WARNING: claude-mem is currently running on the host."
     echo "Running claude-mem in both the host and container can cause database corruption."
@@ -63,8 +63,8 @@ if [ "${CMD}" == "start" ] && claude-mem status 2>/dev/null | grep -q "is runnin
     exit 1
 fi
 
-# Validate --no-chromium only used with build command
-if [ "$NO_CHROMIUM" = "true" ] && [ "$CMD" != "build" ]; then
+# Validate --no-chromium only used with commands that may build
+if [ "$NO_CHROMIUM" = "true" ] && [ -n "$CMD" ] && [ "$CMD" != "build" ]; then
   echo "Error: --no-chromium can only be used with 'build' command"
   exit 1
 fi
@@ -77,7 +77,7 @@ else
 fi
 
 # XQuartz setup for macOS (required for GUI apps in container)
-if [ "${CMD}" == "start" ] && [ "$(uname)" = "Darwin" ]; then
+if ([ -z "${CMD}" ] || [ "${CMD}" == "start" ]) && [ "$(uname)" = "Darwin" ]; then
     if ! pgrep -xi "XQuartz" > /dev/null; then
         if [ -d "/Applications/Utilities/XQuartz.app" ]; then
             echo "XQuartz is installed but not running."
@@ -169,7 +169,7 @@ function download_tool() {
     fi
 }
 
-if [ "${CMD}" == "up" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; then
+if [ -z "${CMD}" ] || [ "${CMD}" == "up" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; then
     download_tool "https://go.dev/dl/${GO_TAR}" "${GO_TAR}"
     download_tool "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/${GIT_DELTA_DEB}" "${GIT_DELTA_DEB}"
     download_tool "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" "${NVM_INSTALL_SH}"
@@ -198,7 +198,19 @@ function start_shell() {
         "if [ -d \"${START_DIR}\" ]; then cd \"${START_DIR}\" && exec zsh; else exec zsh; fi"
 }
 
-if [ "${CMD}" == "start" ]; then
+function ensure_image() {
+    if [ -z "$(docker compose ${COMPOSE_FILES} images -q ai-sandbox 2>/dev/null)" ]; then
+        echo "Image not found, building..."
+        docker compose ${COMPOSE_FILES} build --ssh default=${SSH_AUTH_SOCK}
+    fi
+}
+
+if [ -z "${CMD}" ]; then
+    # Default: enter the sandbox (build if needed, start if needed, connect)
+    ensure_image
+    docker compose ${COMPOSE_FILES} up -d
+    start_shell
+elif [ "${CMD}" == "start" ]; then
     docker compose ${COMPOSE_FILES} up -d
     start_shell
 elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
