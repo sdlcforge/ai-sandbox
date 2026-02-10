@@ -108,8 +108,8 @@ if [ "${CMD}" == "start" ] && [ "$(uname)" = "Darwin" ]; then
     fi
 fi
 
-export TOOL_CACHE_DIR=./.tool-cache
-mkdir -p ${TOOL_CACHE_DIR}
+export TOOL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox"
+mkdir -p "${TOOL_CACHE_DIR}"
 
 # Capture current directory for use when starting shell in container
 export START_DIR="${PWD}"
@@ -124,21 +124,20 @@ export HOST_GID=$(id -g)
 export GIT_USER_NAME="$(git config --global user.name)"
 export GIT_USER_EMAIL="$(git config --global user.email)"
 
-# The dynamic queries can fail due to rate limiting, network issues, etc.; if so, then we defealut to the most recent
-#cached version.
-# Note, many of he cut fields uisng '-' are offset by 1 because of the '-' in the '.tool-cache' directory name.
+# The dynamic queries can fail due to rate limiting, network issues, etc.; if so, then we default to the most recent
+# cached version. Fallbacks use basename to isolate the filename before parsing, so they work regardless of the cache path.
 export BUN_VERSION=$(curl -fsL https://api.github.com/repos/oven-sh/bun/releases/latest | jq -r .name | cut -d' ' -f2 || \
-    basename $(ls -1 .tool-cache/bun-install-*.sh | sort -V | tail -n1 | cut -d'-' -f4) '.sh')
+    basename "$(ls -1 "${TOOL_CACHE_DIR}"/bun-install-*.sh | sort -V | tail -n1)" .sh | sed 's/bun-install-//')
 export GIT_DELTA_VERSION=$(curl -fsL https://api.github.com/repos/dandavison/delta/releases/latest | jq -r .name || \
-    ls -1 .tool-cache/git-delta_*_${HOST_ARCH}.deb | sort -V | tail -n1 | cut -d'_' -f2)
+    basename "$(ls -1 "${TOOL_CACHE_DIR}"/git-delta_*_${HOST_ARCH}.deb | sort -V | tail -n1)" | cut -d'_' -f2)
 export GO_VERSION=$(curl -fsL https://go.dev/dl/?mode=json | jq -r '.[0].version' || \
-    basename $(ls -1 .tool-cache/go*.linux-${HOST_ARCH}.tar.gz | sort -V | tail -n1 | cut -d'-' -f2) '.linux')
+    basename "$(ls -1 "${TOOL_CACHE_DIR}"/go*.linux-${HOST_ARCH}.tar.gz | sort -V | tail -n1)" .linux-${HOST_ARCH}.tar.gz)
 export NVM_VERSION=$(curl -fsL https://api.github.com/repos/nvm-sh/nvm/releases/latest | jq -r .name || \
-    basename $(ls -1 .tool-cache/nvm-install-*.sh | sort -V | tail -n1 | cut -d'-' -f4) '.sh')
+    basename "$(ls -1 "${TOOL_CACHE_DIR}"/nvm-install-*.sh | sort -V | tail -n1)" .sh | sed 's/nvm-install-//')
 export ZSH_IN_DOCKER_VERSION=$(curl -fsL https://api.github.com/repos/deluan/zsh-in-docker/releases/latest | jq -r .name || \
-    basename $(ls -1 .tool-cache/zsh-in-docker-*.sh | sort -V | tail -n1 | cut -d'-' -f5) '.sh')
+    basename "$(ls -1 "${TOOL_CACHE_DIR}"/zsh-in-docker-*.sh | sort -V | tail -n1)" .sh | sed 's/zsh-in-docker-//')
 export S6_OVERLAY_VERSION=$(curl -fsL https://api.github.com/repos/just-containers/s6-overlay/releases/latest | jq -r .tag_name | sed 's/^v//' || \
-    basename $(ls -1 .tool-cache/s6-overlay-noarch-*.tar.xz | sort -V | tail -n1) | sed 's/s6-overlay-noarch-\(.*\)\.tar\.xz/\1/')
+    basename "$(ls -1 "${TOOL_CACHE_DIR}"/s6-overlay-noarch-*.tar.xz | sort -V | tail -n1)" | sed 's/s6-overlay-noarch-\(.*\)\.tar\.xz/\1/')
 
 # Download tools; for some reason this can be really slow when run from the Dockerfile, so we do it here; this also
 # caches the files, which is useful for development and other edge cases

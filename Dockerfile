@@ -28,11 +28,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # === LAYER 1b: s6-overlay (init system for graceful shutdown) ===
-ARG TOOL_CACHE_DIR
 ARG S6_NOARCH_TAR
 ARG S6_ARCH_TAR
-COPY ${TOOL_CACHE_DIR}/${S6_NOARCH_TAR} /root/${S6_NOARCH_TAR}
-COPY ${TOOL_CACHE_DIR}/${S6_ARCH_TAR} /root/${S6_ARCH_TAR}
+COPY --from=tool-cache ${S6_NOARCH_TAR} /root/${S6_NOARCH_TAR}
+COPY --from=tool-cache ${S6_ARCH_TAR} /root/${S6_ARCH_TAR}
 RUN tar -xf /root/${S6_NOARCH_TAR} -C /
 RUN tar -C / -xf /root/${S6_ARCH_TAR}
 RUN rm /root/${S6_NOARCH_TAR} /root/${S6_ARCH_TAR}
@@ -47,18 +46,18 @@ WORKDIR /root
 
 # === LAYER 3: Go installation ===
 ARG GO_TAR
-COPY ${TOOL_CACHE_DIR}/${GO_TAR} /root/${GO_TAR}
+COPY --from=tool-cache ${GO_TAR} /root/${GO_TAR}
 RUN tar -xf ${GO_TAR} -C /usr/local && rm ${GO_TAR}
 RUN ln -s /usr/local/go/bin/go /usr/local/bin/go
 
 # === LAYER 4: Git Delta ===
 ARG GIT_DELTA_DEB
-COPY ${TOOL_CACHE_DIR}/${GIT_DELTA_DEB} /root/${GIT_DELTA_DEB}
+COPY --from=tool-cache ${GIT_DELTA_DEB} /root/${GIT_DELTA_DEB}
 RUN dpkg -i ${GIT_DELTA_DEB} && rm ${GIT_DELTA_DEB}
 
 # === LAYER 5: Zsh-in-docker (root setup) ===
 ARG ZSH_IN_DOCKER_SH
-COPY ${TOOL_CACHE_DIR}/${ZSH_IN_DOCKER_SH} /root/${ZSH_IN_DOCKER_SH}
+COPY --from=tool-cache ${ZSH_IN_DOCKER_SH} /root/${ZSH_IN_DOCKER_SH}
 RUN bash ${ZSH_IN_DOCKER_SH} -- \
   -p git \
   -p fzf \
@@ -85,13 +84,13 @@ WORKDIR ${HOST_HOME}
 
 # === LAYER 7: NVM + Node ===
 ARG NVM_INSTALL_SH
-COPY ${TOOL_CACHE_DIR}/${NVM_INSTALL_SH} ${HOST_HOME}/${NVM_INSTALL_SH}
+COPY --from=tool-cache ${NVM_INSTALL_SH} ${HOST_HOME}/${NVM_INSTALL_SH}
 RUN bash ${NVM_INSTALL_SH} && rm ${NVM_INSTALL_SH}
 RUN bash -c "source ${HOST_HOME}/.nvm/nvm.sh && nvm install --lts"
 
 # === LAYER 8: Bun ===
 ARG BUN_INSTALL_SH
-COPY ${TOOL_CACHE_DIR}/${BUN_INSTALL_SH} ${HOST_HOME}/${BUN_INSTALL_SH}
+COPY --from=tool-cache ${BUN_INSTALL_SH} ${HOST_HOME}/${BUN_INSTALL_SH}
 RUN bash ${BUN_INSTALL_SH} && rm ${BUN_INSTALL_SH}
 
 # === LAYER 9: Workspace & environment setup ===
@@ -162,7 +161,7 @@ RUN git config --global user.name "${GIT_USER_NAME}" && \
     git config --global user.email "${GIT_USER_EMAIL}"
 
 # === LAYER 13: Copy claude.json (may change often) ===
-COPY ${TOOL_CACHE_DIR}/.claude.json ${HOST_HOME}/.claude.json
+COPY --from=tool-cache .claude.json ${HOST_HOME}/.claude.json
 
 # === LAYER 14: s6-overlay scripts ===
 USER root

@@ -28,7 +28,7 @@ Full implementation plan: `~/.claude/plans/adaptive-tickling-pascal.md`
 
 **What this project will implement** (once library is ready):
 - `lib/mcp-manager/` - CommonJS module for container integration
-- XDG path handling (`$XDG_DATA_HOME/ai-container`, `$XDG_CACHE_HOME/ai-container/tool-cache`)
+- XDG path handling (`$XDG_DATA_HOME/ai-sandbox`, `$XDG_CACHE_HOME/ai-sandbox`)
 - Generators for Docker Compose overlays, firewall rules, shutdown hooks
 - CLI interface for scan, generate, preflight-check, migrate commands
 - Integration with `ai-container.sh`

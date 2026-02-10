@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      additional_contexts:
+        tool-cache: ${TOOL_CACHE_DIR}
       args:
         # Host environment variables
         HOST_ARCH: ${HOST_ARCH}
@@ -23,7 +25,6 @@ services:
         GIT_DELTA_DEB: ${GIT_DELTA_DEB}
         NVM_INSTALL_SH: ${NVM_INSTALL_SH}
         ZSH_IN_DOCKER_SH: ${ZSH_IN_DOCKER_SH}
-        TOOL_CACHE_DIR: ${TOOL_CACHE_DIR}
         GIT_USER_NAME: ${GIT_USER_NAME}
         GIT_USER_EMAIL: ${GIT_USER_EMAIL}
         SSH_AUTH_SOCK: "${SSH_AUTH_SOCK}"
