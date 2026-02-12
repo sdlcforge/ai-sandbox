@@ -1,8 +1,8 @@
 {
-  "name": "ai-container",
+  "name": "ai-sandbox",
   "version": "1.0.0-alpha.0",
   "description": "Replicates local Claude setup in an isolated Docker container for convenience and safety.",
-  "bin": { "ai-container": "ai-container.sh" },
+  "bin": { "ai-sandbox": "ai-sandbox.sh" },
   "keywords": [
     "ai",
     "docker",

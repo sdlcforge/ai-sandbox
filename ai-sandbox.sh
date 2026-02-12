@@ -71,9 +71,9 @@ fi
 
 # Set compose files (Chromium is included by default)
 if [ "$NO_CHROMIUM" = "true" ]; then
-  COMPOSE_FILES="-f ${SCRIPT_DIR}/docker-compose.yaml"
+  COMPOSE_FILES="-f ${SCRIPT_DIR}/docker/docker-compose.yaml"
 else
-  COMPOSE_FILES="-f ${SCRIPT_DIR}/docker-compose.yaml -f ${SCRIPT_DIR}/docker-compose.chromium.yaml"
+  COMPOSE_FILES="-f ${SCRIPT_DIR}/docker/docker-compose.yaml -f ${SCRIPT_DIR}/docker/docker-compose.chromium.yaml"
 fi
 
 # XQuartz setup for macOS (required for GUI apps in container)
@@ -151,11 +151,6 @@ export NVM_INSTALL_SH=nvm-install-${NVM_VERSION}.sh
 export BUN_INSTALL_SH=bun-install-${BUN_VERSION}.sh
 export ZSH_IN_DOCKER_SH=zsh-in-docker-${ZSH_IN_DOCKER_VERSION}.sh
 
-# Map HOST_ARCH to s6-overlay naming convention (arm64 -> aarch64)
-S6_ARCH=$([ "$HOST_ARCH" = "x86_64" ] && echo "x86_64" || echo "aarch64")
-export S6_NOARCH_TAR=s6-overlay-noarch-${S6_OVERLAY_VERSION}.tar.xz
-export S6_ARCH_TAR=s6-overlay-${S6_ARCH}-${S6_OVERLAY_VERSION}.tar.xz
-
 export DOCKER_DEFAULT_PLATFORM=linux/${HOST_ARCH}
 
 function download_tool() {
@@ -181,16 +176,6 @@ if [ -z "${CMD}" ] || [ "${CMD}" == "up" ] || [ "${CMD}" == "start" ] || [ "${CM
     # Copy .claude.json into build context (Docker COPY can't access files outside context)
     cp ${HOST_HOME}/.claude.json ${TOOL_CACHE_DIR}/.claude.json
 
-    # ALPHABET="abcdefghijklmnopqrstuvwxyz"
-    # ID_LEN=4
-    #CONTAINER_ID=""
-    #
-    # for i in $(seq 1 ${ID_LEN}); do
-    #     CHAR="${ALPHABET:$(( RANDOM % ${#ALPHABET} )):1}"
-    #     CONTAINER_ID="${CONTAINER_ID}${CHAR}"
-    # done
-
-    # docker compose --project-name ai-sandbox-${CONTAINER_ID} up
 fi
 
 function start_shell() {

@@ -1,6 +1,6 @@
 # docker-compose.chromium.yaml
 # Overlay to enable Chromium browser support
-# Usage: docker-compose -f docker-compose.yaml -f docker-compose.chromium.yaml build
+# Usage: docker compose -f docker/docker-compose.yaml -f docker/docker-compose.chromium.yaml build
 #
 # This overlay:
 # - Sets INSTALL_CHROMIUM=true build arg to install X11 libs + Chromium from xtradeb PPA
