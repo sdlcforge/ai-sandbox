@@ -1,13 +1,15 @@
 # ai-sandbox
 
-Replicates your local Claude Code setup in an isolated Docker container for convenience and safety.
+A CLI app enabling (more) safe unsupervised Claude Code development by replicating your local setup in an isolated Docker container.
 
-ai-sandbox mirrors your host environment (SSH keys, git config, Claude credentials, plugins) into a sandboxed Ubuntu container with a firewall that only allows access to GitHub and Anthropic APIs. This lets AI agents work on your code without risking your host system.
+`ai-sandbox` mirrors your host environment (SSH keys, git config, Claude credentials, etc.) into a sandboxed Ubuntu container with a firewall that only allows access to GitHub and Anthropic APIs by default. This lets AI agents work on your code without risking your host system.
+
+**LIMITATIONS**: This product is still in early stages and has not been tested against a wide range of plug-ins, MCPs, etc. Refer to [current limitations and goals](#current-limitations-and-goals) for more.
 
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- macOS (Linux support planned)
+- macOS (Linux untested, but planned)
 - An active [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installation on the host
 
 Optional:
@@ -20,38 +22,18 @@ Optional:
 npm install -g ai-sandbox
 ```
 
-Or clone and link directly:
-
-```bash
-git clone https://github.com/sdlcforge/ai-sandbox.git
-cd ai-sandbox
-npm link
-```
-
 ## Usage
 
 ```bash
 # Enter the sandbox (builds image if needed, starts container, connects)
 ai-sandbox
 
-# Build the container image
-ai-sandbox build
-
-# Build without Chromium/X11 support
-ai-sandbox build --no-chromium
-
-# Start the container and connect
-ai-sandbox start
-
-# Attach to an already-running container
-ai-sandbox attach
-
 # Pass any docker compose command through
 ai-sandbox down
 ai-sandbox logs -f
 ```
 
-## CLI Reference
+## CLI reference
 
 | Command | Description |
 |---------|-------------|
@@ -67,7 +49,7 @@ ai-sandbox logs -f
 |------|-------------|
 | `--no-chromium` | Skip Chromium/X11 layer (only valid with `build`) |
 
-## What's Inside
+## What's inside
 
 The container includes:
 
@@ -77,6 +59,15 @@ The container includes:
 - **Init system**: s6-overlay for process supervision
 - **Firewall**: iptables rules restricting outbound to GitHub + Anthropic
 - **Optional**: Chromium browser with X11 forwarding
+
+## Current limitations and goals
+
+- *OS support*: `ai-sandbox` is currently developed and tested on macOS. It may work on Linux, but this is untested. Full support for both Linux and Windows is planned.
+- *Plugin and MCP support*: `claude-mem` is specifically supported. While other plugins/MCPs may work, consider the following:
+  - configuration, cache, and data folders may not be mapped into the container,
+  - if a MCP server is already running on the host, the container Claude may try to start its own process which can lead to various errors, including possible MCP file/data corruption,
+  - acess to any user visible endpoints provided by the MCP may require opening additional ports, and
+  - because of limited testing, there may be other issues specific to any particular MCP.
 
 ## License
 
