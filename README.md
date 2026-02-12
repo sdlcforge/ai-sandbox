@@ -66,7 +66,7 @@ The container includes:
 - *Plugin and MCP support*: `claude-mem` is specifically supported. While other plugins/MCPs may work, consider the following:
   - configuration, cache, and data folders may not be mapped into the container,
   - if a MCP server is already running on the host, the container Claude may try to start its own process which can lead to various errors, including possible MCP file/data corruption,
-  - acess to any user visible endpoints provided by the MCP may require opening additional ports, and
+  - access to any user visible endpoints provided by the MCP may require opening additional ports and additional configuration,
   - because of limited testing, there may be other issues specific to any particular MCP.
 
 ## License
