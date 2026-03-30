@@ -190,12 +190,23 @@ function ensure_image() {
     fi
 }
 
+function cleanup_stale_container() {
+    local state
+    state=$(docker inspect --format '{{.State.Status}}' ai-sandbox 2>/dev/null) || return 0
+    if [ "$state" != "running" ]; then
+        echo "Removing stale container (state: ${state})..."
+        docker compose ${COMPOSE_FILES} down 2>/dev/null || docker rm -f ai-sandbox
+    fi
+}
+
 if [ -z "${CMD}" ]; then
     # Default: enter the sandbox (build if needed, start if needed, connect)
     ensure_image
+    cleanup_stale_container
     docker compose ${COMPOSE_FILES} up -d
     start_shell
 elif [ "${CMD}" == "start" ]; then
+    cleanup_stale_container
     docker compose ${COMPOSE_FILES} up -d
     start_shell
 elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
