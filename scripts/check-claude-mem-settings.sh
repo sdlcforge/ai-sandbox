@@ -1,11 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
+
 SETTINGS_FILE="${HOME}/.claude-mem/settings.json"
 
 if [ ! -f "$SETTINGS_FILE" ]; then
-    echo "claude-mem settings file not found at $SETTINGS_FILE"
-    echo "Skipping claude-mem configuration check."
+    qecho "claude-mem settings file not found at $SETTINGS_FILE"
+    qecho "Skipping claude-mem configuration check."
     exit 0
 fi
 
@@ -13,13 +15,13 @@ fi
 CURRENT_HOST=$(jq -r '.CLAUDE_MEM_WORKER_HOST // empty' "$SETTINGS_FILE")
 
 if [ -z "$CURRENT_HOST" ]; then
-    echo "CLAUDE_MEM_WORKER_HOST not set in settings.json"
-    echo "Adding CLAUDE_MEM_WORKER_HOST=0.0.0.0 for ai-sandbox compatibility..."
+    qecho "CLAUDE_MEM_WORKER_HOST not set in settings.json"
+    qecho "Adding CLAUDE_MEM_WORKER_HOST=0.0.0.0 for ai-sandbox compatibility..."
     jq '. + {"CLAUDE_MEM_WORKER_HOST": "0.0.0.0"}' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp"
     mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
-    echo "Done."
+    qecho "Done."
 elif [ "$CURRENT_HOST" = "0.0.0.0" ]; then
-    echo "claude-mem is already configured for ai-sandbox (CLAUDE_MEM_WORKER_HOST=0.0.0.0)"
+    qecho "claude-mem is already configured for ai-sandbox (CLAUDE_MEM_WORKER_HOST=0.0.0.0)"
 elif [ "$CURRENT_HOST" = "127.0.0.1" ]; then
     echo "Updating CLAUDE_MEM_WORKER_HOST from 127.0.0.1 to 0.0.0.0 for ai-sandbox compatibility..."
     jq '.CLAUDE_MEM_WORKER_HOST = "0.0.0.0"' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp"

@@ -15,6 +15,7 @@ Describe 'Docker lifecycle' integration
 
     It 'removes a stale (created but not started) container'
       When call ./ai-sandbox.sh clean
+      The output should include "deleted 'ai-sandbox'"
       The status should be success
     End
   End
@@ -41,6 +42,7 @@ Describe 'Docker lifecycle' integration
 
     It 'succeeds when container is already running'
       When call ensure_running
+      The output should include 'Running'
       The status should be success
     End
 
@@ -52,12 +54,13 @@ Describe 'Docker lifecycle' integration
 
   Describe 'stop'
     It 'removes the container with compose down'
-      When call ./ai-containter.sh stop
+      When call ./ai-sandbox.sh --quiet stop 2>&1
+      The stderr should include "Container ai-sandbox  Stopped"
       The status should be success
     End
 
     It 'container is gone after down'
-      When call ./ai-container.sh --quiet status
+      When call ./ai-sandbox.sh --quiet status
       The output should eq 'nonexistant'
     End
   End
