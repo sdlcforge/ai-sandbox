@@ -1,4 +1,4 @@
-.PHONY: lint qa test test-unit test-integration
+.PHONY: lint qa test test.all test.unit test.integration
 
 SHELLSCRIPTS := $(shell find . -type f -name '*.sh')
 DOCKER_FILES := $(shell find docker -type f)
@@ -12,7 +12,9 @@ lint: $(SHELLSCRIPTS)
 qa: lint test
 
 ## Runs all unit and integration tests.
-test: test.unit test.integration
+test: test.unit
+
+test.all: test.unit test.integration
 
 ## Runs all unit tests. This covers local scripts without involving Docker.
 test.unit: $(SHELLSCRIPTS)

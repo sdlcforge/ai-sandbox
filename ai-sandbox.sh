@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2086 # we want word splitting for 'COMPOSE_FILES'
 
 set -euo pipefail
 
@@ -259,7 +260,7 @@ elif [ "${CMD}" == "stop" ] || [ "${CMD}" == "clean" ]; then
     docker compose ${COMPOSE_FILES} down
     if [ "${CMD}" == "clean" ]; then
         OUTPUT=$(docker rm -f ai-sandbox || true)
-        if [ $QUIET -ne 0 ] && [ "x${OUTPUT}" == "xai-sandbox" ]; then
+        if [ $QUIET -ne 0 ] && [ "${OUTPUT}" == "ai-sandbox" ]; then
             echo "deleted '${OUTPUT}'"
         fi
     fi

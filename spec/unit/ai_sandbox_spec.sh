@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+
 Describe 'ai-sandbox.sh'
   Include "$PWD/ai-sandbox.sh"
 
@@ -138,10 +140,10 @@ Describe 'ai-sandbox.sh'
             while [ "$1" = "-f" ]; do shift; shift; done
             if [ "$1" = "down" ]; then return 1; fi
             ;;
-          rm) removed=true ;;
+          rm) export removed=true ;;
         esac
       }
-      COMPOSE_FILES="-f docker-compose.yaml"
+      export COMPOSE_FILES="-f docker-compose.yaml"
       When call cleanup_stale_container
       The output should include 'Cleaning up stale container'
       The variable removed should eq true

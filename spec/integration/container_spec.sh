@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+# shellcheck disable=SC2016 # we want to send unexpected variables into the container so they expand in the container
 Describe 'Container internals' integration
   # Ensure the container is running for these tests
   start_container() {

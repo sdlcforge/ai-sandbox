@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+
 Describe 'check-claude-mem-settings.sh'
   setup() {
     export ORIG_HOME="$HOME"

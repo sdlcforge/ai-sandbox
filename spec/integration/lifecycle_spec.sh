@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+
 Describe 'Docker lifecycle' integration
   Include "$PWD/ai-sandbox.sh"
   # Ensure clean state before and after the suite
