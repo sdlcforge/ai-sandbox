@@ -9,7 +9,7 @@ lint: $(SHELLSCRIPTS)
 	shellcheck $(SHELLSCRIPTS)
 
 ## Runs all QA checks; linting and tests.
-qa: lint test
+qa: lint test.all
 
 ## Runs all unit and integration tests.
 test: test.unit
