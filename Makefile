@@ -1,7 +1,12 @@
-.PHONY: lint qa test test.all test.unit test.integration
+.PHONY: build lint qa test test.all test.unit test.integration
 
 SHELLSCRIPTS := $(shell find . -type f -name '*.sh')
 DOCKER_FILES := $(shell find docker -type f)
+
+## !category Build
+## Builds the script. At the moment, this is actually a noop.
+build:
+	:
 
 ## !category QA
 ## Runs all linting checks.

@@ -20,6 +20,12 @@
   "license": "Apache-2.0",
   "author": "Zane Rockenbaugh <zane@liquid-labs.com>",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "make build",
+    "lint": "make lint",
+    "qa": "make qa",
+    "test": "make test",
+    "test.all": "make test.all",
+    "test.intgeration": "make test.intgeration",
+    "test.unit": "make test.unit"
   }
 }
