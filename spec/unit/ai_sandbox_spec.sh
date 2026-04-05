@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2317,SC2034,SC2155 # ShellSpec DSL invokes functions indirectly and checks variables via framework assertions
 
 Describe 'ai-sandbox.sh'
   Include "$PWD/ai-sandbox.sh"

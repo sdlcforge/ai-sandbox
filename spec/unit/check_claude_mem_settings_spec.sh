@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2155 # export+assign in test setup; masking return value is harmless here
 
 Describe 'check-claude-mem-settings.sh'
   setup() {

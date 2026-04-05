@@ -74,7 +74,7 @@ for arg in "$@"; do
     NO_CHROMIUM=true
   elif [ "$arg" == "--quiet" ] || [ "$arg" == "-q" ]; then
     QUIET=0
-  elif [ "x${CMD}" == "x" ]; then
+  elif [ -z "${CMD}" ]; then
     CMD=${arg:-"enter"}
   else
     ARGS+=("$arg")
@@ -83,7 +83,7 @@ done
 
 CMD=${CMD:-"enter"}
 
-if [ "x${QUIET}" == "x" ]; then
+if [ -z "${QUIET}" ]; then
     if [ "${CMD}" == "status" ]; then
         QUIET=0 # bash true
     else
@@ -115,7 +115,7 @@ if [ -z "${CMD}" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; then
 fi
 
 # Check if claude-mem is running on the host (would cause database corruption if container also runs it)
-if ([ -z "${CMD}" ] || [ "${CMD}" == "start" ]) && claude-mem status 2>/dev/null | grep -q "is running"; then
+if { [ -z "${CMD}" ] || [ "${CMD}" == "start" ]; } && claude-mem status 2>/dev/null | grep -q "is running"; then
     echo ""
     echo "WARNING: claude-mem is currently running on the host."
     echo "Running claude-mem in both the host and container can cause database corruption."
@@ -142,11 +142,11 @@ else
 fi
 
 # XQuartz setup for macOS (required for GUI apps in container)
-if ([ -z "${CMD}" ] || [ "${CMD}" == "start" ]) && [ "$(uname)" = "Darwin" ]; then
+if { [ -z "${CMD}" ] || [ "${CMD}" == "start" ]; } && [ "$(uname)" = "Darwin" ]; then
     if ! pgrep -xi "XQuartz" > /dev/null; then
         if [ -d "/Applications/Utilities/XQuartz.app" ]; then
             qecho "XQuartz is installed but not running."
-            read -p "Start XQuartz now? (y/n): " start_xquartz
+            read -rp "Start XQuartz now? (y/n): " start_xquartz
             if [ "$start_xquartz" = "y" ]; then
                 open -a XQuartz
                 qecho "Waiting for XQuartz to start..."
@@ -155,7 +155,7 @@ if ([ -z "${CMD}" ] || [ "${CMD}" == "start" ]) && [ "$(uname)" = "Darwin" ]; th
             fi
         else
             echo "XQuartz is not installed. GUI apps require XQuartz on macOS."
-            read -p "Install XQuartz via Homebrew? (y/n): " install_xquartz
+            read -rp "Install XQuartz via Homebrew? (y/n): " install_xquartz
             if [ "$install_xquartz" = "y" ]; then
                 brew install --cask xquartz
                 echo "XQuartz installed. Please:"
@@ -179,14 +179,20 @@ export HOST_USER=${USER}
 # Capture current directory for use when starting shell in container
 export START_DIR="${PWD}"
 
-export HOST_ARCH=$(uname -m)
+HOST_ARCH=$(uname -m)
+export HOST_ARCH
 export HOST_HOME=${HOME}
-export HOST_TZ=$(date +%Z)
-export HOST_UID=$(id -u)
-export HOST_GID=$(id -g)
+HOST_TZ=$(date +%Z)
+export HOST_TZ
+HOST_UID=$(id -u)
+export HOST_UID
+HOST_GID=$(id -g)
+export HOST_GID
 
-export GIT_USER_NAME="$(git config --global user.name)"
-export GIT_USER_EMAIL="$(git config --global user.email)"
+GIT_USER_NAME="$(git config --global user.name || true)"
+export GIT_USER_NAME
+GIT_USER_EMAIL="$(git config --global user.email || true)"
+export GIT_USER_EMAIL
 
 export DOCKER_DEFAULT_PLATFORM=linux/${HOST_ARCH}
 
@@ -196,18 +202,30 @@ mkdir -p "${TOOL_CACHE_DIR}"
 if [ -z "${CMD}" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "up" ] || [ "${CMD}" == "build" ]; then
     # The dynamic queries can fail due to rate limiting, network issues, etc.; if so, then we default to the most recent
     # cached version. Fallbacks use basename to isolate the filename before parsing, so they work regardless of the cache path.
-    export BUN_VERSION=$(curl -fsL https://api.github.com/repos/oven-sh/bun/releases/latest | jq -r .name | cut -d' ' -f2 || \
+    # shellcheck disable=SC2012 # ls with sort -V is intentional for version-sorted cache lookups
+    BUN_VERSION=$(curl -fsL https://api.github.com/repos/oven-sh/bun/releases/latest | jq -r .name | cut -d' ' -f2 || \
         basename "$(ls -1 "${TOOL_CACHE_DIR}"/bun-install-*.sh | sort -V | tail -n1)" .sh | sed 's/bun-install-//')
-    export GIT_DELTA_VERSION=$(curl -fsL https://api.github.com/repos/dandavison/delta/releases/latest | jq -r .name || \
+    export BUN_VERSION
+    # shellcheck disable=SC2012 # ls with sort -V is intentional for version-sorted cache lookups
+    GIT_DELTA_VERSION=$(curl -fsL https://api.github.com/repos/dandavison/delta/releases/latest | jq -r .name || \
         basename "$(ls -1 "${TOOL_CACHE_DIR}"/git-delta_*_${HOST_ARCH}.deb | sort -V | tail -n1)" | cut -d'_' -f2)
-    export GO_VERSION=$(curl -fsL https://go.dev/dl/?mode=json | jq -r '.[0].version' || \
+    export GIT_DELTA_VERSION
+    # shellcheck disable=SC2012 # ls with sort -V is intentional for version-sorted cache lookups
+    GO_VERSION=$(curl -fsL https://go.dev/dl/?mode=json | jq -r '.[0].version' || \
         basename "$(ls -1 "${TOOL_CACHE_DIR}"/go*.linux-${HOST_ARCH}.tar.gz | sort -V | tail -n1)" .linux-${HOST_ARCH}.tar.gz)
-    export NVM_VERSION=$(curl -fsL https://api.github.com/repos/nvm-sh/nvm/releases/latest | jq -r .name || \
+    export GO_VERSION
+    # shellcheck disable=SC2012 # ls with sort -V is intentional for version-sorted cache lookups
+    NVM_VERSION=$(curl -fsL https://api.github.com/repos/nvm-sh/nvm/releases/latest | jq -r .name || \
         basename "$(ls -1 "${TOOL_CACHE_DIR}"/nvm-install-*.sh | sort -V | tail -n1)" .sh | sed 's/nvm-install-//')
-    export ZSH_IN_DOCKER_VERSION=$(curl -fsL https://api.github.com/repos/deluan/zsh-in-docker/releases/latest | jq -r .name || \
+    export NVM_VERSION
+    # shellcheck disable=SC2012 # ls with sort -V is intentional for version-sorted cache lookups
+    ZSH_IN_DOCKER_VERSION=$(curl -fsL https://api.github.com/repos/deluan/zsh-in-docker/releases/latest | jq -r .name || \
         basename "$(ls -1 "${TOOL_CACHE_DIR}"/zsh-in-docker-*.sh | sort -V | tail -n1)" .sh | sed 's/zsh-in-docker-//')
-    export S6_OVERLAY_VERSION=$(curl -fsL https://api.github.com/repos/just-containers/s6-overlay/releases/latest | jq -r .tag_name | sed 's/^v//' || \
+    export ZSH_IN_DOCKER_VERSION
+    # shellcheck disable=SC2012 # ls with sort -V is intentional for version-sorted cache lookups
+    S6_OVERLAY_VERSION=$(curl -fsL https://api.github.com/repos/just-containers/s6-overlay/releases/latest | jq -r .tag_name | sed 's/^v//' || \
         basename "$(ls -1 "${TOOL_CACHE_DIR}"/s6-overlay-noarch-*.tar.xz | sort -V | tail -n1)" | sed 's/s6-overlay-noarch-\(.*\)\.tar\.xz/\1/')
+    export S6_OVERLAY_VERSION
 
     # Download tools; for some reason this can be really slow when run from the Dockerfile, so we do it here; this also
     # caches the files, which is useful for development and other edge cases
@@ -251,7 +269,7 @@ elif [ "${CMD}" == "user-exec" ]; then
 elif [ "${CMD}" == "root-exec" ]; then
     docker compose ${COMPOSE_FILES} exec -u root ai-sandbox "${ARGS[@]}"
 elif [ "${CMD}" == "status" ]; then
-    if [ $(docker ps -q | wc -l) == 0 ]; then
+    if [ "$(docker ps -q | wc -l)" == 0 ]; then
         echo "nonexistant"
     else
         docker inspect --format='{{.State.Status}}' ai-sandbox
