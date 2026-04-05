@@ -27,5 +27,8 @@
     "test.all": "make test.all",
     "test.intgeration": "make test.intgeration",
     "test.unit": "make test.unit"
+  },
+  "_comply": {
+    "orgKey": "@liquid-labs"
   }
 }
