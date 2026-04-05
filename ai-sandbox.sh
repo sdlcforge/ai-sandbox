@@ -269,7 +269,7 @@ elif [ "${CMD}" == "user-exec" ]; then
 elif [ "${CMD}" == "root-exec" ]; then
     docker compose ${COMPOSE_FILES} exec -u root ai-sandbox "${ARGS[@]}"
 elif [ "${CMD}" == "status" ]; then
-    if [ "$(docker ps -q | wc -l)" == 0 ]; then
+    if [ "$(docker ps -q | wc -l | tr -d ' ')" == 0 ]; then
         echo "nonexistant"
     else
         docker inspect --format='{{.State.Status}}' ai-sandbox
