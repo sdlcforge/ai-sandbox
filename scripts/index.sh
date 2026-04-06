@@ -108,6 +108,7 @@ while [ -L "$SOURCE" ]; do
     [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+PROJECT_ROOT="$(cd -P "${SCRIPT_DIR}/.." && pwd)"
 
 # Ensure claude-mem is configured for container access
 if [ -z "${CMD}" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; then
@@ -136,9 +137,9 @@ fi
 
 # Set compose files (Chromium is included by default)
 if [ "$NO_CHROMIUM" = "true" ]; then
-  COMPOSE_FILES="-f ${SCRIPT_DIR}/docker/docker-compose.yaml"
+  COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml"
 else
-  COMPOSE_FILES="-f ${SCRIPT_DIR}/docker/docker-compose.yaml -f ${SCRIPT_DIR}/docker/docker-compose.chromium.yaml"
+  COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml -f ${PROJECT_ROOT}/docker/docker-compose.chromium.yaml"
 fi
 
 # XQuartz setup for macOS (required for GUI apps in container)
