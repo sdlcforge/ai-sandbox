@@ -1,7 +1,7 @@
 {
   "name": "ai-sandbox",
   "version": "1.0.0-alpha.0",
-  "description": "Replicates local Claude setup in an isolated Docker container for convenience and safety.",
+  "description": "A CLI app enabling (more) safe unsupervised Claude Code development by replicating your local setup in an isolated Docker container.",
   "bin": { "ai-sandbox": "ai-sandbox.sh" },
   "keywords": [
     "ai",
@@ -20,6 +20,15 @@
   "license": "Apache-2.0",
   "author": "Zane Rockenbaugh <zane@liquid-labs.com>",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "make build",
+    "lint": "make lint",
+    "qa": "make qa",
+    "test": "make test",
+    "test.all": "make test.all",
+    "test.intgeration": "make test.intgeration",
+    "test.unit": "make test.unit"
+  },
+  "_comply": {
+    "orgKey": "@liquid-labs"
   }
 }
