@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-source ./scripts/utils.sh
+source ./utils.sh
 
 # --- Function definitions (testable via Include) ---
 

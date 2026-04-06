@@ -2,7 +2,7 @@
 # shellcheck disable=SC2317,SC2034,SC2155 # ShellSpec DSL invokes functions indirectly and checks variables via framework assertions
 
 Describe 'ai-sandbox.sh'
-  Include "$PWD/ai-sandbox.sh"
+  Include "$PWD/bin/ai-sandbox.sh"
 
   Describe 'check_docker()'
     It 'succeeds and prints confirmed when docker is running'

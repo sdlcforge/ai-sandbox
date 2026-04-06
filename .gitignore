@@ -1,3 +1,5 @@
-.claude/settings.local.json
-spec/.shellspec-quick.log
 /.ai-sandbox.startup.log
+/.claude/settings.local.json
+/bin
+/node_modules
+/spec/.shellspec-quick.log

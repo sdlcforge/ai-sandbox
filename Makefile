@@ -1,12 +1,17 @@
 .PHONY: build lint qa test test.all test.unit test.integration
 
 SHELLSCRIPTS := $(shell find . -type f -name '*.sh')
+SRC_SCRIPTS := ./scripts/index.sh $(shell find scripts/ -type f -name '*.sh' -not -path 'scripts/index.sh')
 DOCKER_FILES := $(shell find docker -type f)
+BASH_ROLLUP := npx bash-rollup
+BIN_OUT := ./bin/ai-sandbox.sh
 
 ## !category Build
 ## Builds the script. At the moment, this is actually a noop.
-build:
-	:
+build: $(BIN_OUT)
+
+$(BIN_OUT): $(SRC_SCRIPTS)
+	$(BASH_ROLLUP) $< $@
 
 ## !category QA
 ## Runs all linting checks.

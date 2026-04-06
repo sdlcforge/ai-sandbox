@@ -165,6 +165,6 @@ Generated overlay files
 2. Run `bun lib/mcp-manager/cli.cjs generate --dry-run` - preview outputs
 3. Run `bun lib/mcp-manager/cli.cjs generate` - create files
 4. Verify files exist in `~/.local/share/ai-sandbox/`
-5. Run `./ai-sandbox.sh build` - should use generated overlay
-6. Run `./ai-sandbox.sh start` - should start with claude-mem port exposed
+5. Run `./bin/ai-sandbox.sh build` - should use generated overlay
+6. Run `./bin/ai-sandbox.sh start` - should start with claude-mem port exposed
 7. Stop container - verify claude-mem stops gracefully
