@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(./ai-sandbox.sh build:*)",
+      "Bash(./bin/ai-sandbox.sh build:*)",
       "Bash(docker compose run:*)",
       "Bash(chmod:*)",
       "Bash(ls:*)",
