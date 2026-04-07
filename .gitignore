@@ -2,4 +2,4 @@
 /.claude/settings.local.json
 /bin
 /node_modules
-/spec/.shellspec-quick.log
+/test/.shellspec-quick.log
