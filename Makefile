@@ -1,7 +1,7 @@
 .PHONY: build lint qa test test.all test.unit test.integration
 
-SHELLSCRIPTS := $(shell find scripts -type f -name '*.sh') $(shell find spec -type f -name '*.sh')
-SRC_SCRIPTS := ./scripts/index.sh $(shell find scripts/ -type f -name '*.sh' -not -path 'scripts/index.sh')
+SHELLSCRIPTS := $(shell find src -type f -name '*.sh') $(shell find test -type f -name '*.sh')
+SRC_SCRIPTS := ./src/index.sh $(shell find src/ -type f -name '*.sh' -not -path 'src/index.sh')
 DOCKER_FILES := $(shell find docker -type f)
 BASH_ROLLUP := npx bash-rollup
 BIN_OUT := ./bin/ai-sandbox.sh
@@ -16,7 +16,7 @@ $(BIN_OUT): $(SRC_SCRIPTS)
 ## !category QA
 ## Runs all linting checks.
 lint: $(SHELLSCRIPTS)
-	shellcheck -P scripts $(SHELLSCRIPTS)
+	shellcheck -P src $(SHELLSCRIPTS)
 
 ## Runs all QA checks; linting and tests.
 qa: lint test.all
@@ -28,8 +28,8 @@ test.all: test.unit test.integration
 
 ## Runs all unit tests. This covers local scripts without involving Docker.
 test.unit: $(SHELLSCRIPTS) build
-	shellspec spec/unit
+	shellspec test/unit
 
 ## Runs all integration tests. This involves running the playground on a Docker container and testing its behavior there.
 test.integration: $(SHELLSCRIPTS) $(DOCKER_FILES) build
-	shellspec spec/integration
+	shellspec test/integration
