@@ -1,6 +1,6 @@
 .PHONY: build lint qa test test.all test.unit test.integration
 
-SHELLSCRIPTS := $(shell find . -type f -name '*.sh')
+SHELLSCRIPTS := $(shell find scripts -type f -name '*.sh') $(shell find spec -type f -name '*.sh')
 SRC_SCRIPTS := ./scripts/index.sh $(shell find scripts/ -type f -name '*.sh' -not -path 'scripts/index.sh')
 DOCKER_FILES := $(shell find docker -type f)
 BASH_ROLLUP := npx bash-rollup
@@ -16,7 +16,7 @@ $(BIN_OUT): $(SRC_SCRIPTS)
 ## !category QA
 ## Runs all linting checks.
 lint: $(SHELLSCRIPTS)
-	shellcheck $(SHELLSCRIPTS)
+	shellcheck -P scripts $(SHELLSCRIPTS)
 
 ## Runs all QA checks; linting and tests.
 qa: lint test.all

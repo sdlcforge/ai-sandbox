@@ -37,12 +37,8 @@ function download_tool() {
 }
 
 function start_shell() {
-    docker compose ${COMPOSE_FILES} exec -u "${HOST_USER}" ai-sandbox bash -c \
+    docker compose ${COMPOSE_FILES} exec -u ${HOST_USER} ai-sandbox bash -c \
         "if [ -d \"${START_DIR}\" ]; then cd \"${START_DIR}\" && exec zsh; else exec zsh; fi"
-}
-
-function do_build() {
-    docker compose ${COMPOSE_FILES} build --ssh "default=${SSH_AUTH_SOCK}"
 }
 
 function ensure_image() {
@@ -50,6 +46,10 @@ function ensure_image() {
         qecho "Image not found, building..."
         do_build
     fi
+}
+
+function do_build() {
+    docker compose ${COMPOSE_FILES} build --ssh "default=${SSH_AUTH_SOCK}"
 }
 
 function cleanup_stale_container() {
@@ -251,27 +251,6 @@ if [ -z "${CMD}" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "start" ] || [ "$
     # Copy .claude.json into build context (Docker COPY can't access files outside context)
     cp ${HOST_HOME}/.claude.json ${TOOL_CACHE_DIR}/.claude.json
 fi
-
-function start_shell() {
-    docker compose ${COMPOSE_FILES} exec -u ${HOST_USER} ai-sandbox bash -c \
-        "if [ -d \"${START_DIR}\" ]; then cd \"${START_DIR}\" && exec zsh; else exec zsh; fi"
-}
-
-function ensure_image() {
-    if [ -z "$(docker compose ${COMPOSE_FILES} images -q ai-sandbox 2>/dev/null)" ]; then
-        echo "Image not found, building..."
-        docker compose ${COMPOSE_FILES} build --ssh default=${SSH_AUTH_SOCK}
-    fi
-}
-
-function cleanup_stale_container() {
-    local state
-    state=$(docker inspect --format '{{.State.Status}}' ai-sandbox 2>/dev/null) || return 0
-    if [ "$state" != "running" ]; then
-        echo "Removing stale container (state: ${state})..."
-        docker compose ${COMPOSE_FILES} down 2>/dev/null || docker rm -f ai-sandbox
-    fi
-}
 
 # Default: enter the sandbox (build if needed, start if needed, connect)
 if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
