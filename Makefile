@@ -27,9 +27,9 @@ test: test.unit
 test.all: test.unit test.integration
 
 ## Runs all unit tests. This covers local scripts without involving Docker.
-test.unit: $(SHELLSCRIPTS)
+test.unit: $(SHELLSCRIPTS) build
 	shellspec spec/unit
 
 ## Runs all integration tests. This involves running the playground on a Docker container and testing its behavior there.
-test.integration: $(SHELLSCRIPTS) $(DOCKER_FILES)
+test.integration: $(SHELLSCRIPTS) $(DOCKER_FILES) build
 	shellspec spec/integration
