@@ -50,6 +50,12 @@ COPY --from=tool-cache ${GO_TAR} /root/${GO_TAR}
 RUN tar -xf ${GO_TAR} -C /usr/local && rm ${GO_TAR}
 RUN ln -s /usr/local/go/bin/go /usr/local/bin/go
 
+# === LAYER 3b: golangci-lint ===
+ARG GOLANGCI_LINT_VERSION
+ARG GOLANGCI_LINT_INSTALL_SH
+COPY --from=tool-cache ${GOLANGCI_LINT_INSTALL_SH} /root/${GOLANGCI_LINT_INSTALL_SH}
+RUN bash ${GOLANGCI_LINT_INSTALL_SH} -b /usr/local/bin ${GOLANGCI_LINT_VERSION} && rm ${GOLANGCI_LINT_INSTALL_SH}
+
 # === LAYER 4: Git Delta ===
 ARG GIT_DELTA_DEB
 COPY --from=tool-cache ${GIT_DELTA_DEB} /root/${GIT_DELTA_DEB}
@@ -143,7 +149,7 @@ fi
 
 # === LAYER 12: Shell config ===
 USER ${HOST_USER}
-RUN echo "export PATH=\$PATH:${HOST_HOME}/.bun/bin:${HOST_HOME}/.local/bin" >> ${HOST_HOME}/.zshenv
+RUN echo "export PATH=\$PATH:${HOST_HOME}/.bun/bin:${HOST_HOME}/.local/bin:${HOST_HOME}/go/bin" >> ${HOST_HOME}/.zshenv
 # Enable 'ctrl + a', 'ctrl + e', etc.
 RUN echo "bindkey -e" >> ${HOST_HOME}/.zshrc
 RUN echo "PROMPT='%F{red}%~%f %# '" >> ${HOST_HOME}/.zshrc
