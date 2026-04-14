@@ -1,5 +1,6 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2317,SC2034,SC2155 # ShellSpec DSL invokes functions indirectly and checks variables via framework assertions
+# shellcheck disable=SC2034,SC2155,SC2317,SC2329 # ShellSpec DSL invokes functions indirectly and checks variables via framework assertions
+#                                         ^ 'docker()' doesn't think 'docker()' calls are called
 
 Describe 'ai-sandbox.sh'
   Include "$PWD/bin/ai-sandbox.sh"

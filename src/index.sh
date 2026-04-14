@@ -224,6 +224,10 @@ if [ -z "${CMD}" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "start" ] || [ "$
         basename "$(ls -1 "${TOOL_CACHE_DIR}"/zsh-in-docker-*.sh | sort -V | tail -n1)" .sh | sed 's/zsh-in-docker-//')
     export ZSH_IN_DOCKER_VERSION
     # shellcheck disable=SC2012 # ls with sort -V is intentional for version-sorted cache lookups
+    GOLANGCI_LINT_VERSION=$(curl -fsL https://api.github.com/repos/golangci/golangci-lint/releases/latest | jq -r .name || \
+        basename "$(ls -1 "${TOOL_CACHE_DIR}"/golangci-lint-install-*.sh | sort -V | tail -n1)" .sh | sed 's/golangci-lint-install-//')
+    export GOLANGCI_LINT_VERSION
+    # shellcheck disable=SC2012 # ls with sort -V is intentional for version-sorted cache lookups
     S6_OVERLAY_VERSION=$(curl -fsL https://api.github.com/repos/just-containers/s6-overlay/releases/latest | jq -r .tag_name | sed 's/^v//' || \
         basename "$(ls -1 "${TOOL_CACHE_DIR}"/s6-overlay-noarch-*.tar.xz | sort -V | tail -n1)" | sed 's/s6-overlay-noarch-\(.*\)\.tar\.xz/\1/')
     export S6_OVERLAY_VERSION
@@ -236,10 +240,12 @@ if [ -z "${CMD}" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "start" ] || [ "$
     export S6_ARCH_TAR=s6-overlay-${S6_ARCH}-${S6_OVERLAY_VERSION}.tar.xz
     export GO_TAR=${GO_VERSION}.linux-${HOST_ARCH}.tar.gz
     export GIT_DELTA_DEB=git-delta_${GIT_DELTA_VERSION}_${HOST_ARCH}.deb
+    export GOLANGCI_LINT_INSTALL_SH=golangci-lint-install-${GOLANGCI_LINT_VERSION}.sh
     export NVM_INSTALL_SH=nvm-install-${NVM_VERSION}.sh
     export BUN_INSTALL_SH=bun-install-${BUN_VERSION}.sh
     export ZSH_IN_DOCKER_SH=zsh-in-docker-${ZSH_IN_DOCKER_VERSION}.sh
 
+    download_tool "https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh" "${GOLANGCI_LINT_INSTALL_SH}"
     download_tool "https://go.dev/dl/${GO_TAR}" "${GO_TAR}"
     download_tool "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/${GIT_DELTA_DEB}" "${GIT_DELTA_DEB}"
     download_tool "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" "${NVM_INSTALL_SH}"
