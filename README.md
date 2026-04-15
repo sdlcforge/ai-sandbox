@@ -43,6 +43,8 @@ ai-sandbox logs -f
 | `attach` / `connect` | Connect to an already-running container |
 | `<any>` | Passed through to `docker compose` |
 
+The image is rebuilt automatically when any file under `docker/` (Dockerfile, compose configs, entrypoint scripts, etc.) is newer than the image's build timestamp — you do not need to run `ai-sandbox build` or delete the image manually after pulling changes.
+
 ### Flags
 
 | Flag | Description |

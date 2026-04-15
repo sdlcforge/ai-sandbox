@@ -53,9 +53,41 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'variant_key()'
+    It 'returns full when no flags are set'
+      NO_CHROMIUM=false
+      NO_DOCKER=false
+      When call variant_key
+      The output should eq 'full'
+    End
+
+    It 'returns no-chromium when only --no-chromium is set'
+      NO_CHROMIUM=true
+      NO_DOCKER=false
+      When call variant_key
+      The output should eq 'no-chromium'
+    End
+
+    It 'returns no-docker when only --no-docker is set'
+      NO_CHROMIUM=false
+      NO_DOCKER=true
+      When call variant_key
+      The output should eq 'no-docker'
+    End
+
+    It 'returns no-chromium-no-docker when both flags are set'
+      NO_CHROMIUM=true
+      NO_DOCKER=true
+      When call variant_key
+      The output should eq 'no-chromium-no-docker'
+    End
+  End
+
   Describe 'ensure_image()'
     setup() {
       export TOOL_CACHE_DIR="$(mktemp -d)"
+      NO_CHROMIUM=false
+      NO_DOCKER=false
     }
     cleanup() {
       rm -rf "$TOOL_CACHE_DIR"
@@ -67,15 +99,16 @@ Describe 'ai-sandbox.sh'
       built=false
       docker() {
         case "$1" in
+          image)
+            # 'image inspect <tag>' → return failure (image missing)
+            [ "$2" = "inspect" ] && return 1
+            # 'image rm -f <tag>' → succeed silently
+            [ "$2" = "rm" ] && return 0
+            ;;
           compose)
             shift
-            # skip -f flags
             while [ "$1" = "-f" ]; do shift; shift; done
-            if [ "$1" = "images" ]; then
-              echo ""  # empty = no image
-            elif [ "$1" = "build" ]; then
-              built=true
-            fi
+            [ "$1" = "build" ] && built=true
             ;;
         esac
       }
@@ -86,15 +119,11 @@ Describe 'ai-sandbox.sh'
       The variable built should eq true
     End
 
-    It 'does nothing when image exists'
+    It 'does nothing when image exists and is fresh'
       docker() {
         case "$1" in
-          compose)
-            shift
-            while [ "$1" = "-f" ]; do shift; shift; done
-            if [ "$1" = "images" ]; then
-              echo "sha256:abc123"
-            fi
+          image)
+            [ "$2" = "inspect" ] && return 0
             ;;
         esac
       }
@@ -122,115 +151,48 @@ Describe 'ai-sandbox.sh'
     End
   End
 
-  Describe 'image_label()'
-    It 'returns empty string when docker inspect fails'
-      docker() { return 1; }
-      When call image_label ai.sandbox.docker-enabled
-      The output should eq ''
-      The status should be success
-    End
-
-    It 'returns the label value when docker inspect succeeds'
-      docker() { echo "false"; return 0; }
-      When call image_label ai.sandbox.docker-enabled
-      The output should eq 'false'
-    End
-  End
-
-  Describe 'build_config_changed()'
-    It 'returns unchanged (1) when image has no labels at all'
-      docker() { return 1; }
-      NO_CHROMIUM=false
-      NO_DOCKER=false
-      When call build_config_changed
-      The status should be failure
-    End
-
-    It 'returns changed (0) when NO_DOCKER=true but image has docker-enabled=true'
-      docker() {
-        case "$*" in
-          *ai.sandbox.docker-enabled*) echo "true" ;;
-          *ai.sandbox.chromium-enabled*) echo "true" ;;
-        esac
-      }
-      NO_CHROMIUM=false
-      NO_DOCKER=true
-      When call build_config_changed
-      The status should be success
-    End
-
-    It 'returns changed (0) when NO_CHROMIUM=true but image has chromium-enabled=true'
-      docker() {
-        case "$*" in
-          *ai.sandbox.docker-enabled*) echo "true" ;;
-          *ai.sandbox.chromium-enabled*) echo "true" ;;
-        esac
-      }
-      NO_CHROMIUM=true
-      NO_DOCKER=false
-      When call build_config_changed
-      The status should be success
-    End
-
-    It 'returns unchanged (1) when both labels match the flags'
-      docker() {
-        case "$*" in
-          *ai.sandbox.docker-enabled*) echo "false" ;;
-          *ai.sandbox.chromium-enabled*) echo "false" ;;
-        esac
-      }
-      NO_CHROMIUM=true
-      NO_DOCKER=true
-      When call build_config_changed
-      The status should be failure
-    End
-  End
-
   Describe 'is_build_stale()'
     setup() {
-      export TOOL_CACHE_DIR="$(mktemp -d)"
       export PROJECT_ROOT="$(mktemp -d)"
       mkdir -p "${PROJECT_ROOT}/docker"
+      NO_CHROMIUM=false
+      NO_DOCKER=false
     }
     cleanup() {
-      rm -rf "$TOOL_CACHE_DIR" "$PROJECT_ROOT"
+      rm -rf "$PROJECT_ROOT"
     }
     Before 'setup'
     After 'cleanup'
 
-    It 'returns stale when marker is missing'
-      NO_CHROMIUM=false
-      NO_DOCKER=false
-      docker() { return 1; }
+    It 'returns stale when image does not exist'
+      docker() {
+        case "$1 $2" in
+          "image inspect") return 1 ;;
+        esac
+      }
       When call is_build_stale
       The status should be success
     End
 
-    It 'returns fresh when marker is present, no files newer, and labels match'
-      touch "${TOOL_CACHE_DIR}/.last-built"
-      # Give the marker a clearly-older mtime.
-      touch -t 202001010000 "${TOOL_CACHE_DIR}/.last-built"
-      NO_CHROMIUM=false
-      NO_DOCKER=false
+    It 'returns fresh when image is newer than all docker/ files'
+      # Create an old source file, then claim the image was built "now".
+      touch -t 202001010000 "${PROJECT_ROOT}/docker/Dockerfile"
+      # RFC3339 timestamp well in the future of the source file.
       docker() {
-        case "$*" in
-          *ai.sandbox.docker-enabled*) echo "true" ;;
-          *ai.sandbox.chromium-enabled*) echo "true" ;;
+        case "$1 $2" in
+          "image inspect") echo "2099-01-01T00:00:00Z" ;;
         esac
       }
       When call is_build_stale
       The status should be failure
     End
 
-    It 'returns stale when labels disagree with flags even if files are unchanged'
-      touch "${TOOL_CACHE_DIR}/.last-built"
-      touch -t 202001010000 "${TOOL_CACHE_DIR}/.last-built"
-      NO_CHROMIUM=false
-      NO_DOCKER=true
+    It 'returns stale when a docker/ file is newer than the image'
+      touch "${PROJECT_ROOT}/docker/Dockerfile"
+      # Image "created" back in 2000 → source file is newer.
       docker() {
-        case "$*" in
-          *ai.sandbox.docker-enabled*) echo "true" ;;
-          *ai.sandbox.chromium-enabled*) echo "false" ;;
+        case "$1 $2" in
+          "image inspect") echo "2000-01-01T00:00:00Z" ;;
         esac
       }
       When call is_build_stale
