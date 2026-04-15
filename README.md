@@ -118,7 +118,7 @@ a false positive.
 
 The inverse direction (launching host `claude` while the container is
 running) is not currently enforced — rely on user discipline. See
-[`docs/future-work.md`](docs/future-work.md) for the planned lockfile-based
+[`docs/next-steps.md`](docs/next-steps.md) for the planned lockfile-based
 symmetric enforcement.
 
 ## Docker access
@@ -183,6 +183,15 @@ you actually need Docker access and trust the workload.
   work on both sides, but a plugin shipping a native compiled hook would
   need explicit Linux-side handling.
 - *Symmetric mutual exclusion*: see the concurrency invariant note above.
+
+## Further reading
+
+- [`docs/architecture.md`](docs/architecture.md) — how the CLI is structured,
+  the phased command flow, and the design decisions behind per-variant image
+  tagging, plugin mount generation, mutual exclusion, and the Docker proxy.
+- [`docs/next-steps.md`](docs/next-steps.md) — deferred features and known
+  gaps (symmetric mutual exclusion, MCP service manager, plugin-binary
+  architecture mismatch).
 
 ## License
 
