@@ -1,33 +1,67 @@
 FROM ubuntu:latest
 
-# === LAYER 1: Base packages (no ARGs, most stable) ===
+# === LAYER 1a: Core apt packages (no ARGs, most stable — edit last) ===
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  aggregate \
   ca-certificates \
   curl \
   dnsutils \
-  fzf \
-  gh \
   git \
   gnupg2 \
   iproute2 \
-  ipset \
-  iptables \
-  jq \
   less \
   make \
-  man-db \
   procps \
   python3 \
   ssh \
   sudo \
   unzip \
-  vim \
   xz-utils \
   zsh \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# === LAYER 1b: s6-overlay (init system for graceful shutdown) ===
+# === LAYER 1b: Chromium (big apt install — pinned early so downstream edits don't invalidate it) ===
+# Ubuntu uses Snap for chromium-browser which doesn't work in containers.
+# When enabled, we install from the xtradeb PPA which provides native .deb packages.
+ARG INSTALL_CHROMIUM=false
+RUN if [ "$INSTALL_CHROMIUM" = "true" ]; then \
+  apt-get update && \
+  apt-get install -y software-properties-common && \
+  add-apt-repository ppa:xtradeb/apps -y && \
+  apt-get update && \
+  apt-get install -y --no-install-recommends \
+    libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 \
+    libxrandr2 libxrender1 libxtst6 libxss1 libnss3 libatk1.0-0 \
+    libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 libasound2t64 \
+    libpango-1.0-0 libcairo2 fonts-liberation chromium && \
+  apt-get clean && rm -rf /var/lib/apt/lists/*; \
+fi
+
+# === LAYER 1c: Developer/auxiliary apt packages (more likely to churn — edit here) ===
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  aggregate \
+  fzf \
+  gh \
+  ipset \
+  iptables \
+  jq \
+  lsb-release \
+  man-db \
+  vim \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# === LAYER 1c2: Docker CLI (client only; talks to host daemon via socket proxy when --docker is used) ===
+# Skipped when the image is built with --no-docker (INSTALL_DOCKER_CLI=false).
+ARG INSTALL_DOCKER_CLI=true
+RUN if [ "$INSTALL_DOCKER_CLI" = "true" ]; then \
+      install -m 0755 -d /etc/apt/keyrings \
+      && curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+      && chmod a+r /etc/apt/keyrings/docker.gpg \
+      && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list \
+      && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
+      && apt-get clean && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+# === LAYER 1d: s6-overlay (init system for graceful shutdown) ===
 ARG S6_NOARCH_TAR
 ARG S6_ARCH_TAR
 COPY --from=tool-cache ${S6_NOARCH_TAR} /root/${S6_NOARCH_TAR}
@@ -110,7 +144,9 @@ WORKDIR ${HOST_HOME}/playground
 
 # === LAYER 10: Claude Code (changes most frequently) ===
 ARG CLAUDE_CODE_VERSION=latest
-RUN ${HOST_HOME}/.bun/bin/bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+RUN ${HOST_HOME}/.bun/bin/bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} && \
+    { [ -e ${HOST_HOME}/.bun/bin/claude ] || \
+      ln -s ${HOST_HOME}/.bun/install/global/node_modules/@anthropic-ai/claude-code/cli.js ${HOST_HOME}/.bun/bin/claude; }
 
 # === LAYER 11: Firewall setup (root) ===
 COPY init-firewall.sh /usr/local/bin/
@@ -129,23 +165,6 @@ RUN chmod a+r /etc/sudoers
 # RUN echo "${HOST_USER} ALL=(ALL) NOPASSWD: /entrypoint.sh" >> /etc/sudoers.d/entrypoint_script
 RUN echo "${HOST_USER} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/entrypoint_script
 #RUN chmod 0440 /etc/sudoers.d/entrypoint_script
-
-# === LAYER 11c: Optional Chromium (conditional, runs as root) ===
-# Ubuntu uses Snap for chromium-browser which doesn't work in containers.
-# When enabled, we install from the xtradeb PPA which provides native .deb packages.
-ARG INSTALL_CHROMIUM=false
-RUN if [ "$INSTALL_CHROMIUM" = "true" ]; then \
-  apt-get update && \
-  apt-get install -y software-properties-common && \
-  add-apt-repository ppa:xtradeb/apps -y && \
-  apt-get update && \
-  apt-get install -y --no-install-recommends \
-    libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 \
-    libxrandr2 libxrender1 libxtst6 libxss1 libnss3 libatk1.0-0 \
-    libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 libasound2t64 \
-    libpango-1.0-0 libcairo2 fonts-liberation chromium && \
-  apt-get clean && rm -rf /var/lib/apt/lists/*; \
-fi
 
 # === LAYER 12: Shell config ===
 USER ${HOST_USER}
@@ -177,6 +196,12 @@ RUN chmod +x /etc/cont-init.d/* /etc/cont-finish.d/*
 # s6-overlay environment configuration
 ENV S6_CMD_USE_TERMINAL=1
 ENV S6_KILL_FINISH_MAXTIME=10000
+
+# === LAYER 15: Build-config labels (queried by the host launcher to decide when to rebuild) ===
+ARG INSTALL_CHROMIUM=false
+ARG INSTALL_DOCKER_CLI=true
+LABEL ai.sandbox.chromium-enabled="${INSTALL_CHROMIUM}"
+LABEL ai.sandbox.docker-enabled="${INSTALL_DOCKER_CLI}"
 
 ENTRYPOINT ["/init"]
 # With S6-overlay, it is important to use 'docker compose exec -u ${HOST_USER} zsh'; if we add 'USER ${HOST_USER}'

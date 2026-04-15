@@ -27,6 +27,9 @@ services:
         GOLANGCI_LINT_INSTALL_SH: ${GOLANGCI_LINT_INSTALL_SH:-}
         NVM_INSTALL_SH: ${NVM_INSTALL_SH:-}
         ZSH_IN_DOCKER_SH: ${ZSH_IN_DOCKER_SH:-}
+        # Build-config toggles (surfaced as image LABELs so the host launcher
+        # knows when to rebuild if the user switches flags).
+        INSTALL_DOCKER_CLI: ${INSTALL_DOCKER_CLI:-true}
         GIT_USER_NAME: ${GIT_USER_NAME}
         GIT_USER_EMAIL: ${GIT_USER_EMAIL}
         # credentials and auth

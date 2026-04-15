@@ -54,6 +54,15 @@ Describe 'ai-sandbox.sh'
   End
 
   Describe 'ensure_image()'
+    setup() {
+      export TOOL_CACHE_DIR="$(mktemp -d)"
+    }
+    cleanup() {
+      rm -rf "$TOOL_CACHE_DIR"
+    }
+    Before 'setup'
+    After 'cleanup'
+
     It 'calls build when image not found'
       built=false
       docker() {
@@ -89,9 +98,143 @@ Describe 'ai-sandbox.sh'
             ;;
         esac
       }
+      is_build_stale() { return 1; }
       COMPOSE_FILES="-f docker-compose.yaml"
       When call ensure_image
       The output should eq ''
+    End
+  End
+
+  Describe 'parse_options()'
+    It 'leaves NO_DOCKER false by default'
+      When call parse_options
+      The variable NO_DOCKER should eq false
+    End
+
+    It 'sets NO_DOCKER when --no-docker is passed'
+      When call parse_options --no-docker
+      The variable NO_DOCKER should eq true
+    End
+
+    It 'sets NO_DOCKER when -D is passed'
+      When call parse_options -D
+      The variable NO_DOCKER should eq true
+    End
+  End
+
+  Describe 'image_label()'
+    It 'returns empty string when docker inspect fails'
+      docker() { return 1; }
+      When call image_label ai.sandbox.docker-enabled
+      The output should eq ''
+      The status should be success
+    End
+
+    It 'returns the label value when docker inspect succeeds'
+      docker() { echo "false"; return 0; }
+      When call image_label ai.sandbox.docker-enabled
+      The output should eq 'false'
+    End
+  End
+
+  Describe 'build_config_changed()'
+    It 'returns unchanged (1) when image has no labels at all'
+      docker() { return 1; }
+      NO_CHROMIUM=false
+      NO_DOCKER=false
+      When call build_config_changed
+      The status should be failure
+    End
+
+    It 'returns changed (0) when NO_DOCKER=true but image has docker-enabled=true'
+      docker() {
+        case "$*" in
+          *ai.sandbox.docker-enabled*) echo "true" ;;
+          *ai.sandbox.chromium-enabled*) echo "true" ;;
+        esac
+      }
+      NO_CHROMIUM=false
+      NO_DOCKER=true
+      When call build_config_changed
+      The status should be success
+    End
+
+    It 'returns changed (0) when NO_CHROMIUM=true but image has chromium-enabled=true'
+      docker() {
+        case "$*" in
+          *ai.sandbox.docker-enabled*) echo "true" ;;
+          *ai.sandbox.chromium-enabled*) echo "true" ;;
+        esac
+      }
+      NO_CHROMIUM=true
+      NO_DOCKER=false
+      When call build_config_changed
+      The status should be success
+    End
+
+    It 'returns unchanged (1) when both labels match the flags'
+      docker() {
+        case "$*" in
+          *ai.sandbox.docker-enabled*) echo "false" ;;
+          *ai.sandbox.chromium-enabled*) echo "false" ;;
+        esac
+      }
+      NO_CHROMIUM=true
+      NO_DOCKER=true
+      When call build_config_changed
+      The status should be failure
+    End
+  End
+
+  Describe 'is_build_stale()'
+    setup() {
+      export TOOL_CACHE_DIR="$(mktemp -d)"
+      export PROJECT_ROOT="$(mktemp -d)"
+      mkdir -p "${PROJECT_ROOT}/docker"
+    }
+    cleanup() {
+      rm -rf "$TOOL_CACHE_DIR" "$PROJECT_ROOT"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'returns stale when marker is missing'
+      NO_CHROMIUM=false
+      NO_DOCKER=false
+      docker() { return 1; }
+      When call is_build_stale
+      The status should be success
+    End
+
+    It 'returns fresh when marker is present, no files newer, and labels match'
+      touch "${TOOL_CACHE_DIR}/.last-built"
+      # Give the marker a clearly-older mtime.
+      touch -t 202001010000 "${TOOL_CACHE_DIR}/.last-built"
+      NO_CHROMIUM=false
+      NO_DOCKER=false
+      docker() {
+        case "$*" in
+          *ai.sandbox.docker-enabled*) echo "true" ;;
+          *ai.sandbox.chromium-enabled*) echo "true" ;;
+        esac
+      }
+      When call is_build_stale
+      The status should be failure
+    End
+
+    It 'returns stale when labels disagree with flags even if files are unchanged'
+      touch "${TOOL_CACHE_DIR}/.last-built"
+      touch -t 202001010000 "${TOOL_CACHE_DIR}/.last-built"
+      NO_CHROMIUM=false
+      NO_DOCKER=true
+      docker() {
+        case "$*" in
+          *ai.sandbox.docker-enabled*) echo "true" ;;
+          *ai.sandbox.chromium-enabled*) echo "false" ;;
+        esac
+      }
+      When call is_build_stale
+      The status should be success
     End
   End
 
