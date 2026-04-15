@@ -41,15 +41,33 @@ function start_shell() {
         "if [ -d \"${START_DIR}\" ]; then cd \"${START_DIR}\" && exec zsh; else exec zsh; fi"
 }
 
+function build_marker_path() {
+    printf '%s/.last-built\n' "${TOOL_CACHE_DIR}"
+}
+
+# Return 0 (stale) if any file under docker/ is newer than the marker, or if the
+# marker is missing. Return 1 (fresh) otherwise.
+function is_build_stale() {
+    local marker newer
+    marker="$(build_marker_path)"
+    [ -f "${marker}" ] || return 0
+    newer="$(find "${PROJECT_ROOT}/docker" -type f -newer "${marker}" -print -quit 2>/dev/null)"
+    [ -n "${newer}" ]
+}
+
 function ensure_image() {
     if [ -z "$(docker compose ${COMPOSE_FILES} images -q ai-sandbox 2>/dev/null)" ]; then
         qecho "Image not found, building..."
+        do_build
+    elif is_build_stale; then
+        qecho "Build inputs changed since last build, rebuilding..."
         do_build
     fi
 }
 
 function do_build() {
     docker compose ${COMPOSE_FILES} build --ssh "default=${SSH_AUTH_SOCK}"
+    touch "$(build_marker_path)"
 }
 
 function cleanup_stale_container() {
