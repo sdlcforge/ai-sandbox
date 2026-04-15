@@ -1,5 +1,6 @@
 services:
   ai-sandbox:
+    image: ai-sandbox:${AI_SANDBOX_IMAGE_TAG:-full}
     build:
       context: .
       dockerfile: Dockerfile
