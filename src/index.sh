@@ -66,12 +66,14 @@ ${__SOURCED__:+return}
 
 CMD=""
 
-# Parse --no-chromium flag
+# Parse flags
 NO_CHROMIUM=false
 ARGS=()
 for arg in "$@"; do
   if [ "$arg" == "--no-chromium" ]; then
     NO_CHROMIUM=true
+  elif [ "$arg" == "--force" ]; then
+    export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
   elif [ "$arg" == "--quiet" ] || [ "$arg" == "-q" ]; then
     QUIET=0
   elif [ -z "${CMD}" ]; then
@@ -94,7 +96,7 @@ export QUIET
 
 # --- Execution code ---
 
-if [ "${CMD}" != "check-settings" ] && ! check_docker "starting..."; then
+if ! check_docker "starting..."; then
     docker desktop start
     check_docker "bailing out." || exit 1
 fi
@@ -110,23 +112,10 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 PROJECT_ROOT="$(cd -P "${SCRIPT_DIR}/.." && pwd)"
 
-# Ensure claude-mem is configured for container access
-if [ -z "${CMD}" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "build" ]; then
-    check_settings
-fi
-
-# Check if claude-mem is running on the host (would cause database corruption if container also runs it)
-if { [ -z "${CMD}" ] || [ "${CMD}" == "start" ]; } && claude-mem status 2>/dev/null | grep -q "is running"; then
-    echo ""
-    echo "WARNING: claude-mem is currently running on the host."
-    echo "Running claude-mem in both the host and container can cause database corruption."
-    echo ""
-    echo "Please:"
-    echo "  1. Exit any Claude Code sessions on the host"
-    echo "  2. Run 'claude-mem stop' to stop the host instance"
-    echo "  3. Then run this script again"
-    echo ""
-    exit 1
+# Pre-flight: refuse to start if host claude or plugin workers are running.
+# (Does not apply to read-only commands like status, stop, or exec into an already-running container.)
+if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "up" ]; then
+    check_host_plugin_conflicts || exit 1
 fi
 
 # Validate --no-chromium only used with commands that may build
@@ -135,11 +124,19 @@ if [ "$NO_CHROMIUM" = "true" ] && [ -n "$CMD" ] && [ "$CMD" != "build" ]; then
   exit 1
 fi
 
+# Generate docker-compose override with dynamic per-plugin volume mounts. Written
+# to the project's cache dir and included via COMPOSE_FILES below. Safe to
+# regenerate on every invocation — it's derived from installed_plugins.json and
+# ~/.config/ai-sandbox/volume-maps.
+GENERATED_COMPOSE="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox/docker-compose.generated.yaml"
+mkdir -p "$(dirname "${GENERATED_COMPOSE}")"
+generate_volume_override "${GENERATED_COMPOSE}"
+
 # Set compose files (Chromium is included by default)
 if [ "$NO_CHROMIUM" = "true" ]; then
-  COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml"
+  COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml -f ${GENERATED_COMPOSE}"
 else
-  COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml -f ${PROJECT_ROOT}/docker/docker-compose.chromium.yaml"
+  COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml -f ${PROJECT_ROOT}/docker/docker-compose.chromium.yaml -f ${GENERATED_COMPOSE}"
 fi
 
 # XQuartz setup for macOS (required for GUI apps in container)
@@ -271,8 +268,6 @@ elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
     start_shell
 elif [ "${CMD}" == "build" ]; then
     do_build
-elif [ "${CMD}" == "check-settings" ]; then
-    check_settings
 elif [ "${CMD}" == "user-exec" ]; then
     docker compose ${COMPOSE_FILES} exec -u "${HOST_USER}" ai-sandbox "${ARGS[@]}"
 elif [ "${CMD}" == "root-exec" ]; then

@@ -48,6 +48,7 @@ ai-sandbox logs -f
 | Flag | Description |
 |------|-------------|
 | `--no-chromium` | Skip Chromium/X11 layer (only valid with `build`) |
+| `--force` | Bypass the host plugin-conflict pre-flight check (same as `AI_SANDBOX_SKIP_PLUGIN_CHECK=1`) |
 
 ## What's inside
 
@@ -60,14 +61,71 @@ The container includes:
 - **Firewall**: iptables rules restricting outbound to GitHub + Anthropic
 - **Optional**: Chromium browser with X11 forwarding
 
+## Plugin support
+
+The sandbox shares your host `~/.claude` directory, so every plugin you've
+installed on the host is already visible inside the VM and will self-install
+its hooks when `claude` runs there. The remaining question for each plugin is
+where its state/config lives on disk and whether that location is mounted.
+
+### Auto-detected locations
+
+These are mounted into the container with no configuration needed:
+
+- `~/.config/<anything>` — covered by the `~/.config` mount. Picks up any
+  plugin that follows the XDG Base Directory layout.
+- `~/.<plugin-name>` — for each plugin listed in
+  `~/.claude/plugins/installed_plugins.json`, if a matching dot-dir exists
+  in your home directory it is mounted at the same path in the container.
+  This covers `claude-mem` (`~/.claude-mem`) and similarly-conventioned plugins.
+
+### Declaring additional mounts
+
+Plugins that store state outside both of the above locations (e.g. under
+`~/.local/share/<name>`, `~/.cache/<name>`, or somewhere bespoke) must be
+declared in `~/.config/ai-sandbox/volume-maps`. Format:
+
+```
+# One mount per line. Lines starting with '#' and blank lines are ignored.
+# Absolute path -> identity mount (same path on host and container).
+$HOME/.local/share/weird-plugin
+
+# src:dst form for non-identity mappings.
+$HOME/.custom-state:/opt/custom-state
+```
+
+`$HOME` and other environment variables in the file are expanded by the
+pre-flight script.
+
+### Concurrency invariant
+
+**Do not run `claude` or any claude plugin on the host while the ai-sandbox
+container is running, or vice versa.** Plugins with persistent workers (most
+notably `claude-mem`, which writes to a shared SQLite database in
+`~/.claude-mem`) can corrupt their own state if host and container both run
+instances concurrently.
+
+The pre-flight refuses to start the container when it detects host-side
+`claude` or plugin-worker processes. MCP workers can outlive the `claude`
+process that started them, so if you recently exited claude on the host and
+the pre-flight still complains, kill the worker PID it reports. Use `--force`
+or `AI_SANDBOX_SKIP_PLUGIN_CHECK=1` to bypass after confirming the match is
+a false positive.
+
+The inverse direction (launching host `claude` while the container is
+running) is not currently enforced — rely on user discipline. See
+[`docs/future-work.md`](docs/future-work.md) for the planned lockfile-based
+symmetric enforcement.
+
 ## Current limitations and goals
 
 - *OS support*: `ai-sandbox` is currently developed and tested on macOS. It may work on Linux, but this is untested. Full support for both Linux and Windows is planned.
-- *Plugin and MCP support*: `claude-mem` is specifically supported. While other plugins/MCPs may work, consider the following:
-  - configuration, cache, and data folders may not be mapped into the container,
-  - if a MCP server is already running on the host, the container Claude may try to start its own process which can lead to various errors, including possible MCP file/data corruption,
-  - access to any user visible endpoints provided by the MCP may require opening additional ports and additional configuration,
-  - because of limited testing, there may be other issues specific to any particular MCP.
+- *Plugin binaries*: architecture-specific plugin binaries (e.g. Mach-O on
+  macOS host, ELF on Linux in the container) are not handled. Most plugins
+  drive behavior through scripts under `~/.claude/plugins/cache/...` which
+  work on both sides, but a plugin shipping a native compiled hook would
+  need explicit Linux-side handling.
+- *Symmetric mutual exclusion*: see the concurrency invariant note above.
 
 ## License
 
