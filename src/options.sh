@@ -18,6 +18,8 @@ function parse_options() {
             export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
         elif [ "$arg" == "--quiet" ] || [ "$arg" == "-q" ]; then
             QUIET=0
+        elif [ "$arg" == "--help" ] || [ "$arg" == "-h" ]; then
+            CMD="help"
         elif [ -z "${CMD}" ]; then
             CMD=${arg:-"enter"}
         else

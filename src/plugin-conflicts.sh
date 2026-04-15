@@ -55,6 +55,8 @@ function check_host_plugin_conflicts() {
     if [ -n "${all_pids}" ]; then
         printf 'To resolve, stop the offending processes. For example:\n'
         printf '  kill %s\n\n' "${all_pids}"
+        printf 'or\n'
+        printf '  ai-sandbox \n\n'
         printf 'Or bypass with AI_SANDBOX_SKIP_PLUGIN_CHECK=1 if you know the\n'
         printf 'matches are false positives (e.g. a shell with claude in its history).\n\n'
     fi

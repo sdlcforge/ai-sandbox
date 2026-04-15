@@ -9,11 +9,18 @@ source ./volume-override.sh
 source ./tool-versions.sh
 source ./xquartz.sh
 source ./options.sh
+source ./help.sh
 
 ${__SOURCED__:+return}
 
 # --- Phase: parse options ---
 parse_options "$@"
+
+# --- Phase: help short-circuit ---
+if [ "${CMD}" == "help" ]; then
+    print_help
+    exit 0
+fi
 
 # --- Phase: docker pre-flight ---
 if ! check_docker "starting..."; then
