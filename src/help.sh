@@ -19,6 +19,8 @@ Commands:
   clean              Stop, remove the container, and delete the `ai-sandbox` container.
   user-exec <cmd>    Run <cmd> inside the container as the host user.
   root-exec <cmd>    Run <cmd> inside the container as root.
+  kill-local-ai      Kill host claude/plugin processes that conflict with the VM.
+                     Retries up to 4 times; warns if any survive.
   help, -h, --help   Show this message.
 
 Any other command is forwarded to `docker compose` with the assembled compose files,

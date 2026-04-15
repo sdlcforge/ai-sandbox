@@ -10,6 +10,7 @@ source ./tool-versions.sh
 source ./xquartz.sh
 source ./options.sh
 source ./help.sh
+source ./kill-local.sh
 
 ${__SOURCED__:+return}
 
@@ -19,6 +20,12 @@ parse_options "$@"
 # --- Phase: help short-circuit ---
 if [ "${CMD}" == "help" ]; then
     print_help
+    exit 0
+fi
+
+# --- Phase: kill-local-ai short-circuit (no docker needed) ---
+if [ "${CMD}" == "kill-local-ai" ]; then
+    kill_local_ai || exit 1
     exit 0
 fi
 
