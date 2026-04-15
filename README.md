@@ -39,11 +39,11 @@ ai-sandbox logs -f
 |---------|-------------|
 | *(no args)* | Build if needed, start if stopped, then connect |
 | `build` | Build the Docker image |
-
-The image is rebuilt automatically when any file under `docker/` (Dockerfile, compose configs, entrypoint scripts, etc.) is newer than the last successful build. A `.last-built` marker in the tool cache directory tracks this — you do not need to run `ai-sandbox build` or delete the image manually after pulling changes.
 | `start` | Start the container and open a shell |
 | `attach` / `connect` | Connect to an already-running container |
 | `<any>` | Passed through to `docker compose` |
+
+The image is rebuilt automatically when any file under `docker/` (Dockerfile, compose configs, entrypoint scripts, etc.) is newer than the image's build timestamp — you do not need to run `ai-sandbox build` or delete the image manually after pulling changes.
 
 ### Flags
 
