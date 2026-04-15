@@ -14,6 +14,8 @@ function parse_options() {
     NO_CHROMIUM=false
     NO_DOCKER=false
     ENABLE_DOCKER_PROXY=false
+    STATUS_JSON=false
+    STATUS_TEST_CHECK=false
     ARGS=()
     for arg in "$@"; do
         if [ "$arg" == "--no-chromium" ]; then
@@ -24,6 +26,10 @@ function parse_options() {
             ENABLE_DOCKER_PROXY=true
         elif [ "$arg" == "--force" ]; then
             export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
+        elif [ "$arg" == "--json" ]; then
+            STATUS_JSON=true
+        elif [ "$arg" == "--test-check" ]; then
+            STATUS_TEST_CHECK=true
         elif [ "$arg" == "--quiet" ] || [ "$arg" == "-q" ]; then
             QUIET=0
         elif [ "$arg" == "--help" ] || [ "$arg" == "-h" ]; then
@@ -35,10 +41,19 @@ function parse_options() {
         fi
     done
 
+    if { [ "${STATUS_JSON}" = "true" ] || [ "${STATUS_TEST_CHECK}" = "true" ]; } \
+        && [ "${CMD}" != "status" ]; then
+        echo "Error: --json and --test-check only apply to 'status'" 1>&2
+        exit 1
+    fi
+    export STATUS_JSON STATUS_TEST_CHECK
+
     CMD=${CMD:-"enter"}
 
     if [ -z "${QUIET}" ]; then
-        if [ "${CMD}" == "status" ]; then
+        if [ "${CMD}" == "status" ] \
+            && [ "${STATUS_JSON}" != "true" ] \
+            && [ "${STATUS_TEST_CHECK}" != "true" ]; then
             QUIET=0
         else
             QUIET=1

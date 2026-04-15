@@ -11,6 +11,7 @@ source ./xquartz.sh
 source ./options.sh
 source ./help.sh
 source ./kill-local.sh
+source ./status.sh
 
 ${__SOURCED__:+return}
 
@@ -30,9 +31,13 @@ if [ "${CMD}" == "kill-local-ai" ]; then
 fi
 
 # --- Phase: docker pre-flight ---
-if ! check_docker "starting..."; then
-    docker desktop start
-    check_docker "bailing out." || exit 1
+# `status` tolerates docker being down; it will just report the container as
+# stopped and no images. Anything else requires a running daemon.
+if [ "${CMD}" != "status" ]; then
+    if ! check_docker "starting..."; then
+        docker desktop start
+        check_docker "bailing out." || exit 1
+    fi
 fi
 
 # --- Phase: resolve script dir / project root (follows symlinks) ---
@@ -159,11 +164,7 @@ elif [ "${CMD}" == "user-exec" ]; then
 elif [ "${CMD}" == "root-exec" ]; then
     docker compose ${COMPOSE_FILES} exec -u root ai-sandbox "${ARGS[@]}"
 elif [ "${CMD}" == "status" ]; then
-    if [ "$(docker ps -q | wc -l | tr -d ' ')" == 0 ]; then
-        echo "nonexistant"
-    else
-        docker inspect --format='{{.State.Status}}' ai-sandbox
-    fi
+    do_status || exit $?
 elif [ "${CMD}" == "stop" ] || [ "${CMD}" == "clean" ]; then
     docker compose ${COMPOSE_FILES} down
     if [ "${CMD}" == "clean" ]; then

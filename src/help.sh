@@ -17,7 +17,9 @@ Commands:
                      unique combination of --no-chromium / --no-docker produces
                      its own image (tagged ai-sandbox:<variant>); rebuilding
                      only replaces the matching variant.
-  status             Print the container's state (or "nonexistant").
+  status             Show container state, built images, and (when stopped)
+                     whether the container is currently runnable. See `--json`
+                     and `--test-check` options below.
   stop               Stop and remove the container.
   clean              Stop, remove the container, and delete all ai-sandbox:*
                      images.
@@ -46,6 +48,10 @@ Options:
   --force            Bypass host plugin-conflict pre-flight checks.
                      Equivalent to AI_SANDBOX_SKIP_PLUGIN_CHECK=1.
   -q, --quiet        Quieter output (default for most commands; `status` is verbose).
+  --json             (status only) Emit machine-readable JSON instead of text.
+  --test-check       (status only) Run the pre-flight checks silently. Exits 0
+                     if the container could be started, 1 otherwise. Prints
+                     nothing. Intended for use as a gate in test harnesses.
 
 Environment:
   AI_SANDBOX_SKIP_PLUGIN_CHECK=1       Same as --force.

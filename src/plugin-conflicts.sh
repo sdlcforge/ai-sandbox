@@ -1,33 +1,24 @@
 # shellcheck shell=bash
 
-# Check for host-side processes that would conflict with plugins running inside
-# the container. Exits nonzero (with PIDs + suggested `kill` commands) on conflict.
-# Bypass with AI_SANDBOX_SKIP_PLUGIN_CHECK=1.
-function check_host_plugin_conflicts() {
-    if [ "${AI_SANDBOX_SKIP_PLUGIN_CHECK:-0}" = "1" ]; then
-        qecho "Skipping host plugin-conflict check (AI_SANDBOX_SKIP_PLUGIN_CHECK=1)."
-        return 0
-    fi
-
+# Gather host-side processes that would conflict with plugins running inside the
+# container. Prints two newline-terminated blocks on stdout (claude processes
+# then worker processes), separated by a single line "---". Both blocks may be
+# empty. Never emits the banner/resolution text — that's the caller's job.
+# Sets _PLUGIN_CONFLICTS_CLAUDE and _PLUGIN_CONFLICTS_WORKERS globals as a
+# convenience for callers that want structured access.
+function gather_plugin_conflicts() {
     local plugin_cache="${HOME}/.claude/plugins/cache"
     local self_pid=$$
     local ppid_val=$PPID
 
-    # Claude processes: match `claude` as a path component, not a substring (so we
-    # don't flag claude-mem, this script, etc.). Exclude our own PID and parent.
     local claude_pids
     claude_pids=$(pgrep -fl '(^|/)claude( |$)' 2>/dev/null \
         | awk -v s="${self_pid}" -v p="${ppid_val}" '$1 != s && $1 != p {print}' || true)
 
-    # Plugin worker processes: command line mentions any installed plugin name, or
-    # any path under the plugins cache dir.
     local plugin_names
     plugin_names=$(list_installed_plugins | tr '\n' '|' | sed 's/|$//')
     local plugin_pids=""
     if [ -n "${plugin_names}" ]; then
-        # Match plugin name as a path component or standalone arg token, not as a
-        # substring of arbitrary env vars (avoids matching `CURSOR_WORKSPACE_LABEL=
-        # github-toolkit` when 'github' is an installed plugin name).
         plugin_pids=$(pgrep -fl "(^|/)(${plugin_names})( |$|/)" 2>/dev/null \
             | awk -v s="${self_pid}" -v p="${ppid_val}" '$1 != s && $1 != p {print}' || true)
     fi
@@ -38,7 +29,29 @@ function check_host_plugin_conflicts() {
     worker_pids=$(printf '%s\n%s\n' "${plugin_pids}" "${cache_pids}" \
         | grep -v '^$' | sort -u || true)
 
-    if [ -z "${claude_pids}" ] && [ -z "${worker_pids}" ]; then
+    _PLUGIN_CONFLICTS_CLAUDE="${claude_pids}"
+    _PLUGIN_CONFLICTS_WORKERS="${worker_pids}"
+}
+
+# Returns 0 if any conflicts are present after gather, 1 otherwise.
+function has_plugin_conflicts() {
+    [ -n "${_PLUGIN_CONFLICTS_CLAUDE:-}" ] || [ -n "${_PLUGIN_CONFLICTS_WORKERS:-}" ]
+}
+
+# Check for host-side processes that would conflict with plugins running inside
+# the container. Exits nonzero (with PIDs + suggested `kill` commands) on conflict.
+# Bypass with AI_SANDBOX_SKIP_PLUGIN_CHECK=1.
+function check_host_plugin_conflicts() {
+    if [ "${AI_SANDBOX_SKIP_PLUGIN_CHECK:-0}" = "1" ]; then
+        qecho "Skipping host plugin-conflict check (AI_SANDBOX_SKIP_PLUGIN_CHECK=1)."
+        return 0
+    fi
+
+    gather_plugin_conflicts
+    local claude_pids="${_PLUGIN_CONFLICTS_CLAUDE}"
+    local worker_pids="${_PLUGIN_CONFLICTS_WORKERS}"
+
+    if ! has_plugin_conflicts; then
         return 0
     fi
 

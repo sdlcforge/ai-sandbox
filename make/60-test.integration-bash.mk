@@ -15,6 +15,10 @@ TEST_TARGETS+=$(SDLC_INTEGRATION_SHELL_TEST_REPORT) $(SDLC_INTEGRATION_SHELL_TES
 
 $(SDLC_INTEGRATION_SHELL_TEST_REPORT) $(SDLC_INTEGRATION_SHELL_TEST_PASS_MARKER) &: $(SDLC_INTEGRATION_SHELL_TEST_FILES) $(BUILD_TARGETS)
 	@mkdir -p $(dir $@)
+	@if ! ./bin/ai-sandbox.sh status --test-check; then \
+	  echo "Preflight checks failed; test not run."; \
+	  exit 1; \
+	fi
 	( set -e; set -o pipefail; \
 	  $(SDLC_SHELLSPEC) $(SHELL_TESTS)/integration \
 	    | tee $(SDLC_INTEGRATION_SHELL_TEST_REPORT); \
