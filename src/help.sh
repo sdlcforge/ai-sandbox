@@ -28,11 +28,23 @@ so e.g. `ai-sandbox logs -f` works.
 
 Options:
   --no-chromium      (build only) Build the image without Chromium.
+  -D, --no-docker    (build/start only) Build/start without the Docker CLI
+                     inside the container. Produces a smaller image. Cannot
+                     be combined with --docker. If the container is already
+                     running, stop it before applying this flag. Switching
+                     between --no-docker and the default triggers a rebuild
+                     automatically on the next start.
+  --docker           Give the container gated access to the host Docker daemon
+                     via a tecnativa/docker-socket-proxy sidecar. Enables
+                     image pull/search/build and container run/exec inside the
+                     sandbox. This is a mitigation, not a security boundary —
+                     only enable when you actually need it.
   --force            Bypass host plugin-conflict pre-flight checks.
                      Equivalent to AI_SANDBOX_SKIP_PLUGIN_CHECK=1.
   -q, --quiet        Quieter output (default for most commands; `status` is verbose).
 
 Environment:
-  AI_SANDBOX_SKIP_PLUGIN_CHECK=1   Same as --force.
+  AI_SANDBOX_SKIP_PLUGIN_CHECK=1       Same as --force.
+  AI_SANDBOX_ENABLE_DOCKER_PROXY=1     Same as --docker.
 EOF
 }

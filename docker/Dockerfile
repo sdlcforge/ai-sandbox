@@ -44,9 +44,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   ipset \
   iptables \
   jq \
+  lsb-release \
   man-db \
   vim \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# === LAYER 1c2: Docker CLI (client only; talks to host daemon via socket proxy when --docker is used) ===
+# Skipped when the image is built with --no-docker (INSTALL_DOCKER_CLI=false).
+ARG INSTALL_DOCKER_CLI=true
+RUN if [ "$INSTALL_DOCKER_CLI" = "true" ]; then \
+      install -m 0755 -d /etc/apt/keyrings \
+      && curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+      && chmod a+r /etc/apt/keyrings/docker.gpg \
+      && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list \
+      && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
+      && apt-get clean && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 # === LAYER 1d: s6-overlay (init system for graceful shutdown) ===
 ARG S6_NOARCH_TAR
@@ -183,6 +196,12 @@ RUN chmod +x /etc/cont-init.d/* /etc/cont-finish.d/*
 # s6-overlay environment configuration
 ENV S6_CMD_USE_TERMINAL=1
 ENV S6_KILL_FINISH_MAXTIME=10000
+
+# === LAYER 15: Build-config labels (queried by the host launcher to decide when to rebuild) ===
+ARG INSTALL_CHROMIUM=false
+ARG INSTALL_DOCKER_CLI=true
+LABEL ai.sandbox.chromium-enabled="${INSTALL_CHROMIUM}"
+LABEL ai.sandbox.docker-enabled="${INSTALL_DOCKER_CLI}"
 
 ENTRYPOINT ["/init"]
 # With S6-overlay, it is important to use 'docker compose exec -u ${HOST_USER} zsh'; if we add 'USER ${HOST_USER}'

@@ -56,6 +56,54 @@ if [ "$NO_CHROMIUM" = "true" ] && [ -n "$CMD" ] && [ "$CMD" != "build" ]; then
   exit 1
 fi
 
+# --no-docker is only meaningful when we're about to build the image or start
+# the container. Reject it on pass-through / management commands so users don't
+# get the false impression it did something.
+case "${CMD}" in
+  build|start|enter|"") ;;
+  *)
+    if [ "$NO_DOCKER" = "true" ]; then
+      echo "Error: --no-docker only applies to 'build', 'start', or 'enter'" 1>&2
+      exit 1
+    fi
+    ;;
+esac
+
+if [ "$NO_DOCKER" = "true" ] && [ "$ENABLE_DOCKER_PROXY" = "true" ]; then
+  echo "Error: --no-docker and --docker are mutually exclusive" 1>&2
+  exit 1
+fi
+
+# --no-docker modifies how the container is built/started. If a container is
+# already running, the flag would silently do nothing — fail loudly instead.
+if [ "$NO_DOCKER" = "true" ] && [ "${CMD}" != "build" ]; then
+  running_state="$(docker inspect -f '{{.State.Running}}' ai-sandbox 2>/dev/null || true)"
+  if [ "${running_state}" = "true" ]; then
+    echo "Error: --no-docker cannot be applied while the ai-sandbox container is running." 1>&2
+    echo "       Stop it first with 'ai-sandbox stop'." 1>&2
+    exit 1
+  fi
+fi
+
+# If --docker was requested but the existing image was built without the Docker
+# CLI, the proxy overlay will mount but 'docker' won't exist in the container.
+# Refuse early and tell the user to rebuild.
+if [ "$ENABLE_DOCKER_PROXY" = "true" ] && [ "${CMD}" != "build" ]; then
+  docker_label="$(image_label ai.sandbox.docker-enabled)"
+  if [ "${docker_label}" = "false" ]; then
+    echo "Error: image was built with --no-docker; rebuild without it to use --docker." 1>&2
+    echo "       Run 'ai-sandbox build' to rebuild." 1>&2
+    exit 1
+  fi
+fi
+
+# Export build-time ARG values consumed by docker/docker-compose.yaml.
+if [ "$NO_DOCKER" = "true" ]; then
+  export INSTALL_DOCKER_CLI=false
+else
+  export INSTALL_DOCKER_CLI=true
+fi
+
 # --- Phase: assemble docker-compose file list ---
 GENERATED_COMPOSE="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox/docker-compose.generated.yaml"
 mkdir -p "$(dirname "${GENERATED_COMPOSE}")"
@@ -65,6 +113,10 @@ if [ "$NO_CHROMIUM" = "true" ]; then
   COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml -f ${GENERATED_COMPOSE}"
 else
   COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml -f ${PROJECT_ROOT}/docker/docker-compose.chromium.yaml -f ${GENERATED_COMPOSE}"
+fi
+
+if [ "$NO_DOCKER" != "true" ] && { [ "$ENABLE_DOCKER_PROXY" = "true" ] || [ -n "${AI_SANDBOX_ENABLE_DOCKER_PROXY:-}" ]; }; then
+  COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.proxy.yaml"
 fi
 
 # --- Phase: XQuartz setup (macOS, start/empty cmd only) ---

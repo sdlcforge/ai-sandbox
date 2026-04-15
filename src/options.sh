@@ -5,15 +5,23 @@
 #   CMD          — subcommand (defaults to "enter")
 #   ARGS         — array of remaining args forwarded to the subcommand
 #   NO_CHROMIUM  — "true" if --no-chromium was passed
+#   NO_DOCKER    — "true" if --no-docker / -D was passed
+#   ENABLE_DOCKER_PROXY — "true" if --docker was passed
 #   QUIET        — 0 (verbose) or 1 (quiet); defaults to 0 for `status`, 1 otherwise
 # Also exports AI_SANDBOX_SKIP_PLUGIN_CHECK when --force is passed.
 function parse_options() {
     CMD=""
     NO_CHROMIUM=false
+    NO_DOCKER=false
+    ENABLE_DOCKER_PROXY=false
     ARGS=()
     for arg in "$@"; do
         if [ "$arg" == "--no-chromium" ]; then
             NO_CHROMIUM=true
+        elif [ "$arg" == "--no-docker" ] || [ "$arg" == "-D" ]; then
+            NO_DOCKER=true
+        elif [ "$arg" == "--docker" ]; then
+            ENABLE_DOCKER_PROXY=true
         elif [ "$arg" == "--force" ]; then
             export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
         elif [ "$arg" == "--quiet" ] || [ "$arg" == "-q" ]; then

@@ -48,6 +48,8 @@ ai-sandbox logs -f
 | Flag | Description |
 |------|-------------|
 | `--no-chromium` | Skip Chromium/X11 layer (only valid with `build`) |
+| `-D`, `--no-docker` | Build/start without the Docker CLI inside the container (valid on `build`, `start`, `enter`). Smaller image; mutually exclusive with `--docker`. Not allowed while the container is running — stop it first. |
+| `--docker` | Enable gated Docker-daemon access via a socket-proxy sidecar (same as `AI_SANDBOX_ENABLE_DOCKER_PROXY=1`) — see [Docker access](#docker-access) |
 | `--force` | Bypass the host plugin-conflict pre-flight check (same as `AI_SANDBOX_SKIP_PLUGIN_CHECK=1`) |
 
 ## What's inside
@@ -116,6 +118,59 @@ The inverse direction (launching host `claude` while the container is
 running) is not currently enforced — rely on user discipline. See
 [`docs/future-work.md`](docs/future-work.md) for the planned lockfile-based
 symmetric enforcement.
+
+## Docker access
+
+Some agents need to pull images, build, or run throwaway containers from
+inside the sandbox. Direct `docker.sock` mounting would give the container
+root on the host (trivially escapable via `docker run --privileged`), and
+Docker-in-Docker is heavy. Instead, `--docker` starts a
+[`tecnativa/docker-socket-proxy`](https://github.com/Tecnativa/docker-socket-proxy)
+sidecar on a private Compose network that exposes a **whitelisted** subset
+of the host Docker API over TCP. The sandbox reaches it at
+`DOCKER_HOST=tcp://docker-socket-proxy:2375`, which the standard `docker`
+CLI picks up automatically — no other configuration required.
+
+```sh
+ai-sandbox --docker
+# inside the container:
+docker pull hello-world
+docker run --rm hello-world
+docker search nginx
+```
+
+Enabled endpoints: `images`, `containers`, `build`, `networks`, `volumes`,
+`exec`, `info`, `ping`, `version` (plus `POST` so writes/builds work).
+Explicitly **denied**: swarm, nodes, services, secrets, configs, plugins,
+system. See [`docker/docker-compose.proxy.yaml`](docker/docker-compose.proxy.yaml).
+
+**Image search** goes through the daemon (`docker search …`), but nothing
+stops the agent from hitting Docker Hub directly if that's more ergonomic:
+
+```sh
+curl -s 'https://hub.docker.com/v2/search/repositories/?query=nginx&page_size=3' | jq
+```
+
+### Opting out entirely: `--no-docker`
+
+If an agent doesn't need Docker at all, build with `-D` / `--no-docker` to
+skip installing the Docker CLI inside the container. The resulting image is
+smaller and the `LAYER 1c2` build step is skipped. The flag is recorded on
+the image as the `ai.sandbox.docker-enabled=false` label, and the host
+launcher automatically rebuilds when you switch between the two modes (so
+`ai-sandbox build --no-docker` followed later by plain `ai-sandbox` triggers
+a rebuild that reinstates the CLI). The same rebuild-on-flag-change behavior
+applies to `--no-chromium`.
+
+`--no-docker` and `--docker` are mutually exclusive, and `--no-docker` is
+rejected while the container is already running (stop it first).
+
+### Security caveat
+
+The proxy is a **mitigation, not a security boundary**. With `CONTAINERS=1`
+and `POST=1` a hostile workload inside the sandbox can still escape via e.g.
+`docker run -v /:/host alpine chroot /host ...`. Enable `--docker` only when
+you actually need Docker access and trust the workload.
 
 ## Current limitations and goals
 
