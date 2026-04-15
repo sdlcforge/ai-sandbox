@@ -14,7 +14,9 @@ Commands:
   start              Start the container in the background; do not attach.
   attach, connect    Attach a shell to an already-running container.
   build              Build the container image. Use with --no-chromium to skip Chromium.
-  status             Print the container's state (or "nonexistant").
+  status             Show container state, built images, and (when stopped)
+                     whether the container is currently runnable. See `--json`
+                     and `--test-check` options below.
   stop               Stop and remove the container.
   clean              Stop, remove the container, and delete the `ai-sandbox` container.
   user-exec <cmd>    Run <cmd> inside the container as the host user.
@@ -42,6 +44,10 @@ Options:
   --force            Bypass host plugin-conflict pre-flight checks.
                      Equivalent to AI_SANDBOX_SKIP_PLUGIN_CHECK=1.
   -q, --quiet        Quieter output (default for most commands; `status` is verbose).
+  --json             (status only) Emit machine-readable JSON instead of text.
+  --test-check       (status only) Run the pre-flight checks silently. Exits 0
+                     if the container could be started, 1 otherwise. Prints
+                     nothing. Intended for use as a gate in test harnesses.
 
 Environment:
   AI_SANDBOX_SKIP_PLUGIN_CHECK=1       Same as --force.
