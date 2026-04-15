@@ -85,18 +85,6 @@ if [ "$NO_DOCKER" = "true" ] && [ "${CMD}" != "build" ]; then
   fi
 fi
 
-# If --docker was requested but the existing image was built without the Docker
-# CLI, the proxy overlay will mount but 'docker' won't exist in the container.
-# Refuse early and tell the user to rebuild.
-if [ "$ENABLE_DOCKER_PROXY" = "true" ] && [ "${CMD}" != "build" ]; then
-  docker_label="$(image_label ai.sandbox.docker-enabled)"
-  if [ "${docker_label}" = "false" ]; then
-    echo "Error: image was built with --no-docker; rebuild without it to use --docker." 1>&2
-    echo "       Run 'ai-sandbox build' to rebuild." 1>&2
-    exit 1
-  fi
-fi
-
 # Export build-time ARG values consumed by docker/docker-compose.yaml.
 if [ "$NO_DOCKER" = "true" ]; then
   export INSTALL_DOCKER_CLI=false
@@ -144,6 +132,10 @@ export DOCKER_DEFAULT_PLATFORM=linux/${HOST_ARCH}
 export TOOL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox"
 mkdir -p "${TOOL_CACHE_DIR}"
 
+# Per-variant image tag consumed by docker/docker-compose.yaml.
+AI_SANDBOX_IMAGE_TAG="$(variant_key)"
+export AI_SANDBOX_IMAGE_TAG
+
 # --- Phase: tool-version resolution + downloads (build-related commands) ---
 if [ -z "${CMD}" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "up" ] || [ "${CMD}" == "build" ]; then
     resolve_and_download_tools
@@ -178,6 +170,17 @@ elif [ "${CMD}" == "stop" ] || [ "${CMD}" == "clean" ]; then
         OUTPUT=$(docker rm -f ai-sandbox || true)
         if [ $QUIET -ne 0 ] && [ "${OUTPUT}" == "ai-sandbox" ]; then
             echo "deleted '${OUTPUT}'"
+        fi
+        # Remove all ai-sandbox:* variant images.
+        IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}}' \
+            | awk -F: '$1 == "ai-sandbox" {print}' || true)
+        if [ -n "${IMAGES}" ]; then
+            # shellcheck disable=SC2086 # intentional word-splitting across tags
+            docker image rm -f ${IMAGES} >/dev/null 2>&1 || true
+            if [ $QUIET -ne 0 ]; then
+                echo "deleted images:"
+                printf '  %s\n' ${IMAGES}
+            fi
         fi
     fi
 else
