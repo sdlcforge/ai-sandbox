@@ -1,4 +1,23 @@
 #!/command/with-contenv bash
-# Setup SSH socket ownership for the host user; this allows the container to access the host's SSH agent.
-echo -n "Setting ownership for ${SSH_AUTH_SOCK} to ${HOST_USER}:${HOST_USER}: "
-chown ${HOST_USER}:${HOST_USER} ${SSH_AUTH_SOCK} && echo "success" || { echo "failed" >&2; exit 1; }
+# Best-effort setup for the host's SSH agent socket inside the container.
+# The socket is bind-mounted (see docker-compose.yaml) to the stable path
+# ${SSH_AUTH_SOCK}. We try to chown it to the host user so the agent is
+# usable without sudo. A chown failure (common on macOS launchd sockets)
+# is non-fatal — the mount is often already accessible to the user via
+# its existing permissions.
+set -u
+
+SOCK="${SSH_AUTH_SOCK:-/run/ai-sandbox/ssh-auth.sock}"
+
+if [ ! -S "$SOCK" ]; then
+  echo "warn: ${SOCK} is not a socket; SSH agent forwarding will not work" >&2
+  exit 0
+fi
+
+if chown "${HOST_USER}:${HOST_USER}" "${SOCK}" 2>/dev/null; then
+  echo "ssh-agent socket ${SOCK} chowned to ${HOST_USER}"
+else
+  echo "warn: could not chown ${SOCK}; continuing (mount may already be user-accessible)" >&2
+fi
+
+exit 0

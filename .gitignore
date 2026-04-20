@@ -1,5 +1,5 @@
 # dirs
-/.ai-sandbox.startup.log
+/.ai-sandbox*.startup.log
 /.claude/settings.local.json
 /bin
 /node_modules

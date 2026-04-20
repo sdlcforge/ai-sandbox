@@ -151,12 +151,16 @@ if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
     ensure_image
     cleanup_stale_container
     docker compose ${COMPOSE_FILES} up -d
+    warn_if_ssh_mount_stale
 
     if [ "${CMD}" == "enter" ]; then
         start_shell
     fi || true
 elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
+    warn_if_ssh_mount_stale
     start_shell
+elif [ "${CMD}" == "fix-ssh" ]; then
+    fix_ssh || exit 1
 elif [ "${CMD}" == "build" ]; then
     do_build
 elif [ "${CMD}" == "user-exec" ]; then

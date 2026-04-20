@@ -200,6 +200,77 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe '_ssh_mount_is_fresh()'
+    It 'returns 0 when the label matches the current SSH_AUTH_SOCK'
+      export SSH_AUTH_SOCK="/tmp/agent.sock"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo "/tmp/agent.sock"; return 0; fi
+      }
+      When call _ssh_mount_is_fresh
+      The status should eq 0
+    End
+
+    It 'returns 1 when the label disagrees with SSH_AUTH_SOCK'
+      export SSH_AUTH_SOCK="/tmp/new.sock"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo "/tmp/old.sock"; return 0; fi
+      }
+      When call _ssh_mount_is_fresh
+      The status should eq 1
+    End
+
+    It 'returns 2 when docker inspect fails (no container)'
+      export SSH_AUTH_SOCK="/tmp/agent.sock"
+      docker() {
+        if [ "$1" = "inspect" ]; then return 1; fi
+      }
+      When call _ssh_mount_is_fresh
+      The status should eq 2
+    End
+
+    It 'returns 2 when the label is empty'
+      export SSH_AUTH_SOCK="/tmp/agent.sock"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo ""; return 0; fi
+      }
+      When call _ssh_mount_is_fresh
+      The status should eq 2
+    End
+  End
+
+  Describe 'warn_if_ssh_mount_stale()'
+    It 'warns to stderr when the mount is stale'
+      export SSH_AUTH_SOCK="/tmp/new.sock"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo "/tmp/old.sock"; return 0; fi
+      }
+      When call warn_if_ssh_mount_stale
+      The stderr should include 'SSH_AUTH_SOCK has changed'
+      The stderr should include 'ai-sandbox fix-ssh'
+      The status should be success
+    End
+
+    It 'is silent when the mount is fresh'
+      export SSH_AUTH_SOCK="/tmp/agent.sock"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo "/tmp/agent.sock"; return 0; fi
+      }
+      When call warn_if_ssh_mount_stale
+      The output should eq ''
+      The stderr should eq ''
+    End
+
+    It 'is silent when no container exists'
+      export SSH_AUTH_SOCK="/tmp/agent.sock"
+      docker() {
+        if [ "$1" = "inspect" ]; then return 1; fi
+      }
+      When call warn_if_ssh_mount_stale
+      The output should eq ''
+      The stderr should eq ''
+    End
+  End
+
   Describe 'cleanup_stale_container()'
     It 'returns 0 when no container exists'
       docker() {

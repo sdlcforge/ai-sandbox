@@ -141,6 +141,38 @@ This is framed in `README.md` as a mitigation, not a security boundary — with
 `CONTAINERS=1` + `POST=1` a hostile workload inside can still escape via e.g.
 `docker run -v /:/host`. Enable only when the workload is trusted.
 
+### SSH agent forwarding is decoupled from the host path
+
+The container needs the host's `ssh-agent` — without it, `git push` over SSH
+fails inside the VM. The naïve approach (`- ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}`
+plus `ENV SSH_AUTH_SOCK=${SSH_AUTH_SOCK}` baked into the image) breaks any
+time the host's `SSH_AUTH_SOCK` changes — logout/login, reboot, a fresh
+`eval $(ssh-agent)`, a Docker Desktop update. macOS's launchd socket path
+(`/private/tmp/com.apple.launchd.*/Listeners`) rotates whenever that happens.
+
+The current design:
+
+- The container always uses a **stable in-container path**,
+  `/run/ai-sandbox/ssh-auth.sock`, baked into the image as `ENV SSH_AUTH_SOCK`.
+- `docker/docker-compose.yaml` bind-mounts the host's current socket to that
+  target, and records the host path in the
+  `ai.sandbox.ssh-auth-sock-host` container label.
+- On `start` / `enter` / `attach`, `warn_if_ssh_mount_stale`
+  (`src/utils.sh`) compares the label to the current host `SSH_AUTH_SOCK`.
+  When they disagree, the mount is stale and SSH inside the container will
+  fail; the user sees a warning pointing at `ai-sandbox fix-ssh`.
+- `ai-sandbox fix-ssh` re-creates only the `ai-sandbox` service with the
+  current host path mounted. We deliberately *don't* auto-recreate — doing
+  so would kill in-flight Claude sessions or long-running processes without
+  consent.
+- `docker/rootfs/etc/cont-init.d/01-setup-ssh` is best-effort: it warns on
+  failure rather than `exit 1`, since the launchd socket chown often fails
+  with EPERM while the mount is already user-accessible.
+
+Troubleshooting pointer: `ai-sandbox user-exec zsh -c 'ssh-add -l'` inside
+the container should list host keys; a real end-to-end check is `ssh -T
+git@github.com` looking for `successfully authenticated`.
+
 ### Status as both human and machine interface
 
 `ai-sandbox status` has three modes driven by flags, all fed by a single

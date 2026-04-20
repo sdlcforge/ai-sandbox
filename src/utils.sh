@@ -98,6 +98,71 @@ function cleanup_stale_container() {
     docker compose ${COMPOSE_FILES} down 2>/dev/null || docker rm -f ai-sandbox 2>/dev/null || true
 }
 
+# SSH agent forwarding helpers.
+#
+# The container uses a stable internal socket path (/run/ai-sandbox/ssh-auth.sock)
+# set in the Dockerfile. docker-compose.yaml bind-mounts the host's current
+# SSH_AUTH_SOCK to that path and records the host value in the
+# ai.sandbox.ssh-auth-sock-host label. When the host agent restarts (logout,
+# reboot, new `eval $(ssh-agent)`), the label will no longer match the current
+# host env — the container's mount is stale and SSH inside the container will
+# fail. We detect this and tell the user to run `ai-sandbox fix-ssh`.
+
+# Return 0 if the running container's recorded host SSH_AUTH_SOCK matches the
+# current host env. Return 1 if it has drifted. Return 2 if there's no container
+# (or no label), so callers can distinguish "no-op" from "stale".
+function _ssh_mount_is_fresh() {
+    local recorded
+    recorded=$(docker inspect -f \
+        '{{index .Config.Labels "ai.sandbox.ssh-auth-sock-host"}}' \
+        ai-sandbox 2>/dev/null) || return 2
+    [ -z "${recorded}" ] && return 2
+    [ "${recorded}" = "${SSH_AUTH_SOCK:-}" ]
+}
+
+# Warn (non-fatal) if the running container's SSH socket mount is stale.
+function warn_if_ssh_mount_stale() {
+    _ssh_mount_is_fresh
+    case $? in
+        0|2) return 0 ;;
+        1)
+            echo "warn: host SSH_AUTH_SOCK has changed since the container was created." >&2
+            echo "      SSH-backed operations (e.g. git push) will fail inside the container." >&2
+            echo "      Run 'ai-sandbox fix-ssh' to refresh the socket mount." >&2
+            return 0
+            ;;
+    esac
+}
+
+# Verify the host SSH agent is reachable. Non-fatal; returns 1 if not.
+# ssh-add -l exits 0 with identities, 1 with no identities, 2 if it can't
+# contact the agent.
+function ssh_preflight() {
+    if [ -z "${SSH_AUTH_SOCK:-}" ] || [ ! -S "${SSH_AUTH_SOCK}" ]; then
+        qecho "warn: host SSH_AUTH_SOCK (${SSH_AUTH_SOCK:-unset}) is not a live socket"
+        return 1
+    fi
+    local rc
+    ssh-add -l >/dev/null 2>&1
+    rc=$?
+    if [ $rc -eq 2 ]; then
+        qecho "warn: cannot contact ssh-agent at ${SSH_AUTH_SOCK}"
+        return 1
+    fi
+    return 0
+}
+
+# Recreate the ai-sandbox container with the current host SSH_AUTH_SOCK mounted.
+function fix_ssh() {
+    if ! ssh_preflight; then
+        echo "Host SSH agent is not reachable. Start one (e.g. 'eval \$(ssh-agent)') or" >&2
+        echo "verify SSH_AUTH_SOCK points at a live socket, then retry." >&2
+        return 1
+    fi
+    docker compose ${COMPOSE_FILES} up -d --force-recreate --no-deps ai-sandbox
+    qecho "Container recreated with SSH_AUTH_SOCK=${SSH_AUTH_SOCK}"
+}
+
 # List installed claude plugin names (without @marketplace suffix), one per line.
 # Returns nothing if the installed_plugins.json manifest is missing.
 function list_installed_plugins() {

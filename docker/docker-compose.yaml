@@ -33,11 +33,14 @@ services:
         INSTALL_DOCKER_CLI: ${INSTALL_DOCKER_CLI:-true}
         GIT_USER_NAME: ${GIT_USER_NAME}
         GIT_USER_EMAIL: ${GIT_USER_EMAIL}
-        # credentials and auth
-        SSH_AUTH_SOCK: "${SSH_AUTH_SOCK}"
     container_name: ai-sandbox
     stdin_open: true
     tty: true
+    labels:
+      # Records the host SSH_AUTH_SOCK path that was current when the container
+      # was created. The launcher compares this to the current host path via
+      # docker inspect to detect drift after agent restarts / logouts.
+      ai.sandbox.ssh-auth-sock-host: "${SSH_AUTH_SOCK}"
     volumes:
       # Map host directories to same absolute paths in container.
       # Plugin state dirs (e.g. ~/.claude-mem) and XDG-layout plugin configs (under ~/.config)
@@ -48,7 +51,9 @@ services:
       - ${HOST_HOME}/.claude:${HOST_HOME}/.claude
       - ${HOST_HOME}/.config:${HOST_HOME}/.config
       - ${HOST_HOME}/playground:${HOST_HOME}/playground
-      - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
+      # SSH agent socket: host path is bind-mounted to a stable in-container path
+      # (decouples container env from host path changes).
+      - ${SSH_AUTH_SOCK}:/run/ai-sandbox/ssh-auth.sock
     environment:
       # credentials
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}

@@ -27,6 +27,9 @@ Commands:
   root-exec <cmd>    Run <cmd> inside the container as root.
   kill-local-ai      Kill host claude/plugin processes that conflict with the VM.
                      Retries up to 4 times; warns if any survive.
+  fix-ssh            Recreate the container so the host's current SSH_AUTH_SOCK
+                     is bind-mounted. Use after a host logout / ssh-agent
+                     restart when `git push` inside the container fails.
   help, -h, --help   Show this message.
 
 Any other command is forwarded to `docker compose` with the assembled compose files,

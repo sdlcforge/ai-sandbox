@@ -73,8 +73,11 @@ RUN rm /root/${S6_NOARCH_TAR} /root/${S6_ARCH_TAR}
 # === LAYER 2: Timezone (rarely changes) ===
 ARG HOST_TZ
 ENV TZ="$HOST_TZ"
-ARG SSH_AUTH_SOCK
-ENV SSH_AUTH_SOCK="$SSH_AUTH_SOCK"
+# Stable container-internal agent-socket path. The host's current socket is
+# bind-mounted here at runtime (see docker-compose.yaml); decoupling means
+# host-agent restarts don't require an image rebuild.
+ENV SSH_AUTH_SOCK=/run/ai-sandbox/ssh-auth.sock
+RUN mkdir -p /run/ai-sandbox && chmod 0755 /run/ai-sandbox
 
 WORKDIR /root
 

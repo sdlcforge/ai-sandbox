@@ -41,6 +41,7 @@ ai-sandbox logs -f
 | `build` | Build the Docker image |
 | `start` | Start the container and open a shell |
 | `attach` / `connect` | Connect to an already-running container |
+| `fix-ssh` | Recreate the container with the host's current `SSH_AUTH_SOCK` bind-mounted. Run this after a host logout / ssh-agent restart if `git push` inside the container fails — see [SSH agent forwarding](#ssh-agent-forwarding). |
 | `<any>` | Passed through to `docker compose` |
 
 The image is rebuilt automatically when any file under `docker/` (Dockerfile, compose configs, entrypoint scripts, etc.) is newer than the image's build timestamp — you do not need to run `ai-sandbox build` or delete the image manually after pulling changes.
@@ -120,6 +121,47 @@ The inverse direction (launching host `claude` while the container is
 running) is not currently enforced — rely on user discipline. See
 [`docs/next-steps.md`](docs/next-steps.md) for the planned lockfile-based
 symmetric enforcement.
+
+## SSH agent forwarding
+
+The container reuses the host's `ssh-agent` so `git push`, `ssh`, and any
+tooling that needs your keys works inside the sandbox the same way it does on
+the host. The host's current `SSH_AUTH_SOCK` is bind-mounted to a stable
+in-container path, `/run/ai-sandbox/ssh-auth.sock`.
+
+### When `git push` suddenly stops working
+
+The most common cause is that the host's ssh-agent socket path changed since
+the container was created — a logout/login, a reboot, a fresh
+`eval $(ssh-agent)`, or a Docker Desktop restart will all produce a new
+launchd socket path, leaving the running container with a stale mount.
+
+On `start` / `enter` / `attach`, ai-sandbox compares the current host path
+to the one recorded on the container (as the `ai.sandbox.ssh-auth-sock-host`
+label) and warns when they disagree. The repair is:
+
+```sh
+ai-sandbox fix-ssh
+```
+
+This recreates the container (only the `ai-sandbox` service) with the
+current `SSH_AUTH_SOCK` mounted. It is deliberately *not* automatic —
+recreating tears down anything running inside, including attached shells
+and long-running Claude sessions, so you get to decide when that's safe.
+
+### Troubleshooting
+
+From inside the container (`ai-sandbox user-exec zsh`):
+
+```sh
+echo $SSH_AUTH_SOCK          # should print /run/ai-sandbox/ssh-auth.sock
+ssh-add -l                   # should list your host keys
+ssh -T git@github.com        # should reply "Hi <user>! You've successfully authenticated"
+```
+
+If `ssh-add -l` reports "Could not open a connection to your authentication
+agent", the mount is stale — run `ai-sandbox fix-ssh`. If it fails from the
+host too, start an agent there first (`eval $(ssh-agent) && ssh-add`).
 
 ## Docker access
 

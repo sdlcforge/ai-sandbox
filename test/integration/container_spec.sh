@@ -76,10 +76,23 @@ Describe 'Container internals' integration
     End
   End
 
-  Describe 'SSH socket'
-    It 'is accessible'
-      When call ./bin/ai-sandbox.sh --quiet user-exec zsh -c 'test -S $SSH_AUTH_SOCK'
+  Describe 'SSH agent forwarding'
+    It 'exposes the stable in-container socket path'
+      When call ./bin/ai-sandbox.sh --quiet user-exec zsh -c 'echo $SSH_AUTH_SOCK'
+      The output should eq '/run/ai-sandbox/ssh-auth.sock'
+    End
+
+    It 'mounts a live socket at the stable path'
+      When call ./bin/ai-sandbox.sh --quiet user-exec zsh -c 'test -S /run/ai-sandbox/ssh-auth.sock'
       The status should be success
+    End
+
+    It 'authenticates to github.com over SSH'
+      Skip if 'network probe opted out via AI_SANDBOX_SKIP_SSH_NET' "[ -n \"${AI_SANDBOX_SKIP_SSH_NET:-}\" ]"
+      # `ssh -T git@github.com` exits 1 on success (no shell), prints the auth
+      # banner to stderr. We redirect to stdout and tolerate the non-zero exit.
+      When call ./bin/ai-sandbox.sh --quiet user-exec zsh -c 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -T git@github.com 2>&1 || true'
+      The output should include 'successfully authenticated'
     End
   End
 
