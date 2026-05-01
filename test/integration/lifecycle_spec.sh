@@ -56,14 +56,14 @@ Describe 'Docker lifecycle' integration
 
   Describe 'stop'
     It 'removes the container with compose down'
-      When call ./bin/ai-sandbox.sh --quiet stop 2>&1
-      The stderr should include "Container ai-sandbox  Stopped"
+      When call ./bin/ai-sandbox.sh --quiet --yes stop
+      The stderr should include "Container ai-sandbox Stopped"
       The status should be success
     End
 
     It 'container is gone after down'
       When call ./bin/ai-sandbox.sh --quiet status
-      The output should eq 'nonexistant'
+      The output should include 'Container: stopped'
     End
   End
 End

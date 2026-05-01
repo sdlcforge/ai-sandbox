@@ -37,8 +37,57 @@ function download_tool() {
 }
 
 function start_shell() {
+    # Warn the user when they're entering a container with host-Docker access
+    # enabled. DOCKER_HOST is only set inside the container when the proxy
+    # overlay is in play (see docker-compose.proxy.yaml), so it doubles as a
+    # runtime detector.
+    # shellcheck disable=SC2016 # ${DOCKER_HOST} must be expanded by the in-container shell, not the host
+    local banner='if [ -n "${DOCKER_HOST:-}" ]; then printf "\033[1;33m%s\033[0m\n" "WARNING: This container is running with docker support activated. This gives the container access to docker on the host and it may be possible for the AI or another program to breakout of the container via this access." >&2; fi; '
     docker compose ${COMPOSE_FILES} exec -u ${HOST_USER} ai-sandbox bash -c \
-        "if [ -d \"${START_DIR}\" ]; then cd \"${START_DIR}\" && exec zsh; else exec zsh; fi"
+        "${banner}if [ -d \"${START_DIR}\" ]; then cd \"${START_DIR}\" && exec zsh; else exec zsh; fi"
+}
+
+# Return 0 if the ai-sandbox container is currently in `running` state, 1 otherwise.
+function is_container_running() {
+    local state
+    state=$(docker inspect -f '{{.State.Status}}' ai-sandbox 2>/dev/null) || return 1
+    [ "${state}" = "running" ]
+}
+
+# Return 0 if the running container's image + config-relevant labels match the
+# current invocation's flags, 1 if they differ, 2 if no container is running.
+# Reads NO_ISOLATE_CONFIG / EFFECTIVE_PROXY / variant_image_tag from caller scope.
+function running_config_matches() {
+    is_container_running || return 2
+    local cur_image cur_no_isolate cur_proxy
+    cur_image=$(docker inspect -f '{{.Config.Image}}' ai-sandbox 2>/dev/null || true)
+    cur_no_isolate=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.no-isolate-config"}}' ai-sandbox 2>/dev/null || true)
+    cur_proxy=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.docker-proxy"}}' ai-sandbox 2>/dev/null || true)
+    [ "${cur_image}" = "$(variant_image_tag)" ] || return 1
+    [ "${cur_no_isolate:-false}" = "${NO_ISOLATE_CONFIG:-false}" ] || return 1
+    [ "${cur_proxy:-false}" = "${EFFECTIVE_PROXY:-false}" ] || return 1
+    return 0
+}
+
+# Prompt the user to confirm a destructive action that would stop the running
+# container. Returns 0 on confirmation, 1 on rejection. Auto-confirms when
+# AUTO_YES is set or when stdin is not a TTY (scripted/test environments).
+# $1 — short reason shown in the prompt, e.g. "stopping the running sandbox"
+function confirm_stop_running() {
+    local reason="${1:-stopping the running sandbox}"
+    if [ "${AUTO_YES:-false}" = "true" ]; then
+        return 0
+    fi
+    if [ ! -t 0 ]; then
+        return 0
+    fi
+    local answer
+    printf 'About to %s. Continue? [y/N] ' "${reason}" >&2
+    read -r answer || answer=""
+    case "${answer}" in
+        y|Y|yes|YES) return 0 ;;
+        *) echo "Aborted." >&2; return 1 ;;
+    esac
 }
 
 # Echoes a stable key identifying the current build-option combination. Used as

@@ -114,6 +114,7 @@ RUN bash ${ZSH_IN_DOCKER_SH} -- \
 ARG HOST_USER
 ENV HOST_USER=${HOST_USER}
 ARG HOST_HOME
+ENV HOST_HOME=${HOST_HOME}
 ARG HOST_UID
 ARG HOST_GID
 COPY scripts/create-user.sh /tmp/create-user.sh

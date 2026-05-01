@@ -7,7 +7,9 @@ ai-sandbox — run a disposable, containerized AI dev environment.
 Usage:
   ai-sandbox [options] [command] [args...]
 
-If no command is given, `enter` is assumed.
+If no command is given and a sandbox is already running, `ai-sandbox` (with no
+config-changing flags) acts as `connect` — it will not stop the running
+container. Otherwise `enter` is assumed.
 
 Commands:
   enter              Start the container (if needed) and drop into a shell. (default)
@@ -50,6 +52,9 @@ Options:
                      only enable when you actually need it.
   --force            Bypass host plugin-conflict pre-flight checks.
                      Equivalent to AI_SANDBOX_SKIP_PLUGIN_CHECK=1.
+  -y, --yes          Skip the confirmation prompt that fires before commands
+                     would stop a running sandbox container. Implied when stdin
+                     is not a TTY (scripts/tests proceed without prompting).
   --no-isolate-config
                      Share the host's ~/.config with the container (read-write
                      passthrough). Default is to mount it copy-on-write so

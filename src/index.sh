@@ -40,6 +40,17 @@ if [ "${CMD}" != "status" ]; then
     fi
 fi
 
+# --- Phase: auto-promote bare invocation to `connect` ---
+# If the user invoked bare `ai-sandbox` (no command, no config-changing flags)
+# and a container is already running, treat it as `connect` so we never stop a
+# sandbox the user didn't explicitly target. This must run before the
+# plugin-conflict preflight (which would otherwise fire on the default `enter`).
+if [ "${CMD_EXPLICIT}" != "true" ] \
+    && [ "${CONFIG_FLAGS_PROVIDED}" != "true" ] \
+    && is_container_running; then
+  CMD="connect"
+fi
+
 # --- Phase: resolve script dir / project root (follows symlinks) ---
 SOURCE="${BASH_SOURCE[0]}"
 while [ -L "$SOURCE" ]; do
@@ -97,6 +108,17 @@ else
   export INSTALL_DOCKER_CLI=true
 fi
 
+# Resolve the effective docker-proxy state once. --docker and the env-var alias
+# are equivalent; --no-docker overrides both. EFFECTIVE_PROXY drives compose
+# overlay selection, the container label, and config-match detection.
+if [ "$NO_DOCKER" != "true" ] \
+    && { [ "$ENABLE_DOCKER_PROXY" = "true" ] || [ -n "${AI_SANDBOX_ENABLE_DOCKER_PROXY:-}" ]; }; then
+  EFFECTIVE_PROXY=true
+else
+  EFFECTIVE_PROXY=false
+fi
+export EFFECTIVE_PROXY NO_ISOLATE_CONFIG NO_CHROMIUM NO_DOCKER
+
 # --- Phase: assemble docker-compose file list ---
 GENERATED_COMPOSE="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox/docker-compose.generated.yaml"
 mkdir -p "$(dirname "${GENERATED_COMPOSE}")"
@@ -119,7 +141,7 @@ fi
 
 COMPOSE_FILES="${COMPOSE_FILES} -f ${GENERATED_COMPOSE}"
 
-if [ "$NO_DOCKER" != "true" ] && { [ "$ENABLE_DOCKER_PROXY" = "true" ] || [ -n "${AI_SANDBOX_ENABLE_DOCKER_PROXY:-}" ]; }; then
+if [ "${EFFECTIVE_PROXY}" = "true" ]; then
   COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.proxy.yaml"
 fi
 
@@ -159,6 +181,12 @@ fi
 
 # --- Phase: command dispatch ---
 if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
+    # If a container is already running but its config differs from what this
+    # invocation would produce, `compose up -d` will silently recreate it. Ask
+    # first so the user can bail or rerun without conflicting flags.
+    if is_container_running && ! running_config_matches; then
+        confirm_stop_running "stop the running sandbox and recreate it with the requested options" || exit 1
+    fi
     ensure_image
     cleanup_stale_container
     docker compose ${COMPOSE_FILES} up -d
@@ -181,6 +209,9 @@ elif [ "${CMD}" == "root-exec" ]; then
 elif [ "${CMD}" == "status" ]; then
     do_status || exit $?
 elif [ "${CMD}" == "stop" ] || [ "${CMD}" == "clean" ]; then
+    if is_container_running; then
+        confirm_stop_running "stop the running sandbox" || exit 1
+    fi
     docker compose ${COMPOSE_FILES} down
     if [ "${CMD}" == "clean" ]; then
         OUTPUT=$(docker rm -f ai-sandbox || true)

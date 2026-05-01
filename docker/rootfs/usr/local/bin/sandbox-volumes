@@ -170,7 +170,10 @@ cmd_diff() {
         a="$ro/$rel"; b="$cp/$rel"
     fi
     # diff exits 1 when differences are found — expected, not an error.
-    diff -ur "${diff_args[@]}" "$a" "$b" || [ $? -eq 1 ]
+    # -N treats absent paths as empty, so a path that exists on only one
+    # side (e.g. an upper-layer-only file in the overlay) still produces
+    # diff output instead of a "No such file or directory" error.
+    diff -urN "${diff_args[@]}" "$a" "$b" || [ $? -eq 1 ]
 }
 
 cmd_sync() {

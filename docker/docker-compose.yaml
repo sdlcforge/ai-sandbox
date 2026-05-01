@@ -41,6 +41,11 @@ services:
       # was created. The launcher compares this to the current host path via
       # docker inspect to detect drift after agent restarts / logouts.
       ai.sandbox.ssh-auth-sock-host: "${SSH_AUTH_SOCK}"
+      # Snapshot of config-changing flags the launcher was invoked with. Used
+      # by running_config_matches() to detect when a re-invocation would force
+      # a recreate, so we can prompt before stopping the user's container.
+      ai.sandbox.no-isolate-config: "${NO_ISOLATE_CONFIG:-false}"
+      ai.sandbox.docker-proxy: "${EFFECTIVE_PROXY:-false}"
     volumes:
       # Map host directories to same absolute paths in container.
       # ~/.claude is shared so plugins inside the VM see the same state as the host.
