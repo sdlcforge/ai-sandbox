@@ -1,0 +1,36 @@
+# Applied when isolate-config mode is active (the default — suppress with
+# --no-isolate-config). Mounts the host's ~/.config as a read-only "lower"
+# under /mnt/ai-sandbox/host-config, then the 02-overlay-config cont-init
+# script stacks an overlayfs at ${HOST_HOME}/.config with a tmpfs upper so
+# writes inside the container stay container-local.
+services:
+  ai-sandbox:
+    # Required for mount() from inside the container. Default Docker seccomp
+    # profile allows the mount syscall when the thread holds CAP_SYS_ADMIN.
+    cap_add:
+      - SYS_ADMIN
+    # AppArmor on Linux hosts blocks mount() even with CAP_SYS_ADMIN; no-op
+    # on Docker Desktop's linuxkit VM which doesn't run AppArmor by default.
+    security_opt:
+      - apparmor=unconfined
+    volumes:
+      # Host ~/.config as read-only lower. The overlay mounts at
+      # ${HOST_HOME}/.config inside the container, so reads fall through here.
+      - ${HOST_HOME}/.config:/mnt/ai-sandbox/host-config:ro
+      # Host ~/.config as read-write bind, reachable only via sudo (the parent
+      # dir /var/lib/ai-sandbox-rw is chmod 0700 root in the Dockerfile so
+      # non-root users can't traverse into it). Used exclusively by
+      # `sandbox-volumes sync --match-container` to write container changes
+      # back to the host — the isolation path users write through normally
+      # (~/.config) still stays container-local.
+      - ${HOST_HOME}/.config:/var/lib/ai-sandbox-rw/config
+    tmpfs:
+      # Single tmpfs hosting both overlayfs upper and work dirs — overlayfs
+      # requires them on the same filesystem. cont-init creates the subdirs.
+      - /run/ai-sandbox/config-overlay:mode=0755
+    environment:
+      - AI_SANDBOX_ISOLATE_CONFIG=1
+      - AI_SANDBOX_HOST_CONFIG_DIR=/mnt/ai-sandbox/host-config
+      - AI_SANDBOX_CONFIG_OVERLAY_DIR=/run/ai-sandbox/config-overlay
+      - AI_SANDBOX_CONFIG_RW_DIR=/var/lib/ai-sandbox-rw/config
+      - AI_SANDBOX_HOST_CONFIG_SOURCE=${HOST_HOME}/.config

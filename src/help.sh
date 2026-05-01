@@ -50,6 +50,12 @@ Options:
                      only enable when you actually need it.
   --force            Bypass host plugin-conflict pre-flight checks.
                      Equivalent to AI_SANDBOX_SKIP_PLUGIN_CHECK=1.
+  --no-isolate-config
+                     Share the host's ~/.config with the container (read-write
+                     passthrough). Default is to mount it copy-on-write so
+                     writes from inside the container stay container-local.
+                     Pass this when a plugin needs to round-trip state in
+                     ~/.config back to the host.
   -q, --quiet        Quieter output (default for most commands; `status` is verbose).
   --json             (status only) Emit machine-readable JSON instead of text.
   --test-check       (status only) Run the pre-flight checks silently. Exits 0

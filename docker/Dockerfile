@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   make \
   procps \
   python3 \
+  rsync \
   ssh \
   sudo \
   unzip \
@@ -191,10 +192,18 @@ RUN git config --global user.name "${GIT_USER_NAME}" && \
 # === LAYER 13: Copy claude.json (may change often) ===
 COPY --from=tool-cache .claude.json ${HOST_HOME}/.claude.json
 
-# === LAYER 14: s6-overlay scripts ===
+# === LAYER 14: s6-overlay scripts + sandbox-volumes helper ===
 USER root
 COPY rootfs/ /
-RUN chmod +x /etc/cont-init.d/* /etc/cont-finish.d/*
+RUN chmod +x /etc/cont-init.d/* /etc/cont-finish.d/* /usr/local/bin/sandbox-volumes
+
+# Parent of the RW host-config bind (see docker-compose.isolate-config.yaml).
+# Baked with 0700 root perms so non-root users can't traverse into the
+# writable view of the host; `sandbox-volumes sync --match-container` reaches
+# it via passwordless sudo.
+RUN mkdir -p /var/lib/ai-sandbox-rw && \
+    chown root:root /var/lib/ai-sandbox-rw && \
+    chmod 0700 /var/lib/ai-sandbox-rw
 
 # s6-overlay environment configuration
 ENV S6_CMD_USE_TERMINAL=1

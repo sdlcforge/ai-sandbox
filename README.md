@@ -54,6 +54,7 @@ The image is rebuilt automatically when any file under `docker/` (Dockerfile, co
 | `-D`, `--no-docker` | Build/start without the Docker CLI inside the container (valid on `build`, `start`, `enter`). Smaller image; mutually exclusive with `--docker`. Not allowed while the container is running — stop it first. |
 | `--docker` | Enable gated Docker-daemon access via a socket-proxy sidecar (same as `AI_SANDBOX_ENABLE_DOCKER_PROXY=1`) — see [Docker access](#docker-access) |
 | `--force` | Bypass the host plugin-conflict pre-flight check (same as `AI_SANDBOX_SKIP_PLUGIN_CHECK=1`) |
+| `--no-isolate-config` | Share `~/.config` read-write with the host (opt out of the default copy-on-write overlay). See [Config isolation](#config-isolation). |
 
 ## What's inside
 
@@ -101,6 +102,83 @@ $HOME/.custom-state:/opt/custom-state
 
 `$HOME` and other environment variables in the file are expanded by the
 pre-flight script.
+
+### Config isolation
+
+By default, `~/.config` is mounted **copy-on-write**: the container sees the
+host's current config as a read-only lower layer, and any writes inside the
+container land on a tmpfs upper layer that's discarded with the container.
+Host `~/.config` is never modified by the sandbox. Mechanics:
+
+- Host `~/.config` → bind-mounted read-only at `/mnt/ai-sandbox/host-config`.
+- A tmpfs at `/run/ai-sandbox/config-overlay` holds the `upper/` and `work/` dirs.
+- `docker/rootfs/etc/cont-init.d/02-overlay-config` mounts an overlayfs at
+  `${HOME}/.config` inside the container during s6 startup.
+- Reads pass through to the host for files the container hasn't touched, so
+  host edits during a session are still visible for untouched files.
+
+To opt out and restore the old shared-passthrough behavior (e.g. when a
+plugin writes state under `~/.config` that you want back on the host):
+
+```sh
+ai-sandbox --no-isolate-config
+```
+
+Note that plugins following the `~/.<plugin-name>` convention (like
+`claude-mem` at `~/.claude-mem`) are auto-mounted separately and are
+**unaffected** by this flag. Isolation only covers `~/.config`.
+
+#### Inspecting and syncing overlay volumes: `sandbox-volumes`
+
+The container ships a helper at `/usr/local/bin/sandbox-volumes` that
+inspects copy-on-write overlays and — when you want — pushes changes back
+to the host. Run it inside the sandbox:
+
+```sh
+sandbox-volumes list                              # registered overlays
+sandbox-volumes status                            # drift for all overlays
+sandbox-volumes status ~/.config/gh               # drift for one subpath
+sandbox-volumes diff ~/.config/gh                 # unified diff, container vs host
+sandbox-volumes diff ~/.config -- --brief        # diff args after '--'
+
+# Copy host → container (resets container-side changes in the overlay upper)
+sandbox-volumes sync --match-host ~/.config/gh
+sandbox-volumes sync --match-host --delete --dry-run ~/.config/gh
+
+# Copy container → host (uses passwordless sudo to reach the root-only RW mount)
+sandbox-volumes sync --match-container ~/.config/gh
+sandbox-volumes sync --match-container --delete --dry-run ~/.config/gh
+```
+
+There is no default bidirectional sync — you always pick a direction.
+`--delete` is opt-in: without it, `sync` only copies files and doesn't
+remove anything on the destination.
+
+All paths can be a subpath within an overlay (not just the mount root), so
+you can scope operations tightly. Invalid paths (not under any registered
+volume) are rejected with a clear error.
+
+From the host you can reach the same tool through the launcher:
+
+```sh
+ai-sandbox user-exec sandbox-volumes status
+ai-sandbox user-exec sandbox-volumes diff \$HOME/.config
+```
+
+Under the hood: the host's `~/.config` is also bind-mounted read-write at
+`/var/lib/ai-sandbox-rw/config` inside the container. The parent dir is
+chmod 0700 root so non-root processes can't traverse into the writable
+view; `sandbox-volumes sync --match-container` uses `sudo rsync` to write
+there. Passwordless sudo is already granted in the image, so the UX is
+smooth without weakening accident-protection: you can't hurt the host by
+accident, only by asking the tool to do it.
+
+Requirements: the container is granted `CAP_SYS_ADMIN` and
+`apparmor=unconfined` while in isolate-config mode so it can call `mount()`.
+`CAP_SYS_ADMIN` is a real privilege grant — in this project's threat model
+the firewall is the primary boundary and the cap set is intentionally
+permissive, but if that trade-off doesn't fit your use case, `--no-isolate-config`
+drops both.
 
 ### Concurrency invariant
 

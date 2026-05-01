@@ -43,13 +43,15 @@ services:
       ai.sandbox.ssh-auth-sock-host: "${SSH_AUTH_SOCK}"
     volumes:
       # Map host directories to same absolute paths in container.
-      # Plugin state dirs (e.g. ~/.claude-mem) and XDG-layout plugin configs (under ~/.config)
-      # are shared so plugins inside the VM see the same state as the host. The pre-flight
-      # in bin/ai-sandbox.sh enforces mutual exclusion — host and VM must not run claude
-      # or plugin workers simultaneously, or shared SQLite state can be corrupted.
+      # ~/.claude is shared so plugins inside the VM see the same state as the host.
+      # The pre-flight in bin/ai-sandbox.sh enforces mutual exclusion — host and VM
+      # must not run claude or plugin workers simultaneously, or shared SQLite state
+      # can be corrupted.
+      # ~/.config handling is split into two overlay compose files:
+      #   - docker-compose.isolate-config.yaml (default): read-only lower + overlayfs
+      #   - docker-compose.shared-config.yaml  (--no-isolate-config): rw passthrough
       # Additional per-plugin mounts are generated dynamically into docker-compose.generated.yaml.
       - ${HOST_HOME}/.claude:${HOST_HOME}/.claude
-      - ${HOST_HOME}/.config:${HOST_HOME}/.config
       - ${HOST_HOME}/playground:${HOST_HOME}/playground
       # SSH agent socket: host path is bind-mounted to a stable in-container path
       # (decouples container env from host path changes).

@@ -102,4 +102,94 @@ Describe 'Container internals' integration
       The output should eq 'true'
     End
   End
+
+  Describe 'Config isolation (default)'
+    # Drop a marker in ~/.config inside the container; the same path on the
+    # host must stay absent. The subdir is one we fully own so there's no
+    # risk of collision.
+    probe_dir="ai-sandbox-isolation-probe"
+    probe_file="marker"
+    host_probe_path="$HOME/.config/${probe_dir}"
+
+    cleanup_host_probe() { rm -rf "${host_probe_path}" 2>/dev/null || true; }
+
+    BeforeAll 'cleanup_host_probe'
+    AfterAll 'cleanup_host_probe'
+
+    It 'exposes AI_SANDBOX_ISOLATE_CONFIG=1 inside the container'
+      When call ./bin/ai-sandbox.sh --quiet user-exec zsh -c 'echo ${AI_SANDBOX_ISOLATE_CONFIG:-unset}'
+      The output should eq '1'
+    End
+
+    It 'mounts an overlayfs at ~/.config'
+      When call ./bin/ai-sandbox.sh --quiet user-exec zsh -c 'findmnt -n -o FSTYPE "$HOME/.config"'
+      The output should eq 'overlay'
+    End
+
+    It 'lets the container write to ~/.config'
+      When call ./bin/ai-sandbox.sh --quiet user-exec zsh -c "mkdir -p \$HOME/.config/${probe_dir} && echo container-only > \$HOME/.config/${probe_dir}/${probe_file} && cat \$HOME/.config/${probe_dir}/${probe_file}"
+      The output should eq 'container-only'
+    End
+
+    It 'keeps that write out of the host ~/.config'
+      # This example depends on the previous one having run; ShellSpec runs
+      # examples in source order within a Describe by default.
+      When call test -e "${host_probe_path}/${probe_file}"
+      The status should be failure
+    End
+  End
+
+  Describe 'sandbox-volumes'
+    sv_probe_dir="ai-sandbox-sv-probe"
+    sv_probe_file="marker"
+    sv_host_probe="$HOME/.config/${sv_probe_dir}"
+
+    cleanup_sv_probe() { rm -rf "${sv_host_probe}" 2>/dev/null || true; }
+    BeforeAll 'cleanup_sv_probe'
+    AfterAll 'cleanup_sv_probe'
+
+    It 'lists the config overlay volume'
+      When call ./bin/ai-sandbox.sh --quiet user-exec sandbox-volumes list
+      The output should include 'config'
+      The output should include '.config'
+    End
+
+    It 'reports clean status on an untouched overlay'
+      When call ./bin/ai-sandbox.sh --quiet user-exec sandbox-volumes status
+      The output should include 'clean'
+      The status should be success
+    End
+
+    It 'detects drift after a container-side write'
+      # Dirty the overlay so the next status/diff/sync probes have work to do.
+      ./bin/ai-sandbox.sh --quiet user-exec zsh -c "mkdir -p \$HOME/.config/${sv_probe_dir} && echo drift-me > \$HOME/.config/${sv_probe_dir}/${sv_probe_file}"
+      When call ./bin/ai-sandbox.sh --quiet user-exec sandbox-volumes status
+      The output should include 'drift'
+      The status should be failure
+    End
+
+    It 'shows a diff for the drifted path'
+      When call ./bin/ai-sandbox.sh --quiet user-exec sandbox-volumes diff "\$HOME/.config/${sv_probe_dir}"
+      The output should include "${sv_probe_file}"
+    End
+
+    It 'previews match-container sync as a dry-run without touching host'
+      When call ./bin/ai-sandbox.sh --quiet user-exec sandbox-volumes sync --match-container --dry-run "\$HOME/.config/${sv_probe_dir}"
+      The output should include 'dry-run'
+      The output should include "${sv_probe_file}"
+      # Host must still not have the probe.
+      The path "${sv_host_probe}/${sv_probe_file}" should not be exist
+    End
+
+    It 'previews match-host sync as a dry-run'
+      When call ./bin/ai-sandbox.sh --quiet user-exec sandbox-volumes sync --match-host --delete --dry-run "\$HOME/.config/${sv_probe_dir}"
+      The output should include 'dry-run'
+    End
+
+    It 'rejects a path outside any registered volume'
+      When call ./bin/ai-sandbox.sh --quiet user-exec sandbox-volumes status /etc/passwd
+      The stderr should include 'not under any registered overlay volume'
+      The status should be failure
+    End
+  End
 End

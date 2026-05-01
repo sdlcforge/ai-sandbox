@@ -1,0 +1,8 @@
+# Applied only when --no-isolate-config is passed. Restores the original
+# read-write passthrough of the host's ~/.config, so XDG-layout plugin state
+# is shared between host and container (with the concurrency invariant:
+# don't run claude on both sides simultaneously).
+services:
+  ai-sandbox:
+    volumes:
+      - ${HOST_HOME}/.config:${HOST_HOME}/.config

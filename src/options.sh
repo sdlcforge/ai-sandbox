@@ -13,6 +13,7 @@ function parse_options() {
     CMD=""
     NO_CHROMIUM=false
     NO_DOCKER=false
+    NO_ISOLATE_CONFIG=false
     ENABLE_DOCKER_PROXY=false
     STATUS_JSON=false
     STATUS_TEST_CHECK=false
@@ -22,6 +23,8 @@ function parse_options() {
             NO_CHROMIUM=true
         elif [ "$arg" == "--no-docker" ] || [ "$arg" == "-D" ]; then
             NO_DOCKER=true
+        elif [ "$arg" == "--no-isolate-config" ]; then
+            NO_ISOLATE_CONFIG=true
         elif [ "$arg" == "--docker" ]; then
             ENABLE_DOCKER_PROXY=true
         elif [ "$arg" == "--force" ]; then

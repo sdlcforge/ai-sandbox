@@ -102,11 +102,22 @@ GENERATED_COMPOSE="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox/docker-compose.gen
 mkdir -p "$(dirname "${GENERATED_COMPOSE}")"
 generate_volume_override "${GENERATED_COMPOSE}"
 
-if [ "$NO_CHROMIUM" = "true" ]; then
-  COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml -f ${GENERATED_COMPOSE}"
-else
-  COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml -f ${PROJECT_ROOT}/docker/docker-compose.chromium.yaml -f ${GENERATED_COMPOSE}"
+COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml"
+if [ "$NO_CHROMIUM" != "true" ]; then
+  COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.chromium.yaml"
 fi
+
+# ~/.config handling: either overlay (default, isolates container writes) or
+# passthrough. Kept as separate overlay files so the base compose doesn't
+# have to know about either form and the active choice is obvious from
+# `docker compose config`.
+if [ "$NO_ISOLATE_CONFIG" = "true" ]; then
+  COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.shared-config.yaml"
+else
+  COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.isolate-config.yaml"
+fi
+
+COMPOSE_FILES="${COMPOSE_FILES} -f ${GENERATED_COMPOSE}"
 
 if [ "$NO_DOCKER" != "true" ] && { [ "$ENABLE_DOCKER_PROXY" = "true" ] || [ -n "${AI_SANDBOX_ENABLE_DOCKER_PROXY:-}" ]; }; then
   COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.proxy.yaml"

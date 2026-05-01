@@ -141,6 +141,73 @@ This is framed in `README.md` as a mitigation, not a security boundary — with
 `CONTAINERS=1` + `POST=1` a hostile workload inside can still escape via e.g.
 `docker run -v /:/host`. Enable only when the workload is trusted.
 
+### `~/.config` is copy-on-write by default
+
+Writes under `~/.config` from inside the container are kept **container-local
+by default** so a rogue or exploratory plugin run can't mutate your host's
+configuration. The mechanism is overlayfs, not a copy-on-start snapshot:
+
+- `docker/docker-compose.isolate-config.yaml` bind-mounts host `~/.config`
+  read-only at `/mnt/ai-sandbox/host-config` and mounts a tmpfs at
+  `/run/ai-sandbox/config-overlay` (one tmpfs hosting both `upper/` and
+  `work/`, since overlayfs requires them on the same filesystem).
+- `docker/rootfs/etc/cont-init.d/02-overlay-config` (s6 cont-init stage)
+  calls `mount -t overlay` to stack the tmpfs over the read-only lower at
+  `${HOST_HOME}/.config`.
+- The service is granted `CAP_SYS_ADMIN` and `apparmor=unconfined` so the
+  cont-init mount actually succeeds. Default Docker seccomp allows `mount()`
+  once `CAP_SYS_ADMIN` is present, so we don't need `seccomp=unconfined`.
+
+Passing `--no-isolate-config` swaps in `docker-compose.shared-config.yaml`,
+which restores the original read-write passthrough. The two overlay files
+are mutually exclusive — the launcher includes exactly one of them in the
+assembled `-f` list so `docker compose config` shows a single, correct mount
+for `${HOST_HOME}/.config` regardless of mode.
+
+Trade-off: isolation breaks round-tripping of state written under `~/.config`
+back to the host. Plugins that keep state there (tokens, SQLite, settings
+the user expects to see both inside and outside the sandbox) need
+`--no-isolate-config`. Plugins under `~/.<plugin-name>` (claude-mem et al.)
+aren't affected since they're mounted separately by `volume-override.sh`.
+
+The cap-set cost is real: `CAP_SYS_ADMIN` is broad. For this project it's
+acceptable because the outbound-network firewall is the primary boundary,
+not the capability set — a compromised agent can already run arbitrary code
+inside the container. If that reasoning doesn't hold for a specific
+workload, `--no-isolate-config` drops both the cap and the AppArmor opt-out.
+
+#### `sandbox-volumes`: inspecting and syncing overlay state
+
+Overlay isolation creates a need for tooling that makes drift visible and
+lets the user selectively push container changes back to the host. That
+tooling lives in the image at `/usr/local/bin/sandbox-volumes`
+(`docker/rootfs/usr/local/bin/sandbox-volumes`). It reads a registry at
+`/etc/ai-sandbox/overlay-volumes.conf` emitted by the `02-overlay-config`
+cont-init and drives `diff` and `rsync` against the three paths each
+overlay owns:
+
+- **container view** — `${HOME}/.config`, the overlay mount point.
+- **host RO mirror** — `/mnt/ai-sandbox/host-config`, the bind used as the
+  overlay's lower layer. User-readable; the tool compares against it for
+  `status` and `diff`.
+- **host RW bind** — `/var/lib/ai-sandbox-rw/config`. Parent dir is 0700
+  root, so non-root processes can't even `cd` into it; `sync
+  --match-container` reaches it through `sudo rsync`. Passwordless sudo is
+  already granted in the image, so the UX stays smooth without creating a
+  second trust surface.
+
+The registry is tab-separated on purpose: adding a second overlay later
+(e.g. `~/.ssh`, `~/.aws`) is a matter of appending a row in the cont-init
+and adding the matching mounts in the isolate-config compose file —
+`sandbox-volumes` itself doesn't need changes.
+
+Bidirectional "smart" sync is deliberately out of scope: without a baseline
+snapshot at container start, "file missing on side X" is ambiguous
+("deleted from X" vs "never on X"). The tool requires an explicit direction
+(`--match-host` or `--match-container`) and an explicit `--delete` opt-in,
+which matches what users actually want (restore from host, or promote from
+container) without the correctness pitfalls of three-way merging.
+
 ### SSH agent forwarding is decoupled from the host path
 
 The container needs the host's `ssh-agent` — without it, `git push` over SSH

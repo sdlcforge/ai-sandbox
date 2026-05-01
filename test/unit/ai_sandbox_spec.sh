@@ -149,6 +149,16 @@ Describe 'ai-sandbox.sh'
       When call parse_options -D
       The variable NO_DOCKER should eq true
     End
+
+    It 'leaves NO_ISOLATE_CONFIG false by default (isolation on)'
+      When call parse_options
+      The variable NO_ISOLATE_CONFIG should eq false
+    End
+
+    It 'sets NO_ISOLATE_CONFIG when --no-isolate-config is passed'
+      When call parse_options --no-isolate-config
+      The variable NO_ISOLATE_CONFIG should eq true
+    End
   End
 
   Describe 'is_build_stale()'
