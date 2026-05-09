@@ -190,6 +190,16 @@ ARG GIT_USER_EMAIL
 RUN git config --global user.name "${GIT_USER_NAME}" && \
     git config --global user.email "${GIT_USER_EMAIL}"
 
+# Disable Git's "dubious ownership" check globally inside the container.
+# Not ideal: '*' trusts every path, not just the mounted playground tree.
+# We tried scoping it (e.g. ${HOST_HOME}/playground/*) but Git's safe.directory
+# config takes only exact paths or the literal '*' — it does not glob — and a
+# more elegant per-repo solution proved difficult enough not to be worth it.
+# The risk is mitigated by the container's isolation: only ~/.claude and
+# ~/playground are bind-mounted from the host, network egress is allow-listed,
+# and the container runs as the host user with no extra privileges.
+RUN git config --global --add safe.directory '*'
+
 # === LAYER 13: Copy claude.json (may change often) ===
 COPY --from=tool-cache .claude.json ${HOST_HOME}/.claude.json
 
