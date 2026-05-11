@@ -64,6 +64,10 @@ services:
     environment:
       # credentials
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Stable in-container path for the SSH agent socket; the host socket
+      # is bind-mounted here (see volumes:). Set at runtime rather than baked
+      # into the image so host-agent restarts don't require a rebuild.
+      - SSH_AUTH_SOCK=/run/ai-sandbox/ssh-auth.sock
     dns:
       - 8.8.8.8
       - 8.8.4.4

@@ -74,10 +74,10 @@ RUN rm /root/${S6_NOARCH_TAR} /root/${S6_ARCH_TAR}
 # === LAYER 2: Timezone (rarely changes) ===
 ARG HOST_TZ
 ENV TZ="$HOST_TZ"
-# Stable container-internal agent-socket path. The host's current socket is
-# bind-mounted here at runtime (see docker-compose.yaml); decoupling means
-# host-agent restarts don't require an image rebuild.
-ENV SSH_AUTH_SOCK=/run/ai-sandbox/ssh-auth.sock
+# Container-internal mount-parent for the host's SSH agent socket. The
+# SSH_AUTH_SOCK env var itself is set at runtime in docker-compose.yaml so
+# that host-agent restarts don't require an image rebuild and so BuildKit's
+# secrets-in-ENV linter doesn't flag the variable name.
 RUN mkdir -p /run/ai-sandbox && chmod 0755 /run/ai-sandbox
 
 WORKDIR /root
