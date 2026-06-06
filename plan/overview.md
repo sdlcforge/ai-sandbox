@@ -11,7 +11,7 @@ Files produced:
 
 ## Current status
 
-Task 001 complete: docs/ai-sandbox-profiles-spec.md written (405 lines), all validation passed.
+Task 002 complete: README.md and docs/architecture.md updated with profiles feature coverage.
 
 ## Overview
 
