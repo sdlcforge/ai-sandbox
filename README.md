@@ -1,10 +1,8 @@
 # ai-sandbox
 
-A CLI app enabling (more) safe unsupervised Claude Code development by replicating your local setup in an isolated Docker container.
+`ai-sandbox` is a macOS-first CLI that runs Claude Code (and other agents) inside an isolated Ubuntu container. It mirrors your host identity — SSH keys, git config, `~/.claude`, `~/.config` — into the container and enforces an iptables allow-list that restricts outbound traffic to GitHub and Anthropic APIs by default.
 
-`ai-sandbox` mirrors your host environment (SSH keys, git config, Claude credentials, etc.) into a sandboxed Ubuntu container with a firewall that only allows access to GitHub and Anthropic APIs by default. This lets AI agents work on your code without risking your host system.
-
-**LIMITATIONS**: This product is still in early stages and has not been tested against a wide range of plug-ins, MCPs, etc. Refer to [current limitations and goals](#current-limitations-and-goals) for more.
+**Limitations:** This project is still in early stages and has not been tested against a wide range of plugins and MCPs. See [current limitations and goals](#current-limitations-and-goals) for details.
 
 ## Prerequisites
 
@@ -22,7 +20,7 @@ Optional:
 npm install -g ai-sandbox
 ```
 
-## Usage
+## Quick start
 
 ```bash
 # Enter the sandbox (builds image if needed, starts container, connects)
@@ -41,31 +39,47 @@ ai-sandbox logs -f
 | `build` | Build the Docker image |
 | `start` | Start the container and open a shell |
 | `attach` / `connect` | Connect to an already-running container |
+| `create-profile` | Scaffold a new profile YAML file by auto-discovering skills, hooks, and agents |
 | `fix-ssh` | Recreate the container with the host's current `SSH_AUTH_SOCK` bind-mounted. Run this after a host logout / ssh-agent restart if `git push` inside the container fails — see [SSH agent forwarding](#ssh-agent-forwarding). |
 | `<any>` | Passed through to `docker compose` |
 
-The image is rebuilt automatically when any file under `docker/` (Dockerfile, compose configs, entrypoint scripts, etc.) is newer than the image's build timestamp — you do not need to run `ai-sandbox build` or delete the image manually after pulling changes.
+The image is rebuilt automatically when any file under `docker/` (Dockerfile, compose configs, entrypoint scripts, etc.) or any active profile YAML is newer than the image's build timestamp — you do not need to run `ai-sandbox build` or delete the image manually after pulling changes.
 
 ### Flags
 
 | Flag | Description |
 |------|-------------|
-| `--no-chromium` | Skip Chromium/X11 layer (only valid with `build`) |
-| `-D`, `--no-docker` | Build/start without the Docker CLI inside the container (valid on `build`, `start`, `enter`). Smaller image; mutually exclusive with `--docker`. Not allowed while the container is running — stop it first. |
-| `--docker` | Enable gated Docker-daemon access via a socket-proxy sidecar (same as `AI_SANDBOX_ENABLE_DOCKER_PROXY=1`) — see [Docker access](#docker-access) |
+| `--profile <name>` | Activate a named profile (repeatable; profiles are merged left to right). See [Profiles](#profiles). |
+| `--mode <mirror\|static>` | Override the container identity mode for this run only, without changing the profile file. |
 | `--force` | Bypass the host plugin-conflict pre-flight check (same as `AI_SANDBOX_SKIP_PLUGIN_CHECK=1`) |
 | `--no-isolate-config` | Share `~/.config` read-write with the host (opt out of the default copy-on-write overlay). See [Config isolation](#config-isolation). |
 
+## Profiles
+
+A **profile** is a YAML file that describes a reproducible ai-sandbox environment — packages to install, plugins to enable, skills/hooks/agents to copy in, network allow-list additions, and whether to attach the docker-socket-proxy sidecar. Profiles replace the former ad-hoc `--docker`, `--no-docker`, and `--no-chromium` flags with reusable, composable configuration files.
+
+```bash
+# Use the base runtime profile with Docker access
+ai-sandbox start --profile base --profile docker
+
+# Override the identity mode for one run
+ai-sandbox start --profile base --mode static
+```
+
+Multiple `--profile` flags are merged left to right. Scalar conflicts (e.g. two profiles both setting `mode` to different values) are an error — resolve them by using only one, or override with `--mode`. You can set a `default_profiles` list in `~/.config/ai-sandbox/config.yaml` so you don't need to pass `--profile` on every invocation.
+
+See [`docs/ai-sandbox-profiles-spec.md`](docs/ai-sandbox-profiles-spec.md) for the full schema, composition rules, storage and discovery order, and the `profile-installer.js` interface.
+
 ## What's inside
 
-The container includes:
+The `base` standard profile (and the default pre-profile image) includes:
 
 - **Languages**: Go, Node.js (via nvm), Bun
 - **Shell**: Zsh with Oh My Zsh
 - **Tools**: git, git-delta, jq, curl, build-essential
 - **Init system**: s6-overlay for process supervision
 - **Firewall**: iptables rules restricting outbound to GitHub + Anthropic
-- **Optional**: Chromium browser with X11 forwarding
+- **Optional**: Chromium browser with X11 forwarding (via `--profile chromium`)
 
 ## Plugin support
 
@@ -246,7 +260,7 @@ host too, start an agent there first (`eval $(ssh-agent) && ssh-add`).
 Some agents need to pull images, build, or run throwaway containers from
 inside the sandbox. Direct `docker.sock` mounting would give the container
 root on the host (trivially escapable via `docker run --privileged`), and
-Docker-in-Docker is heavy. Instead, `--docker` starts a
+Docker-in-Docker is heavy. Instead, the `docker` profile starts a
 [`tecnativa/docker-socket-proxy`](https://github.com/Tecnativa/docker-socket-proxy)
 sidecar on a private Compose network that exposes a **whitelisted** subset
 of the host Docker API over TCP. The sandbox reaches it at
@@ -254,7 +268,7 @@ of the host Docker API over TCP. The sandbox reaches it at
 CLI picks up automatically — no other configuration required.
 
 ```sh
-ai-sandbox --docker
+ai-sandbox start --profile base --profile docker
 # inside the container:
 docker pull hello-world
 docker run --rm hello-world
@@ -273,25 +287,11 @@ stops the agent from hitting Docker Hub directly if that's more ergonomic:
 curl -s 'https://hub.docker.com/v2/search/repositories/?query=nginx&page_size=3' | jq
 ```
 
-### Opting out entirely: `--no-docker`
-
-If an agent doesn't need Docker at all, build with `-D` / `--no-docker` to
-skip installing the Docker CLI inside the container. The resulting image is
-smaller and the `LAYER 1c2` build step is skipped. The flag is recorded on
-the image as the `ai.sandbox.docker-enabled=false` label, and the host
-launcher automatically rebuilds when you switch between the two modes (so
-`ai-sandbox build --no-docker` followed later by plain `ai-sandbox` triggers
-a rebuild that reinstates the CLI). The same rebuild-on-flag-change behavior
-applies to `--no-chromium`.
-
-`--no-docker` and `--docker` are mutually exclusive, and `--no-docker` is
-rejected while the container is already running (stop it first).
-
 ### Security caveat
 
 The proxy is a **mitigation, not a security boundary**. With `CONTAINERS=1`
 and `POST=1` a hostile workload inside the sandbox can still escape via e.g.
-`docker run -v /:/host alpine chroot /host ...`. Enable `--docker` only when
+`docker run -v /:/host alpine chroot /host ...`. Enable `--profile docker` only when
 you actually need Docker access and trust the workload.
 
 ## Current limitations and goals
@@ -303,12 +303,14 @@ you actually need Docker access and trust the workload.
   work on both sides, but a plugin shipping a native compiled hook would
   need explicit Linux-side handling.
 - *Symmetric mutual exclusion*: see the concurrency invariant note above.
+- *Profiles*: the profiles feature is specified but not yet implemented. The `--profile`, `--mode`, and `create-profile` surface described above reflects the planned interface.
 
 ## Further reading
 
 - [`docs/architecture.md`](docs/architecture.md) — how the CLI is structured,
   the phased command flow, and the design decisions behind per-variant image
   tagging, plugin mount generation, mutual exclusion, and the Docker proxy.
+- [`docs/ai-sandbox-profiles-spec.md`](docs/ai-sandbox-profiles-spec.md) — full profiles specification: YAML schema, composition rules, storage and discovery, `profile-installer.js` interface, and the `create-profile` command.
 - [`docs/next-steps.md`](docs/next-steps.md) — deferred features and known
   gaps (symmetric mutual exclusion, MCP service manager, plugin-binary
   architecture mismatch).

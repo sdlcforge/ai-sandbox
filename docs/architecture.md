@@ -253,6 +253,24 @@ The `--test-check` mode is specifically designed as a gate for test harnesses
 (`make test.integration` calls it before running ShellSpec), so it stays
 silent and honors `AI_SANDBOX_SKIP_PLUGIN_CHECK` / `--force`.
 
+### Profile system
+
+The profiles system replaces the former ad-hoc build flags (`--docker`, `--no-docker`, `--no-chromium`) with composable YAML files. The full schema, composition rules, and `profile-installer.js` interface are specified in [`docs/ai-sandbox-profiles-spec.md`](ai-sandbox-profiles-spec.md). This section covers the architectural decisions.
+
+**What a profile is.** A profile is a YAML file that fully describes an ai-sandbox environment: apt packages, Claude Code plugins, skill/hook/agent files to copy in, network allow-list additions, and the container identity mode (`mirror` vs. `static`). Profiles are composable — `ai-sandbox start --profile base --profile docker` merges both before building or starting.
+
+**Composition model.** Profiles are merged left to right in declaration order. List fields (`packages`, `plugins`, `skills`, `hooks`, `agents`, `network.allow`) are unioned; scalar fields (`mode`, `docker`, `setup_script`) error on conflict if two composed profiles set the same field to different values. Error-on-conflict rather than last-wins makes surprises explicit: a user composing `mirror` and `static` gets a clear error naming both profiles and the field, instead of a silently wrong container. Conflicts can always be resolved with a `--mode` override at invocation time.
+
+**Storage and discovery.** `profile-installer.js` searches three locations in priority order: `./profiles/<name>.yaml` (project-local), `$XDG_CONFIG_HOME/ai-sandbox/profiles/<name>.yaml` (user global, defaulting to `~/.config/ai-sandbox/profiles/`), and bundled profiles shipped with ai-sandbox. `~/.config/ai-sandbox/config.yaml` holds a `default_profiles` list — when present, `ai-sandbox start` with no `--profile` flags behaves as if those profiles were passed, eliminating repetition for per-project or per-user defaults.
+
+**The Node boundary.** `bin/profile-installer.js` sits between the YAML world and bash. It handles YAML parsing, profile discovery, composition, path resolution, `required_env` validation, and the composition-hash computation. It outputs three blocks to stdout: a shell-sourceable `KEY=VALUE` block (consumed via `eval`), newline-delimited `src\tdst` path pairs for file-copy operations, and a JSON blob for structured data consumed via `jq`. The boundary is Node because YAML parsing and structured merge logic are brittle in bash, and because the output formats are designed for easy consumption by a bash caller without a full-stack Node dependency on the hot path. The script runs on the host (not inside the container) and exits nonzero on any error, which halts the bash launcher cleanly.
+
+**Image tagging by composition hash.** Profile-based images are tagged `ai-sandbox:profile-<hash>`, where `<hash>` is derived from the ordered, resolved list of composed profile names. The hash is stable — the same profile composition always produces the same tag. `is_build_stale` checks the `docker/` directory mtime (existing behavior) plus the mtime of each resolved profile YAML and each `src` file referenced by `skills`, `hooks`, `agents`, and `setup_script` in the merged profile. This extends the existing no-marker-file freshness check to cover profile content without adding new state files. Trade-off: disk usage scales with unique compositions, but the hash-based scheme avoids the combinatorial tag explosion that a flag-name scheme would produce for arbitrary profile combinations.
+
+**Standard profiles and the Dockerfile.** The base Dockerfile becomes thinner: it carries the OS, core utilities, and the ai-sandbox toolchain, but not the language runtimes. The `base` standard profile carries Go, Node.js via nvm, Bun, and the developer tools previously baked into the Dockerfile. This separates "what the image needs to run" from "what an agent needs to work" — a team that doesn't use Go can compose a leaner image by omitting `base` and providing their own profile, without patching the Dockerfile.
+
+**Local vs. shareable profiles.** A profile is auto-flagged `local: true` by `profile-installer` when any `src` path in its `skills`, `hooks`, or `agents` blocks resolves outside the profile file's own directory and outside `$XDG_CONFIG_HOME/ai-sandbox/`. The flag is a signal, not a hard restriction — the profile still works, but the warning makes it explicit that the profile may not resolve on another machine. Enterprise setups with stable shared filesystem layouts are a valid use case for local profiles in source control.
+
 ## Test strategy
 
 ShellSpec with two tiers:

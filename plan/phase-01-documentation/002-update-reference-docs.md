@@ -70,3 +70,27 @@ Cover these topics:
 - Architecture profiles section covers: composition model (with error-on-conflict rationale), Node boundary rationale, image tagging by hash, standard profiles vs. Dockerfile split.
 - No existing content in either file has been accidentally removed.
 - Both files render correctly as Markdown.
+
+## Status
+
+**Implementation outcome:** succeeded
+**Date:** 2026-06-06
+**Validation summary:** All checks passed. See details below.
+
+- README.md: Profiles section added at line 57 with link to `docs/ai-sandbox-profiles-spec.md` (lines 71, 313). CLI reference table updated: `--docker`, `--no-docker`, `--no-chromium` removed as standalone flags; `--profile <name>` and `--mode <mirror|static>` added. `create-profile` command added to command table. Docker access section updated to explain proxy is now enabled via `--profile docker`. Further reading section updated with profiles spec link.
+- docs/architecture.md: `### Profile system` subsection added under `## Key design decisions` (before `## Test strategy`). Covers composition model with error-on-conflict rationale, Node boundary rationale, image tagging by composition hash with trade-offs, standard profiles vs. Dockerfile split, storage/discovery, and local vs. shareable profiles. All existing sections preserved intact.
+- Removed flags (`--docker`, `--no-docker`, `--no-chromium`) appear only in Profiles section prose explaining what they replaced, not in the CLI reference table.
+
+**Affected files:**
+- `README.md`
+- `docs/architecture.md`
+
+**Assumptions applied:**
+- Task 001 was complete and `docs/ai-sandbox-profiles-spec.md` existed before editing began — confirmed present in worktree.
+- Architecture section cross-references the spec with a link rather than duplicating its content.
+- Existing README content verified as fully preserved (all key terms still present; file grew from 319 to 320 lines).
+
+**Decisions made:**
+- README restructured to match the ordered section list from Requirements exactly; the Config isolation and Concurrency invariant subsections were left under Plugin support (their natural location) since the task did not specify moving them.
+- The "Opting out entirely" Docker subsection was removed from the Docker access section since it described the `--no-docker` flag being removed; the security caveat was kept.
+- Added a note to Current limitations and goals that profiles are specified but not yet implemented, as the task document allowed.
