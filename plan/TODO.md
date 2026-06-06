@@ -8,5 +8,5 @@ Track documentation tasks for the ai-sandbox profiles feature specification roun
 
 ### Phase 01 — Documentation
 
-- [ ] [001-profiles-spec.md](./phase-01-documentation/001-profiles-spec.md) — tier `sonnet-high` · branch `task/001-profiles-spec` · commit `…` · merge `…`
+- [x] [001-profiles-spec.md](./phase-01-documentation/001-profiles-spec.md) — tier `sonnet-high` · branch `phase-01-task-01-profiles-spec` · commit `ee3cdf7` · merge `0e0573d`
 - [ ] [002-update-reference-docs.md](./phase-01-documentation/002-update-reference-docs.md) — tier `sonnet-high` · branch `task/002-update-reference-docs` · commit `…` · merge `…`
