@@ -1,0 +1,7 @@
+metadata:
+  name: docker
+  version: "1.0.0"
+  description: "Adds Docker CLI and socket-proxy sidecar access inside the container"
+
+capabilities:
+  - docker

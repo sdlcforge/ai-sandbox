@@ -1,0 +1,13 @@
+metadata:
+  name: base
+  version: "1.0.0"
+  description: "Go, Node.js (nvm), Bun, zsh + Oh My Zsh, git-delta, jq, build-essential — the fully-featured default runtime"
+
+# The base toolchain (Go, Node.js via nvm, Bun, zsh + Oh My Zsh, git-delta,
+# jq, build-essential, fzf, gh, and other developer tools) is provided
+# unconditionally by docker/capabilities/base.dockerfile, not by a packages
+# list here. This profile exists so that [base, mirror] is a nameable default
+# composition that reproduces pre-profile ai-sandbox behavior.
+#
+# No mode or capabilities are set here. Mode selection is the job of the
+# mirror/static profiles; docker and chromium are opt-in via their own profiles.

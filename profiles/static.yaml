@@ -1,0 +1,6 @@
+metadata:
+  name: static
+  version: "1.0.0"
+  description: "Selects self-contained mode with no host identity mirroring; suitable for CI/CD and shared deployments"
+
+mode: static

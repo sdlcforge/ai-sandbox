@@ -36,5 +36,8 @@
   "devDependencies": {
     "@liquid-labs/bash-rollup": "^1.0.0-alpha.6",
     "shellcheck": "^4.1.0"
+  },
+  "dependencies": {
+    "js-yaml": "^4.2.0"
   }
 }
