@@ -138,3 +138,26 @@ Document how profiles are passed to commands:
 - An annotated YAML example in the spec is syntactically valid.
 - Spec is internally consistent: no contradictions between sections.
 - Prose is clear and at the level of a developer picking up the spec cold.
+
+## Status
+
+**outcome**: succeeded
+**date**: 2026-06-06
+**validation summary**:
+- `docs/ai-sandbox-profiles-spec.md` created.
+- All required sections present: concept overview, full YAML schema with annotated example, composition rules, storage/discovery order, local vs. shareable distinction, bundled standard profiles list, default profiles config, image tagging scheme, profile-installer interface, create-profile command, invocation changes.
+- Annotated YAML example validated syntactically valid (python3 `yaml.safe_load`).
+- Spec internally consistent; no contradictions found across sections.
+
+**files affected**:
+- `docs/ai-sandbox-profiles-spec.md` (created)
+- `plan/phase-01-documentation/001-profiles-spec.md` (this file, status added)
+
+**decisions made**:
+- `network.preset` field is documented as reserved/not-yet-implemented per the task requirement to "document the field and note it is not yet implemented."
+- Object list deduplication rule (`skills`, `hooks`, `agents`) specifies no deduplication of identical `{src, dst}` pairs, since the task did not specify and removing a duplicate entry is harmless while keeping them is safe; flagged for planner review if a different rule is wanted.
+- Table format used for the bundled profiles list and field reference tables for readability.
+
+**assumptions applied**:
+- Spec documents designed (not yet implemented) behavior per the Assumptions section.
+- `profile-installer.js` YAML library choice is left to the implementer; spec specifies the interface only.
