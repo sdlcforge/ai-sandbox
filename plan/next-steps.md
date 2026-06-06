@@ -14,4 +14,5 @@ Tracks pending changes, priorities, and active todos for this project.
 ### Follow-ups
 
 - 2026-06-06 [001-profiles-spec] Update spec prose for network.preset when V2 'default no network' semantics are defined
-- 2026-06-06 [001-profiles-spec] Consider a deprecation warning phase before hard removal of --docker/--no-docker/--no-chromium CLI flags
+- 2026-06-06 [capabilities-spec] PROFILE_CAPABILITIES bash encoding: spec uses space-separated string; implementer should confirm this is workable for iteration (for cap in $PROFILE_CAPABILITIES) vs. newline-delimited sentinel block
+- 2026-06-06 [capabilities-spec] Composition hash must include capabilities list in a deterministic way (sort before hashing); confirm hash function signature when implementing profile-installer.js
