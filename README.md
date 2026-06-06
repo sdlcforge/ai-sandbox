@@ -56,7 +56,7 @@ The image is rebuilt automatically when any file under `docker/` (Dockerfile, co
 
 ## Profiles
 
-A **profile** is a YAML file that describes a reproducible ai-sandbox environment — packages to install, plugins to enable, skills/hooks/agents to copy in, network allow-list additions, and whether to attach the docker-socket-proxy sidecar. Profiles replace the former ad-hoc `--docker`, `--no-docker`, and `--no-chromium` flags with reusable, composable configuration files.
+A **profile** is a YAML file that describes a reproducible ai-sandbox environment — packages to install, plugins to enable, skills/hooks/agents to copy in, network allow-list additions, and an optional `capabilities` list that selects named feature layers (e.g. `[docker, chromium]`). Profiles replace the former ad-hoc `--docker`, `--no-docker`, and `--no-chromium` flags with reusable, composable configuration files.
 
 ```bash
 # Use the base runtime profile with Docker access
@@ -258,10 +258,11 @@ host too, start an agent there first (`eval $(ssh-agent) && ssh-add`).
 ## Docker access
 
 Some agents need to pull images, build, or run throwaway containers from
-inside the sandbox. Direct `docker.sock` mounting would give the container
-root on the host (trivially escapable via `docker run --privileged`), and
-Docker-in-Docker is heavy. Instead, the `docker` profile starts a
-[`tecnativa/docker-socket-proxy`](https://github.com/Tecnativa/docker-socket-proxy)
+inside the sandbox. Docker access is enabled by setting `capabilities: [docker]`
+in a profile (the bundled `docker` profile does this). Direct `docker.sock`
+mounting would give the container root on the host (trivially escapable via
+`docker run --privileged`), and Docker-in-Docker is heavy. Instead, the `docker`
+capability starts a [`tecnativa/docker-socket-proxy`](https://github.com/Tecnativa/docker-socket-proxy)
 sidecar on a private Compose network that exposes a **whitelisted** subset
 of the host Docker API over TCP. The sandbox reaches it at
 `DOCKER_HOST=tcp://docker-socket-proxy:2375`, which the standard `docker`
@@ -291,8 +292,9 @@ curl -s 'https://hub.docker.com/v2/search/repositories/?query=nginx&page_size=3'
 
 The proxy is a **mitigation, not a security boundary**. With `CONTAINERS=1`
 and `POST=1` a hostile workload inside the sandbox can still escape via e.g.
-`docker run -v /:/host alpine chroot /host ...`. Enable `--profile docker` only when
-you actually need Docker access and trust the workload.
+`docker run -v /:/host alpine chroot /host ...`. Enable the `docker` capability
+(`capabilities: [docker]` in a profile, or `--profile docker`) only when you
+actually need Docker access and trust the workload.
 
 ## Current limitations and goals
 

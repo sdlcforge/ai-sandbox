@@ -32,9 +32,11 @@ metadata:
 # host identity mirroring, suitable for CI/CD and shared deployments.
 mode: mirror
 
-# Whether to attach the docker-socket-proxy sidecar.
-# Replaces the --docker CLI flag.
-docker: false
+# Optional list of capabilities to include in the image.
+# Currently supported: "docker", "chromium".
+# Absent or empty means a lean image with no Docker CLI, no proxy sidecar,
+# and no Chromium. Order does not matter.
+capabilities: [docker]
 
 # apt packages installed at image build time.
 packages:
@@ -114,9 +116,14 @@ Can be overridden at invocation time: `ai-sandbox start --mode static` overrides
 
 When no profile sets `mode`, the launcher behaves as if `mode: mirror` were set (preserving backward compatibility with pre-profile behavior).
 
-#### `docker` (boolean)
+#### `capabilities` (list of strings)
 
-Whether to attach the `tecnativa/docker-socket-proxy` sidecar and expose it as `DOCKER_HOST=tcp://docker-socket-proxy:2375` inside the container. Replaces the `--docker` CLI flag. When `false` or absent, no sidecar is started.
+An optional list of named capabilities to include when building the image. Absent or empty means a lean image with no additional capability layers. The order of entries does not affect the result. Currently supported values:
+
+- `docker` — installs the Docker CLI inside the container and attaches the `tecnativa/docker-socket-proxy` sidecar, exposed as `DOCKER_HOST=tcp://docker-socket-proxy:2375`. Replaces the former `--docker` / `--no-docker` CLI flags.
+- `chromium` — installs Chromium and the X11 forwarding layer. Replaces the former `--no-chromium` CLI flag.
+
+Future ai-sandbox-defined capabilities can be added to this list without schema changes.
 
 #### `packages` (list of strings)
 
@@ -162,6 +169,34 @@ Environment variable names the profile may use. Their absence is not an error. D
 | `allow` | list of strings | Hostnames or CIDRs to add to the iptables allow-list. Extends the default (GitHub + Anthropic). V1 is additive only — there is no mechanism to remove defaults. |
 | `preset` | string | Reserved for a future "default no network" direction (`default` or `none`). Field is parsed and stored but has no effect in V1. Do not set this field in V1 profiles. |
 
+## Capabilities reference
+
+Capabilities are named features that extend the base image. They are declared in the `capabilities` list field of a profile and are implemented by assembling per-capability Dockerfile fragments at build time. The base image layer (`docker/capabilities/base.dockerfile`) is always included; each declared capability appends its own fragment (`docker/capabilities/<capability>.dockerfile`). An empty or absent `capabilities` list produces a lean image containing only the base layer — no Docker CLI, no socket proxy, no Chromium.
+
+### `docker`
+
+**What it installs:** The Docker CLI binary inside the container.
+
+**What it enables:** The `tecnativa/docker-socket-proxy` sidecar is attached on a private Compose network and exposed as `DOCKER_HOST=tcp://docker-socket-proxy:2375` inside the container. The standard `docker` CLI picks up `DOCKER_HOST` automatically — no additional configuration required.
+
+**Absence:** When `docker` is not in `capabilities`, no Docker CLI is installed and no proxy sidecar is started. The container cannot issue Docker API calls to the host daemon.
+
+**Previously controlled by:** `--docker` / `--no-docker` CLI flags and the former `docker: boolean` profile field (both removed).
+
+**Dockerfile fragment:** `docker/capabilities/docker.dockerfile`
+
+### `chromium`
+
+**What it installs:** The Chromium browser and the X11 forwarding layer (XQuartz integration on macOS).
+
+**What it enables:** GUI-based browser automation or manual browsing from inside the container, forwarded to the host display via X11. On macOS, XQuartz is started automatically by the launcher when this capability is active.
+
+**Absence:** When `chromium` is not in `capabilities`, no Chromium or X11 packages are installed. The container is headless.
+
+**Previously controlled by:** `--no-chromium` CLI flag (removed; Chromium is now opt-in).
+
+**Dockerfile fragment:** `docker/capabilities/chromium.dockerfile`
+
 ## Profile composition
 
 Multiple profiles are composed when `ai-sandbox start --profile a --profile b` is invoked. Profiles are merged left to right in the order they appear on the command line (or in `default_profiles`; see [Default profiles](#default-profiles)).
@@ -170,8 +205,8 @@ Multiple profiles are composed when `ai-sandbox start --profile a --profile b` i
 
 | Category | Fields | Rule |
 |----------|--------|------|
-| Lists | `packages`, `plugins`, `skills`, `hooks`, `agents`, `network.allow`, `required_env`, `optional_env` | Union. Items from each profile are concatenated; duplicates are deduplicated (for simple string lists). Object lists (`skills`, `hooks`, `agents`) are not deduplicated — identical `{src, dst}` pairs from multiple profiles are kept once. |
-| Scalars | `mode`, `docker`, `setup_script` | Error on conflict. If two composed profiles both set the same scalar to different values, `profile-installer` exits nonzero with a message naming the conflicting profiles and the field. If only one profile sets a scalar, that value is used. If no profile sets a scalar, the field is absent in the merged result and the launcher applies its built-in default. |
+| Lists | `packages`, `plugins`, `capabilities`, `skills`, `hooks`, `agents`, `network.allow`, `required_env`, `optional_env` | Union. Items from each profile are concatenated; duplicates are deduplicated (for simple string lists). Object lists (`skills`, `hooks`, `agents`) are not deduplicated — identical `{src, dst}` pairs from multiple profiles are kept once. |
+| Scalars | `mode`, `setup_script` | Error on conflict. If two composed profiles both set the same scalar to different values, `profile-installer` exits nonzero with a message naming the conflicting profiles and the field. If only one profile sets a scalar, that value is used. If no profile sets a scalar, the field is absent in the merged result and the launcher applies its built-in default. |
 | `metadata` | entire block | Ignored. The merged result has no `metadata` block. |
 
 ### Scalar conflict example
@@ -225,8 +260,8 @@ ai-sandbox ships the following profiles in its install tree. They are always ava
 | Name | Description |
 |------|-------------|
 | `base` | Go, Node.js (nvm), Bun, zsh + Oh My Zsh, git-delta, jq, build-essential. Extracted from the current Dockerfile. This is the fully-featured default runtime. |
-| `docker` | Enables the docker-socket-proxy sidecar (`docker: true`). Compose with `base` or any other profile to add Docker API access inside the container. |
-| `chromium` | Chromium browser with X11 forwarding layer. Replaces the existing Chromium build flag. |
+| `docker` | Sets `capabilities: [docker]`. Compose with `base` or any other profile to add Docker CLI and socket-proxy access inside the container. |
+| `chromium` | Sets `capabilities: [chromium]`. Adds Chromium browser and X11 forwarding layer. |
 | `mirror` | Sets `mode: mirror`. No other effect. Compose with any other profile to explicitly select mirror mode. |
 | `static` | Sets `mode: static`. No other effect. Compose with any other profile to select self-contained mode for CI/CD use. |
 
@@ -248,7 +283,7 @@ Users can change the defaults by editing this file. `create-profile` does not mo
 
 Profile-based images are tagged `ai-sandbox:profile-<composition-hash>`.
 
-The `<composition-hash>` is a short hash derived from the ordered, resolved list of composed profile names after deduplication and default expansion (e.g. `base+mirror` or `base+mirror+docker`). The hash is stable: the same ordered set of profile names always produces the same tag, regardless of wall-clock time or machine.
+The `<composition-hash>` is a short hash derived from the ordered, resolved list of composed profile names after deduplication and default expansion (e.g. `base+mirror` or `base+mirror+docker`), along with the resolved `capabilities` list from the merged profile. Because capabilities determine which Dockerfile fragments are assembled, they must be part of the hash input — two compositions that resolve to the same profile names but different capability sets produce different images and therefore different tags. The hash is stable: the same combination of profile names and capabilities always produces the same tag, regardless of wall-clock time or machine.
 
 `is_build_stale` determines whether a rebuild is needed. For profile-based builds it checks:
 
@@ -269,11 +304,12 @@ The previous variant-key scheme (`ai-sandbox:<variant>` derived from `--no-chrom
 1. **Parse and validate profile YAML.** Uses a YAML parsing library (e.g. `js-yaml`). Emits schema-validation errors on unknown keys (warning, not error) and on type mismatches (error, exits nonzero).
 2. **Resolve profile discovery.** For each named profile, search the three locations in [Profile storage and discovery](#profile-storage-and-discovery) order. Exit nonzero if a profile is not found.
 3. **Apply composition rules.** Load all named profiles in order, apply the merge rules in [Profile composition](#profile-composition), and exit nonzero on scalar conflicts. The output is a single merged profile object.
-4. **Resolve paths.** For each `src` in `skills`, `hooks`, `agents`, and for `setup_script`, resolve the path relative to the profile file that declared it. Validate that each resolved path exists. Exit nonzero on missing paths.
-5. **Detect local paths.** Implement the auto-detection rule from [Local vs. shareable profiles](#local-vs-shareable-profiles). Set `local: true` on the in-memory merged object and emit a warning when detected.
-6. **Validate `required_env`.** For each name in the merged `required_env` list, check that the variable is present in `process.env`. Exit nonzero with a descriptive error message naming the missing variable and the profile that declared it.
-7. **Compute the composition hash.** Derive `<composition-hash>` from the ordered list of resolved profile names. Output it as part of the shell-sourceable block.
-8. **Output to stdout** in the three formats described below.
+4. **Resolve capabilities to Dockerfile fragments.** For each capability named in the merged `capabilities` list, locate the corresponding Dockerfile fragment (`docker/capabilities/<capability>.dockerfile`). Assemble these fragments — along with the base image fragment (`docker/capabilities/base.dockerfile`) — into the effective Dockerfile used for the image build. This replaces the previous ARG/variant approach and scales to future capabilities without schema changes.
+5. **Resolve paths.** For each `src` in `skills`, `hooks`, `agents`, and for `setup_script`, resolve the path relative to the profile file that declared it. Validate that each resolved path exists. Exit nonzero on missing paths.
+6. **Detect local paths.** Implement the auto-detection rule from [Local vs. shareable profiles](#local-vs-shareable-profiles). Set `local: true` on the in-memory merged object and emit a warning when detected.
+7. **Validate `required_env`.** For each name in the merged `required_env` list, check that the variable is present in `process.env`. Exit nonzero with a descriptive error message naming the missing variable and the profile that declared it.
+8. **Compute the composition hash.** Derive `<composition-hash>` from the ordered list of resolved profile names. The resolved `capabilities` list is included as an input to this hash. Output the hash as part of the shell-sourceable block.
+9. **Output to stdout** in the three formats described below.
 
 ### Output formats
 
@@ -283,7 +319,7 @@ The script writes to stdout in three blocks, separated by sentinel lines so the 
 
 ```bash
 PROFILE_MODE=mirror          # or "static", or "" if no profile set it
-PROFILE_DOCKER=false         # "true" or "false"
+PROFILE_CAPABILITIES=docker  # space-separated capability names, or "" if none
 PROFILE_IMAGE_TAG=profile-a1b2c3d4   # ai-sandbox:profile-<hash>
 PROFILE_LOCAL=false          # "true" if any composed profile is local
 PROFILE_COMPOSITION_HASH=a1b2c3d4
@@ -371,9 +407,9 @@ The following CLI flags are removed in the profiles release:
 
 | Removed flag | Replacement |
 |---|---|
-| `--docker` | `--profile docker` or `docker: true` in a profile |
-| `--no-docker` / `-D` | Omit the `docker` profile and omit `docker: true` from all composed profiles |
-| `--no-chromium` | Omit the `chromium` profile (Chromium is opt-in via `--profile chromium`) |
+| `--docker` | `--profile docker` or `capabilities: [docker]` in a profile |
+| `--no-docker` / `-D` | Omit the `docker` profile and omit `docker` from any `capabilities` list in composed profiles |
+| `--no-chromium` | Omit the `chromium` profile (Chromium is opt-in via `--profile chromium` or `capabilities: [chromium]`) |
 
 Callers using the removed flags receive a clear error message directing them to the profile-based equivalent.
 
