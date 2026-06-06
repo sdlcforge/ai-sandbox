@@ -11,12 +11,12 @@ Phase 01 (documentation) is complete in a prior round and not relisted here.
 
 ### Phase 02 — Foundation
 
-- [ ] [001-bundled-profiles.md](./phase-02-foundation/001-bundled-profiles.md) — tier `sonnet-high` · branch `phase-02-task-01-bundled-profiles` · commit `…` · merge `…`
+- [x] [001-bundled-profiles.md](./phase-02-foundation/001-bundled-profiles.md) — tier `sonnet-high` · branch `phase-02-task-01-bundled-profiles` · commit `aa35ade` · merge `c0bc86e`
 - [ ] [002-profile-installer.md](./phase-02-foundation/002-profile-installer.md) — tier `opus-medium` · branch `phase-02-task-02-profile-installer` · commit `…` · merge `…`
 
 ### Phase 03 — Dockerfile Decomposition
 
-- [ ] [003-dockerfile-decomposition.md](./phase-03-dockerfile-decomposition/003-dockerfile-decomposition.md) — tier `sonnet-high` · branch `phase-03-task-03-dockerfile-decomposition` · commit `…` · merge `…`
+- [x] [003-dockerfile-decomposition.md](./phase-03-dockerfile-decomposition/003-dockerfile-decomposition.md) — tier `sonnet-high` · branch `phase-03-task-03-dockerfile-decomposition` · commit `81a5fc6` · merge `3167a11`
 
 ### Phase 04 — CLI Integration
 

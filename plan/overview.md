@@ -23,8 +23,7 @@ Constraints carried through every task:
 
 ## Current status
 
-Phase 01 (documentation) complete and merged. This round (Phases 02–05) is
-planned and ready for implementation; no implementation tasks started yet.
+Task 003 complete: Dockerfile.base + capabilities/docker.dockerfile + capabilities/chromium.dockerfile + docker/scripts/assemble-dockerfile.sh. Original Dockerfile untouched.
 
 ## Overview
 
