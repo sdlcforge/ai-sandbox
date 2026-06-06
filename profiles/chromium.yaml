@@ -1,0 +1,7 @@
+metadata:
+  name: chromium
+  version: "1.0.0"
+  description: "Adds Chromium browser and X11 forwarding layer"
+
+capabilities:
+  - chromium

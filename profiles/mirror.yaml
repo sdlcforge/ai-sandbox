@@ -1,0 +1,6 @@
+metadata:
+  name: mirror
+  version: "1.0.0"
+  description: "Selects host-identity mirroring (SSH keys, git config, ~/.claude, ~/.config)"
+
+mode: mirror
