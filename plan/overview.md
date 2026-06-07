@@ -23,7 +23,7 @@ Constraints carried through every task:
 
 ## Current status
 
-Task 003 complete: Dockerfile.base + capabilities/docker.dockerfile + capabilities/chromium.dockerfile + docker/scripts/assemble-dockerfile.sh. Original Dockerfile untouched.
+Tasks 001–004 complete. Phase 02 foundation and Phase 03 Dockerfile decomposition landed. Task 004 (CLI integration) merged: --profile/--mode flags, profile resolution phase in index.sh, capability-driven compose overlays. Tasks 005 (image tagging) and 006 (create-profile) complete in their worktrees, pending reconciliation against 004 before merge. Unit suite 50/50.
 
 ## Overview
 
