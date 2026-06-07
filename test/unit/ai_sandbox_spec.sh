@@ -53,41 +53,36 @@ Describe 'ai-sandbox.sh'
     End
   End
 
-  Describe 'variant_key()'
-    It 'returns full when no flags are set'
-      NO_CHROMIUM=false
-      NO_DOCKER=false
-      When call variant_key
-      The output should eq 'full'
+  Describe 'profile_has_capability()'
+    It 'returns success when the capability is present'
+      PROFILE_CAPABILITIES="docker chromium"
+      When call profile_has_capability docker
+      The status should be success
     End
 
-    It 'returns no-chromium when only --no-chromium is set'
-      NO_CHROMIUM=true
-      NO_DOCKER=false
-      When call variant_key
-      The output should eq 'no-chromium'
+    It 'returns failure when the capability is absent'
+      PROFILE_CAPABILITIES="chromium"
+      When call profile_has_capability docker
+      The status should be failure
     End
 
-    It 'returns no-docker when only --no-docker is set'
-      NO_CHROMIUM=false
-      NO_DOCKER=true
-      When call variant_key
-      The output should eq 'no-docker'
+    It 'matches whole tokens, not substrings'
+      PROFILE_CAPABILITIES="dockerized"
+      When call profile_has_capability docker
+      The status should be failure
     End
 
-    It 'returns no-chromium-no-docker when both flags are set'
-      NO_CHROMIUM=true
-      NO_DOCKER=true
-      When call variant_key
-      The output should eq 'no-chromium-no-docker'
+    It 'returns failure when no capabilities are set'
+      PROFILE_CAPABILITIES=""
+      When call profile_has_capability docker
+      The status should be failure
     End
   End
 
   Describe 'ensure_image()'
     setup() {
       export TOOL_CACHE_DIR="$(mktemp -d)"
-      NO_CHROMIUM=false
-      NO_DOCKER=false
+      export AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-test"
     }
     cleanup() {
       rm -rf "$TOOL_CACHE_DIR"
@@ -135,19 +130,46 @@ Describe 'ai-sandbox.sh'
   End
 
   Describe 'parse_options()'
-    It 'leaves NO_DOCKER false by default'
-      When call parse_options
-      The variable NO_DOCKER should eq false
+    It 'leaves PROFILES empty by default'
+      profile_count() { parse_options "$@"; echo "${#PROFILES[@]}"; }
+      When call profile_count
+      The output should eq 0
     End
 
-    It 'sets NO_DOCKER when --no-docker is passed'
-      When call parse_options --no-docker
-      The variable NO_DOCKER should eq true
+    It 'accumulates repeated --profile flags in order'
+      When call parse_options --profile base --profile docker
+      The variable "PROFILES[*]" should eq 'base docker'
+      The variable CONFIG_FLAGS_PROVIDED should eq true
     End
 
-    It 'sets NO_DOCKER when -D is passed'
-      When call parse_options -D
-      The variable NO_DOCKER should eq true
+    It 'sets MODE_OVERRIDE from --mode'
+      When call parse_options --mode static
+      The variable MODE_OVERRIDE should eq static
+      The variable CONFIG_FLAGS_PROVIDED should eq true
+    End
+
+    It 'rejects an invalid --mode value'
+      When run parse_options --mode bogus
+      The status should be failure
+      The stderr should include "must be 'mirror' or 'static'"
+    End
+
+    It 'errors and points to --profile docker when --docker is passed'
+      When run parse_options build --docker
+      The status should be failure
+      The stderr should include '--profile docker'
+    End
+
+    It 'errors and points to --profile docker when --no-docker is passed'
+      When run parse_options build --no-docker
+      The status should be failure
+      The stderr should include '--profile docker'
+    End
+
+    It 'errors and points to --profile chromium when --no-chromium is passed'
+      When run parse_options build --no-chromium
+      The status should be failure
+      The stderr should include '--profile chromium'
     End
 
     It 'leaves NO_ISOLATE_CONFIG false by default (isolation on)'
@@ -165,8 +187,7 @@ Describe 'ai-sandbox.sh'
     setup() {
       export PROJECT_ROOT="$(mktemp -d)"
       mkdir -p "${PROJECT_ROOT}/docker"
-      NO_CHROMIUM=false
-      NO_DOCKER=false
+      export AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-test"
     }
     cleanup() {
       rm -rf "$PROJECT_ROOT"
