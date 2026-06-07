@@ -23,7 +23,7 @@ Constraints carried through every task:
 
 ## Current status
 
-Phase 04 complete: all three CLI integration tasks (004, 005, 006) merged. --profile/--mode flags, profile resolution phase, enhanced is_build_stale() with profile hash + file mtime checks, --hash support in assemble-dockerfile.sh, create-profile command. Unit suite 58/58. Phase 05 (Task 007: tests and QA gate) is next.
+COMPLETE. All 7 tasks across Phases 02–05 merged to main. Unit suite 61/61 green. Integration tests skipped (dev-environment preflight gate). src/index.sh bash 3.2 empty-array fix included. Profiles feature fully implemented.
 
 ## Overview
 

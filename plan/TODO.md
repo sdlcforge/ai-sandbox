@@ -26,4 +26,4 @@ Phase 01 (documentation) is complete in a prior round and not relisted here.
 
 ### Phase 05 — Verification
 
-- [ ] [007-tests-and-qa.md](./phase-05-verification/007-tests-and-qa.md) — tier `opus-medium` · branch `phase-05-task-07-tests-and-qa` · commit `…` · merge `…`
+- [x] [007-tests-and-qa.md](./phase-05-verification/007-tests-and-qa.md) — tier `opus-medium` · branch `phase-05-task-07-tests-and-qa-gate` · commit `5e5c9a9` · merge `51388aa`
