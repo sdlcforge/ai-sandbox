@@ -86,7 +86,7 @@ if [ -n "${MODE_OVERRIDE}" ]; then
   PROFILE_INSTALLER_ARGS+=(--mode "${MODE_OVERRIDE}")
 fi
 
-PROFILE_INSTALLER_OUTPUT="$(node "${PROFILE_INSTALLER}" "${PROFILE_INSTALLER_ARGS[@]}")" || exit $?
+PROFILE_INSTALLER_OUTPUT="$(node "${PROFILE_INSTALLER}" "${PROFILE_INSTALLER_ARGS[@]+"${PROFILE_INSTALLER_ARGS[@]}"}")" || exit $?
 
 # Source only the KEY=VALUE env lines (between the ENV sentinel and the first
 # subsequent '###' sentinel). awk emits them; eval sets PROFILE_* in this scope.
