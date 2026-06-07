@@ -392,6 +392,38 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'create_profile()'
+    setup() {
+      export TMPDIR_CP="$(mktemp -d)"
+      export HOME="${TMPDIR_CP}"
+    }
+    cleanup() {
+      rm -rf "${TMPDIR_CP}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'writes the profile file and prints success'
+      output_file="${TMPDIR_CP}/test-profile.yaml"
+      When call create_profile --name t --output "${output_file}"
+      The output should include 'Created profile:'
+      The path "${output_file}" should be exist
+      The status should be success
+    End
+
+    It 'errors when --name is missing'
+      When run create_profile --output /tmp/nope.yaml
+      The status should be failure
+      The stderr should include '--name is required'
+    End
+
+    It 'errors when --name contains a path separator'
+      When run create_profile --name bad/name --output /tmp/nope.yaml
+      The status should be failure
+      The stderr should include '/'
+    End
+  End
+
   Describe 'cleanup_stale_container()'
     It 'returns 0 when no container exists'
       docker() {
