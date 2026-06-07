@@ -2,7 +2,13 @@
 # assemble-dockerfile.sh — Assemble the effective Dockerfile from base + capability fragments.
 #
 # Usage:
-#   assemble-dockerfile.sh <capabilities> <output-path>
+#   assemble-dockerfile.sh [--hash <composition-hash>] <capabilities> <output-path>
+#
+#   --hash <hash>   Optional. The 8-char profile composition hash from profile-installer.js.
+#                   When supplied, a LABEL ai.sandbox.profile-hash=<hash> instruction is
+#                   appended to the assembled Dockerfile so that is_build_stale() can detect
+#                   composition changes without re-running the installer.
+#                   The hash is owned by profile-installer.js — never compute it here.
 #
 #   <capabilities>  Space-separated list of capability names (e.g. "docker chromium"),
 #                   or an empty string "" for a lean image with no capability layers.
@@ -22,6 +28,7 @@
 #   assemble-dockerfile.sh "docker chromium" /tmp/Dockerfile.test
 #   assemble-dockerfile.sh "" /tmp/Dockerfile.lean
 #   assemble-dockerfile.sh "docker" "${HOME}/.cache/ai-sandbox/Dockerfile.abc123"
+#   assemble-dockerfile.sh --hash a1b2c3d4 "docker" "${HOME}/.cache/ai-sandbox/Dockerfile.a1b2c3d4"
 
 set -euo pipefail
 
@@ -30,9 +37,27 @@ DOCKER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BASE_FILE="${DOCKER_DIR}/Dockerfile.base"
 CAPABILITIES_DIR="${DOCKER_DIR}/capabilities"
 
-# --- Argument validation ---
+# --- Argument parsing ---
+PROFILE_HASH=""
+while [[ $# -gt 0 && "$1" == --* ]]; do
+  case "$1" in
+    --hash)
+      if [[ $# -lt 2 ]]; then
+        printf 'error: --hash requires a value\n' >&2
+        exit 1
+      fi
+      PROFILE_HASH="$2"
+      shift 2
+      ;;
+    *)
+      printf 'error: unknown option: %s\n' "$1" >&2
+      exit 1
+      ;;
+  esac
+done
+
 if [[ $# -ne 2 ]]; then
-  printf 'Usage: %s <capabilities> <output-path>\n' "$(basename "${BASH_SOURCE[0]}")" >&2
+  printf 'Usage: %s [--hash <hash>] <capabilities> <output-path>\n' "$(basename "${BASH_SOURCE[0]}")" >&2
   printf 'Example: %s "docker chromium" /tmp/Dockerfile.test\n' "$(basename "${BASH_SOURCE[0]}")" >&2
   exit 1
 fi
@@ -83,6 +108,15 @@ for cap in "${capabilities[@]}"; do
   printf '\n' >> "${OUTPUT_PATH}"
   cat "${fragment}" >> "${OUTPUT_PATH}"
 done
+
+# Append the profile composition hash label when --hash was provided.
+# This label is read by is_build_stale() to detect composition changes
+# without re-running profile-installer.js. The hash is owned by
+# profile-installer.js and passed through here verbatim.
+if [[ -n "${PROFILE_HASH}" ]]; then
+  printf '\n# === Profile composition label ===\n' >> "${OUTPUT_PATH}"
+  printf 'LABEL ai.sandbox.profile-hash="%s"\n' "${PROFILE_HASH}" >> "${OUTPUT_PATH}"
+fi
 
 # Append the ENTRYPOINT as the final line.
 printf '\nENTRYPOINT ["/init"]\n' >> "${OUTPUT_PATH}"

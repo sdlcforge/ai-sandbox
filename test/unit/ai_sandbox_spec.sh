@@ -53,6 +53,40 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'profile_image_suffix()'
+    It 'returns profile-<hash> when PROFILE_COMPOSITION_HASH is set'
+      PROFILE_COMPOSITION_HASH=a1b2c3d4
+      When call profile_image_suffix
+      The output should eq 'profile-a1b2c3d4'
+    End
+
+    It 'returns profile-default when PROFILE_COMPOSITION_HASH is unset'
+      unset PROFILE_COMPOSITION_HASH
+      When call profile_image_suffix
+      The output should eq 'profile-default'
+    End
+
+    It 'returns profile-default when PROFILE_COMPOSITION_HASH is empty'
+      PROFILE_COMPOSITION_HASH=
+      When call profile_image_suffix
+      The output should eq 'profile-default'
+    End
+  End
+
+  Describe 'variant_image_tag()'
+    It 'returns ai-sandbox:profile-<hash> when PROFILE_COMPOSITION_HASH is set'
+      PROFILE_COMPOSITION_HASH=a1b2c3d4
+      When call variant_image_tag
+      The output should eq 'ai-sandbox:profile-a1b2c3d4'
+    End
+
+    It 'returns ai-sandbox:profile-default when PROFILE_COMPOSITION_HASH is unset'
+      unset PROFILE_COMPOSITION_HASH
+      When call variant_image_tag
+      The output should eq 'ai-sandbox:profile-default'
+    End
+  End
+
   Describe 'profile_has_capability()'
     It 'returns success when the capability is present'
       PROFILE_CAPABILITIES="docker chromium"
@@ -83,6 +117,7 @@ Describe 'ai-sandbox.sh'
     setup() {
       export TOOL_CACHE_DIR="$(mktemp -d)"
       export AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-test"
+      unset PROFILE_COMPOSITION_HASH
     }
     cleanup() {
       rm -rf "$TOOL_CACHE_DIR"
@@ -188,6 +223,9 @@ Describe 'ai-sandbox.sh'
       export PROJECT_ROOT="$(mktemp -d)"
       mkdir -p "${PROJECT_ROOT}/docker"
       export AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-test"
+      unset PROFILE_COMPOSITION_HASH
+      unset PROFILE_INPUT_FILES
+      unset PROFILE_ASSEMBLED_DOCKERFILE
     }
     cleanup() {
       rm -rf "$PROJECT_ROOT"
@@ -221,6 +259,58 @@ Describe 'ai-sandbox.sh'
     It 'returns stale when a docker/ file is newer than the image'
       touch "${PROJECT_ROOT}/docker/Dockerfile"
       # Image "created" back in 2000 → source file is newer.
+      docker() {
+        case "$1 $2" in
+          "image inspect") echo "2000-01-01T00:00:00Z" ;;
+        esac
+      }
+      When call is_build_stale
+      The status should be success
+    End
+
+    It 'returns stale when profile hash in image label differs from current'
+      touch -t 202001010000 "${PROJECT_ROOT}/docker/Dockerfile"
+      PROFILE_COMPOSITION_HASH=newHash8
+      docker() {
+        case "$1 $2" in
+          "image inspect")
+            # First call: .Created timestamp; second call: label value.
+            # Both cases are caught by "image inspect" — the label call returns
+            # a different (stale) hash to trigger the staleness check.
+            if [[ "$*" == *"profile-hash"* ]]; then
+              echo "oldHash8"
+            else
+              echo "2099-01-01T00:00:00Z"
+            fi
+            ;;
+        esac
+      }
+      When call is_build_stale
+      The status should be success
+    End
+
+    It 'returns fresh when profile hash matches and no files changed'
+      touch -t 202001010000 "${PROJECT_ROOT}/docker/Dockerfile"
+      PROFILE_COMPOSITION_HASH=a1b2c3d4
+      docker() {
+        case "$1 $2" in
+          "image inspect")
+            if [[ "$*" == *"profile-hash"* ]]; then
+              echo "a1b2c3d4"
+            else
+              echo "2099-01-01T00:00:00Z"
+            fi
+            ;;
+        esac
+      }
+      When call is_build_stale
+      The status should be failure
+    End
+
+    It 'returns stale when a PROFILE_INPUT_FILES entry is newer than the image'
+      input_file="${PROJECT_ROOT}/profile-input.yaml"
+      touch "${input_file}"
+      PROFILE_INPUT_FILES="${input_file}"
       docker() {
         case "$1 $2" in
           "image inspect") echo "2000-01-01T00:00:00Z" ;;
