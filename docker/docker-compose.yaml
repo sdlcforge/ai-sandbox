@@ -3,7 +3,7 @@ services:
     image: ai-sandbox:${AI_SANDBOX_IMAGE_TAG:-full}
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ${AI_SANDBOX_DOCKERFILE:-Dockerfile}
       additional_contexts:
         tool-cache: ${TOOL_CACHE_DIR}
       args:
@@ -28,9 +28,6 @@ services:
         GOLANGCI_LINT_INSTALL_SH: ${GOLANGCI_LINT_INSTALL_SH:-}
         NVM_INSTALL_SH: ${NVM_INSTALL_SH:-}
         ZSH_IN_DOCKER_SH: ${ZSH_IN_DOCKER_SH:-}
-        # Build-config toggles (surfaced as image LABELs so the host launcher
-        # knows when to rebuild if the user switches flags).
-        INSTALL_DOCKER_CLI: ${INSTALL_DOCKER_CLI:-true}
         GIT_USER_NAME: ${GIT_USER_NAME}
         GIT_USER_EMAIL: ${GIT_USER_EMAIL}
     container_name: ai-sandbox
@@ -41,9 +38,12 @@ services:
       # was created. The launcher compares this to the current host path via
       # docker inspect to detect drift after agent restarts / logouts.
       ai.sandbox.ssh-auth-sock-host: "${SSH_AUTH_SOCK}"
-      # Snapshot of config-changing flags the launcher was invoked with. Used
-      # by running_config_matches() to detect when a re-invocation would force
-      # a recreate, so we can prompt before stopping the user's container.
+      # Snapshot of the resolved composition + config-changing options the
+      # launcher was invoked with. Used by running_config_matches() to detect
+      # when a re-invocation would force a recreate, so we can prompt before
+      # stopping the user's container.
+      ai.sandbox.profile-hash: "${PROFILE_COMPOSITION_HASH:-}"
+      ai.sandbox.mode: "${EFFECTIVE_MODE:-mirror}"
       ai.sandbox.no-isolate-config: "${NO_ISOLATE_CONFIG:-false}"
       ai.sandbox.docker-proxy: "${EFFECTIVE_PROXY:-false}"
     volumes:

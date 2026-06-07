@@ -54,16 +54,32 @@ function is_container_running() {
     [ "${state}" = "running" ]
 }
 
+# Return 0 if the named capability is present in PROFILE_CAPABILITIES (a
+# space-separated list), 1 otherwise. Matches whole tokens, not substrings.
+# $1 — capability name to test for.
+function profile_has_capability() {
+    local want="$1" cap
+    for cap in ${PROFILE_CAPABILITIES:-}; do
+        [ "${cap}" = "${want}" ] && return 0
+    done
+    return 1
+}
+
 # Return 0 if the running container's image + config-relevant labels match the
-# current invocation's flags, 1 if they differ, 2 if no container is running.
-# Reads NO_ISOLATE_CONFIG / EFFECTIVE_PROXY / variant_image_tag from caller scope.
+# current invocation's composition, 1 if they differ, 2 if no container is
+# running. Reads AI_SANDBOX_IMAGE_TAG / PROFILE_COMPOSITION_HASH / EFFECTIVE_MODE
+# / NO_ISOLATE_CONFIG / EFFECTIVE_PROXY from caller scope.
 function running_config_matches() {
     is_container_running || return 2
-    local cur_image cur_no_isolate cur_proxy
+    local cur_image cur_hash cur_mode cur_no_isolate cur_proxy
     cur_image=$(docker inspect -f '{{.Config.Image}}' ai-sandbox 2>/dev/null || true)
+    cur_hash=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.profile-hash"}}' ai-sandbox 2>/dev/null || true)
+    cur_mode=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.mode"}}' ai-sandbox 2>/dev/null || true)
     cur_no_isolate=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.no-isolate-config"}}' ai-sandbox 2>/dev/null || true)
     cur_proxy=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.docker-proxy"}}' ai-sandbox 2>/dev/null || true)
-    [ "${cur_image}" = "$(variant_image_tag)" ] || return 1
+    [ "${cur_image}" = "${AI_SANDBOX_IMAGE_TAG:-}" ] || return 1
+    [ "${cur_hash}" = "${PROFILE_COMPOSITION_HASH:-}" ] || return 1
+    [ "${cur_mode:-mirror}" = "${EFFECTIVE_MODE:-mirror}" ] || return 1
     [ "${cur_no_isolate:-false}" = "${NO_ISOLATE_CONFIG:-false}" ] || return 1
     [ "${cur_proxy:-false}" = "${EFFECTIVE_PROXY:-false}" ] || return 1
     return 0
@@ -90,25 +106,11 @@ function confirm_stop_running() {
     esac
 }
 
-# Echoes a stable key identifying the current build-option combination. Used as
-# the Docker image tag so each distinct option set gets its own image. Reads
-# NO_CHROMIUM / NO_DOCKER from caller scope.
-function variant_key() {
-    local parts=""
-    [ "${NO_CHROMIUM:-false}" = "true" ] && parts="${parts}${parts:+-}no-chromium"
-    [ "${NO_DOCKER:-false}" = "true" ] && parts="${parts}${parts:+-}no-docker"
-    printf '%s\n' "${parts:-full}"
-}
-
-function variant_image_tag() {
-    printf 'ai-sandbox:%s\n' "$(variant_key)"
-}
-
-# Return 0 (stale) if the variant image is missing or any file under docker/ is
-# newer than its creation timestamp. Return 1 (fresh) otherwise.
+# Return 0 (stale) if the composition image is missing or any file under docker/
+# is newer than its creation timestamp. Return 1 (fresh) otherwise.
 function is_build_stale() {
     local tag created tmp newer
-    tag="$(variant_image_tag)"
+    tag="${AI_SANDBOX_IMAGE_TAG}"
     created="$(docker image inspect --format='{{.Created}}' "${tag}" 2>/dev/null)" || return 0
     tmp="$(mktemp)"
     # touch -d accepts ISO 8601 on macOS (BSD) and Linux (GNU). On failure,
@@ -123,7 +125,7 @@ function is_build_stale() {
 }
 
 function ensure_image() {
-    if ! docker image inspect "$(variant_image_tag)" >/dev/null 2>&1; then
+    if ! docker image inspect "${AI_SANDBOX_IMAGE_TAG}" >/dev/null 2>&1; then
         qecho "Image not found, building..."
         do_build
     elif is_build_stale; then
@@ -133,7 +135,7 @@ function ensure_image() {
 }
 
 function do_build() {
-    docker image rm -f "$(variant_image_tag)" >/dev/null 2>&1 || true
+    docker image rm -f "${AI_SANDBOX_IMAGE_TAG}" >/dev/null 2>&1 || true
     docker compose ${COMPOSE_FILES} build --ssh "default=${SSH_AUTH_SOCK}"
 }
 

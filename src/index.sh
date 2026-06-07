@@ -66,58 +66,55 @@ if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "up" ]; t
     check_host_plugin_conflicts || exit 1
 fi
 
-# --- Phase: flag validation ---
-if [ "$NO_CHROMIUM" = "true" ] && [ -n "$CMD" ] && [ "$CMD" != "build" ]; then
-  echo "Error: --no-chromium can only be used with 'build' command" 1>&2
-  exit 1
+# --- Phase: resolve profiles ---
+# Run profile-installer.js to compose the requested (or default) profiles and
+# emit the resolved env block. Source PROFILE_* from it, assemble the effective
+# Dockerfile, and derive the image tag. Drives compose-overlay selection below.
+PROFILE_INSTALLER="${PROJECT_ROOT}/bin/profile-installer.js"
+PROFILE_INSTALLER_ARGS=()
+if [ "${#PROFILES[@]}" -gt 0 ]; then
+  PROFILE_INSTALLER_ARGS+=("${PROFILES[@]}")
+fi
+if [ -n "${MODE_OVERRIDE}" ]; then
+  PROFILE_INSTALLER_ARGS+=(--mode "${MODE_OVERRIDE}")
 fi
 
-# --no-docker is only meaningful when we're about to build the image or start
-# the container. Reject it on pass-through / management commands so users don't
-# get the false impression it did something.
-case "${CMD}" in
-  build|start|enter|"") ;;
-  *)
-    if [ "$NO_DOCKER" = "true" ]; then
-      echo "Error: --no-docker only applies to 'build', 'start', or 'enter'" 1>&2
-      exit 1
-    fi
-    ;;
-esac
+PROFILE_INSTALLER_OUTPUT="$(node "${PROFILE_INSTALLER}" "${PROFILE_INSTALLER_ARGS[@]}")" || exit $?
 
-if [ "$NO_DOCKER" = "true" ] && [ "$ENABLE_DOCKER_PROXY" = "true" ]; then
-  echo "Error: --no-docker and --docker are mutually exclusive" 1>&2
-  exit 1
-fi
+# Source only the KEY=VALUE env lines (between the ENV sentinel and the first
+# subsequent '###' sentinel). awk emits them; eval sets PROFILE_* in this scope.
+PROFILE_ENV_BLOCK="$(printf '%s\n' "${PROFILE_INSTALLER_OUTPUT}" \
+  | awk '/^### PROFILE_ENV ###$/{f=1;next} /^###/{f=0} f && /^[A-Z_]+=/{print}')"
+eval "${PROFILE_ENV_BLOCK}"
+export PROFILE_MODE PROFILE_CAPABILITIES PROFILE_IMAGE_TAG \
+  PROFILE_COMPOSITION_HASH PROFILE_ASSEMBLED_DOCKERFILE
 
-# --no-docker modifies how the container is built/started. If a container is
-# already running, the flag would silently do nothing — fail loudly instead.
-if [ "$NO_DOCKER" = "true" ] && [ "${CMD}" != "build" ]; then
-  running_state="$(docker inspect -f '{{.State.Running}}' ai-sandbox 2>/dev/null || true)"
-  if [ "${running_state}" = "true" ]; then
-    echo "Error: --no-docker cannot be applied while the ai-sandbox container is running." 1>&2
-    echo "       Stop it first with 'ai-sandbox stop'." 1>&2
-    exit 1
-  fi
-fi
-
-# Export build-time ARG values consumed by docker/docker-compose.yaml.
-if [ "$NO_DOCKER" = "true" ]; then
-  export INSTALL_DOCKER_CLI=false
+# MODE_OVERRIDE wins; else the profile's mode; else mirror (legacy default).
+if [ -n "${MODE_OVERRIDE}" ]; then
+  EFFECTIVE_MODE="${MODE_OVERRIDE}"
 else
-  export INSTALL_DOCKER_CLI=true
+  EFFECTIVE_MODE="${PROFILE_MODE:-mirror}"
 fi
+export EFFECTIVE_MODE
 
-# Resolve the effective docker-proxy state once. --docker and the env-var alias
-# are equivalent; --no-docker overrides both. EFFECTIVE_PROXY drives compose
-# overlay selection, the container label, and config-match detection.
-if [ "$NO_DOCKER" != "true" ] \
-    && { [ "$ENABLE_DOCKER_PROXY" = "true" ] || [ -n "${AI_SANDBOX_ENABLE_DOCKER_PROXY:-}" ]; }; then
+# Per-composition image tag consumed by docker/docker-compose.yaml.
+AI_SANDBOX_IMAGE_TAG="ai-sandbox:${PROFILE_IMAGE_TAG}"
+export AI_SANDBOX_IMAGE_TAG
+
+# Capability-derived proxy state. The proxy sidecar overlay and the
+# ai.sandbox.docker-proxy label are keyed off this.
+if profile_has_capability docker; then
   EFFECTIVE_PROXY=true
 else
   EFFECTIVE_PROXY=false
 fi
-export EFFECTIVE_PROXY NO_ISOLATE_CONFIG NO_CHROMIUM NO_DOCKER
+export EFFECTIVE_PROXY NO_ISOLATE_CONFIG
+
+# Assemble the effective Dockerfile from the resolved capabilities and point the
+# compose build at it (docker-compose.yaml reads ${AI_SANDBOX_DOCKERFILE}).
+"${PROJECT_ROOT}/docker/scripts/assemble-dockerfile.sh" \
+  "${PROFILE_CAPABILITIES}" "${PROFILE_ASSEMBLED_DOCKERFILE}" >/dev/null
+export AI_SANDBOX_DOCKERFILE="${PROFILE_ASSEMBLED_DOCKERFILE}"
 
 # --- Phase: assemble docker-compose file list ---
 GENERATED_COMPOSE="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox/docker-compose.generated.yaml"
@@ -125,18 +122,23 @@ mkdir -p "$(dirname "${GENERATED_COMPOSE}")"
 generate_volume_override "${GENERATED_COMPOSE}"
 
 COMPOSE_FILES="-f ${PROJECT_ROOT}/docker/docker-compose.yaml"
-if [ "$NO_CHROMIUM" != "true" ]; then
+if profile_has_capability chromium; then
   COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.chromium.yaml"
 fi
 
-# ~/.config handling: either overlay (default, isolates container writes) or
-# passthrough. Kept as separate overlay files so the base compose doesn't
-# have to know about either form and the active choice is obvious from
-# `docker compose config`.
-if [ "$NO_ISOLATE_CONFIG" = "true" ]; then
-  COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.shared-config.yaml"
-else
-  COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.isolate-config.yaml"
+# Host-identity / config overlays only apply in mirror mode. static mode is
+# self-contained: no ~/.config overlay is applied (see decisions in task report
+# for the V1 scope of static-mode mount suppression).
+if [ "${EFFECTIVE_MODE}" = "mirror" ]; then
+  # ~/.config handling: either overlay (default, isolates container writes) or
+  # passthrough. Kept as separate overlay files so the base compose doesn't
+  # have to know about either form and the active choice is obvious from
+  # `docker compose config`.
+  if [ "$NO_ISOLATE_CONFIG" = "true" ]; then
+    COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.shared-config.yaml"
+  else
+    COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.isolate-config.yaml"
+  fi
 fi
 
 COMPOSE_FILES="${COMPOSE_FILES} -f ${GENERATED_COMPOSE}"
@@ -169,10 +171,6 @@ export GIT_USER_EMAIL
 export DOCKER_DEFAULT_PLATFORM=linux/${HOST_ARCH}
 export TOOL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox"
 mkdir -p "${TOOL_CACHE_DIR}"
-
-# Per-variant image tag consumed by docker/docker-compose.yaml.
-AI_SANDBOX_IMAGE_TAG="$(variant_key)"
-export AI_SANDBOX_IMAGE_TAG
 
 # --- Phase: tool-version resolution + downloads (build-related commands) ---
 if [ -z "${CMD}" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "up" ] || [ "${CMD}" == "build" ]; then

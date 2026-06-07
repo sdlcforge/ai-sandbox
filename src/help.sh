@@ -15,10 +15,11 @@ Commands:
   enter              Start the container (if needed) and drop into a shell. (default)
   start              Start the container in the background; do not attach.
   attach, connect    Attach a shell to an already-running container.
-  build              Build the container image for the current option set. Each
-                     unique combination of --no-chromium / --no-docker produces
-                     its own image (tagged ai-sandbox:<variant>); rebuilding
-                     only replaces the matching variant.
+  build              Build the container image for the resolved profile
+                     composition. Each unique composition (profiles +
+                     capabilities) produces its own image, tagged
+                     ai-sandbox:profile-<hash>; rebuilding only replaces the
+                     matching composition.
   status             Show container state, built images, and (when stopped)
                      whether the container is currently runnable. See `--json`
                      and `--test-check` options below.
@@ -38,18 +39,17 @@ Any other command is forwarded to `docker compose` with the assembled compose fi
 so e.g. `ai-sandbox logs -f` works.
 
 Options:
-  --no-chromium      (build only) Build the image without Chromium.
-  -D, --no-docker    (build/start only) Build/start without the Docker CLI
-                     inside the container. Produces a smaller image. Cannot
-                     be combined with --docker. If the container is already
-                     running, stop it before applying this flag. Selects a
-                     distinct image variant — switching flags picks a
-                     different variant without rebuilding the others.
-  --docker           Give the container gated access to the host Docker daemon
-                     via a tecnativa/docker-socket-proxy sidecar. Enables
-                     image pull/search/build and container run/exec inside the
-                     sandbox. This is a mitigation, not a security boundary —
-                     only enable when you actually need it.
+  --profile <name>   Compose the named profile into this invocation. Repeatable;
+                     profiles merge left to right. When omitted, the
+                     default_profiles from config.yaml are used (falling back to
+                     'base mirror'). Capabilities like 'docker' (host Docker
+                     access via a socket-proxy sidecar) and 'chromium' (X11
+                     browser support) are opt-in via profiles such as
+                     '--profile docker' / '--profile chromium'.
+  --mode <mode>      Override the container mode for this run: 'mirror' mirrors
+                     host identity (SSH keys, git config, ~/.claude, ~/.config);
+                     'static' is self-contained with no host-identity mounts.
+                     Overrides any mode set by the composed profiles.
   --force            Bypass host plugin-conflict pre-flight checks.
                      Equivalent to AI_SANDBOX_SKIP_PLUGIN_CHECK=1.
   -y, --yes          Skip the confirmation prompt that fires before commands
@@ -69,6 +69,5 @@ Options:
 
 Environment:
   AI_SANDBOX_SKIP_PLUGIN_CHECK=1       Same as --force.
-  AI_SANDBOX_ENABLE_DOCKER_PROXY=1     Same as --docker.
 EOF
 }

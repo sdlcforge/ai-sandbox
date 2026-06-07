@@ -1,15 +1,11 @@
 # docker-compose.chromium.yaml
-# Overlay to enable Chromium browser support
-# Usage: docker compose -f docker/docker-compose.yaml -f docker/docker-compose.chromium.yaml build
-#
-# This overlay:
-# - Sets INSTALL_CHROMIUM=true build arg to install X11 libs + Chromium from xtradeb PPA
-# - Configures 2GB shared memory required for Chromium in Docker
+# Overlay applied when the `chromium` capability is active. Chromium and its
+# X11 dependencies are installed by the chromium Dockerfile fragment; this
+# overlay only supplies the runtime config Chromium needs in Docker:
+# - DISPLAY pointing at the host X server (XQuartz on macOS)
+# - 2GB shared memory required for Chromium in Docker
 services:
   ai-sandbox:
-    build:
-      args:
-        INSTALL_CHROMIUM: "true"
     environment:
       - DISPLAY=host.docker.internal:0
     shm_size: '2gb'

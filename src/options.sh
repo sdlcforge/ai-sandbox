@@ -5,9 +5,9 @@
 #   CMD          — subcommand (defaults to "enter")
 #   CMD_EXPLICIT — "true" if the user supplied a command word
 #   ARGS         — array of remaining args forwarded to the subcommand
-#   NO_CHROMIUM  — "true" if --no-chromium was passed
-#   NO_DOCKER    — "true" if --no-docker / -D was passed
-#   ENABLE_DOCKER_PROXY — "true" if --docker was passed
+#   PROFILES     — array of --profile names, in invocation order
+#   MODE_OVERRIDE — "mirror" / "static" from --mode, or "" if not given
+#   NO_ISOLATE_CONFIG — "true" if --no-isolate-config was passed
 #   CONFIG_FLAGS_PROVIDED — "true" if any flag changing container config was passed
 #   AUTO_YES     — "true" if --yes / -y was passed (skip confirmation prompts)
 #   QUIET        — 0 (verbose) or 1 (quiet); defaults to 0 for `status`, 1 otherwise
@@ -15,27 +15,47 @@
 function parse_options() {
     CMD=""
     CMD_EXPLICIT=false
-    NO_CHROMIUM=false
-    NO_DOCKER=false
+    PROFILES=()
+    MODE_OVERRIDE=""
     NO_ISOLATE_CONFIG=false
-    ENABLE_DOCKER_PROXY=false
     CONFIG_FLAGS_PROVIDED=false
     AUTO_YES=false
     STATUS_JSON=false
     STATUS_TEST_CHECK=false
     ARGS=()
-    for arg in "$@"; do
-        if [ "$arg" == "--no-chromium" ]; then
-            NO_CHROMIUM=true
+    while [ $# -gt 0 ]; do
+        arg="$1"
+        if [ "$arg" == "--profile" ]; then
+            if [ $# -lt 2 ]; then
+                echo "Error: --profile requires a profile name" 1>&2
+                exit 1
+            fi
+            PROFILES+=("$2")
             CONFIG_FLAGS_PROVIDED=true
+            shift
+        elif [ "$arg" == "--mode" ]; then
+            if [ $# -lt 2 ]; then
+                echo "Error: --mode requires a value (mirror or static)" 1>&2
+                exit 1
+            fi
+            MODE_OVERRIDE="$2"
+            if [ "${MODE_OVERRIDE}" != "mirror" ] && [ "${MODE_OVERRIDE}" != "static" ]; then
+                echo "Error: --mode must be 'mirror' or 'static' (got '${MODE_OVERRIDE}')" 1>&2
+                exit 1
+            fi
+            CONFIG_FLAGS_PROVIDED=true
+            shift
+        elif [ "$arg" == "--no-chromium" ]; then
+            echo "Error: --no-chromium has been removed. Chromium is opt-in via '--profile chromium'." 1>&2
+            exit 1
         elif [ "$arg" == "--no-docker" ] || [ "$arg" == "-D" ]; then
-            NO_DOCKER=true
-            CONFIG_FLAGS_PROVIDED=true
+            echo "Error: --no-docker/-D has been removed. The Docker CLI is opt-in via '--profile docker'." 1>&2
+            exit 1
+        elif [ "$arg" == "--docker" ]; then
+            echo "Error: --docker has been removed. Use '--profile docker' instead." 1>&2
+            exit 1
         elif [ "$arg" == "--no-isolate-config" ]; then
             NO_ISOLATE_CONFIG=true
-            CONFIG_FLAGS_PROVIDED=true
-        elif [ "$arg" == "--docker" ]; then
-            ENABLE_DOCKER_PROXY=true
             CONFIG_FLAGS_PROVIDED=true
         elif [ "$arg" == "--force" ]; then
             export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
@@ -56,14 +76,9 @@ function parse_options() {
         else
             ARGS+=("$arg")
         fi
+        shift
     done
 
-    # AI_SANDBOX_ENABLE_DOCKER_PROXY env var is an implicit --docker, so treat it
-    # like a config flag too — bare `ai-sandbox` invocations should still pick
-    # up its effect.
-    if [ -n "${AI_SANDBOX_ENABLE_DOCKER_PROXY:-}" ] && [ "${NO_DOCKER}" != "true" ]; then
-        CONFIG_FLAGS_PROVIDED=true
-    fi
     export CMD_EXPLICIT CONFIG_FLAGS_PROVIDED AUTO_YES
 
     if { [ "${STATUS_JSON}" = "true" ] || [ "${STATUS_TEST_CHECK}" = "true" ]; } \
