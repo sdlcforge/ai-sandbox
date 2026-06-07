@@ -106,12 +106,54 @@ function confirm_stop_running() {
     esac
 }
 
-# Return 0 (stale) if the composition image is missing or any file under docker/
-# is newer than its creation timestamp. Return 1 (fresh) otherwise.
+# Echoes the image-tag suffix for the current profile composition. Used as the
+# Docker image tag suffix so each distinct profile composition gets its own
+# image. Reads PROFILE_COMPOSITION_HASH from caller scope (set by
+# profile-installer.js via Task 004's profile resolution phase).
+# The hash is owned by profile-installer.js — do NOT recompute it here.
+function profile_image_suffix() {
+    printf 'profile-%s\n' "${PROFILE_COMPOSITION_HASH:-default}"
+}
+
+function variant_image_tag() {
+    printf 'ai-sandbox:%s\n' "$(profile_image_suffix)"
+}
+
+# Return 0 (stale) if the variant image is missing, its stored profile hash
+# label differs from the current PROFILE_COMPOSITION_HASH, or any input file
+# (docker/ tree, assembled Dockerfile, or profile input files) is newer than
+# the image's creation timestamp. Return 1 (fresh) otherwise.
+#
+# Profile-hash label check: the label ai.sandbox.profile-hash is written into
+# the assembled Dockerfile by assemble-dockerfile.sh at build time. If the hash
+# stored in the image does not match the current PROFILE_COMPOSITION_HASH the
+# image was built from a different composition and must be rebuilt.
+#
+# PROFILE_INPUT_FILES contract (set by Task 004's profile resolution phase):
+#   A newline-delimited list of absolute paths to profile YAML files and the src
+#   files referenced by skills/hooks/agents/setup_script in the merged profile.
+#   When unset, only docker/ files are checked (non-profile / legacy path).
+#
+# PROFILE_ASSEMBLED_DOCKERFILE contract (set by profile-installer.js output,
+#   sourced in Task 004): absolute path to the assembled Dockerfile. Checked in
+#   addition to docker/ when set and the path is outside docker/.
 function is_build_stale() {
     local tag created tmp newer
     tag="${AI_SANDBOX_IMAGE_TAG}"
     created="$(docker image inspect --format='{{.Created}}' "${tag}" 2>/dev/null)" || return 0
+
+    # If a composition hash is known, verify the image was built from the same
+    # composition. A hash mismatch means the image is stale regardless of mtimes.
+    if [[ -n "${PROFILE_COMPOSITION_HASH:-}" ]]; then
+        local stored_hash
+        stored_hash="$(docker image inspect \
+            --format '{{index .Config.Labels "ai.sandbox.profile-hash"}}' \
+            "${tag}" 2>/dev/null)" || true
+        if [[ "${stored_hash}" != "${PROFILE_COMPOSITION_HASH}" ]]; then
+            return 0  # stale: composition changed
+        fi
+    fi
+
     tmp="$(mktemp)"
     # touch -d accepts ISO 8601 on macOS (BSD) and Linux (GNU). On failure,
     # treat as stale to force a rebuild rather than silently skipping.
@@ -119,9 +161,42 @@ function is_build_stale() {
         rm -f "${tmp}"
         return 0
     fi
+
+    # Check docker/ tree (existing behavior).
     newer="$(find "${PROJECT_ROOT}/docker" -type f -newer "${tmp}" -print -quit 2>/dev/null)"
+    if [[ -n "${newer}" ]]; then
+        rm -f "${tmp}"
+        return 0  # stale: docker/ file changed
+    fi
+
+    # Check the assembled Dockerfile when it lives outside docker/ (it may be in
+    # the XDG cache dir). PROFILE_ASSEMBLED_DOCKERFILE is set by profile-installer
+    # output sourced in Task 004's profile resolution phase.
+    if [[ -n "${PROFILE_ASSEMBLED_DOCKERFILE:-}" && -f "${PROFILE_ASSEMBLED_DOCKERFILE}" ]]; then
+        newer="$(find "${PROFILE_ASSEMBLED_DOCKERFILE}" -newer "${tmp}" -print -quit 2>/dev/null)"
+        if [[ -n "${newer}" ]]; then
+            rm -f "${tmp}"
+            return 0  # stale: assembled Dockerfile changed
+        fi
+    fi
+
+    # Check profile YAML files and their referenced src files. PROFILE_INPUT_FILES
+    # is a newline-delimited list of absolute paths exported by Task 004 from the
+    # installer's paths block output. When unset, skip (non-profile / legacy path).
+    if [[ -n "${PROFILE_INPUT_FILES:-}" ]]; then
+        while IFS= read -r input_file; do
+            [[ -z "${input_file}" ]] && continue
+            [[ ! -f "${input_file}" ]] && continue
+            newer="$(find "${input_file}" -newer "${tmp}" -print -quit 2>/dev/null)"
+            if [[ -n "${newer}" ]]; then
+                rm -f "${tmp}"
+                return 0  # stale: a profile input file changed
+            fi
+        done <<< "${PROFILE_INPUT_FILES}"
+    fi
+
     rm -f "${tmp}"
-    [ -n "${newer}" ]
+    return 1  # fresh
 }
 
 function ensure_image() {

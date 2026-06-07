@@ -105,7 +105,10 @@ fi
 export EFFECTIVE_MODE
 
 # Per-composition image tag consumed by docker/docker-compose.yaml.
-AI_SANDBOX_IMAGE_TAG="ai-sandbox:${PROFILE_IMAGE_TAG}"
+# profile_image_suffix() reads PROFILE_COMPOSITION_HASH set above from the
+# installer output. Using the function keeps utils.sh as the single source of
+# truth for the tag-suffix derivation.
+AI_SANDBOX_IMAGE_TAG="ai-sandbox:$(profile_image_suffix)"
 export AI_SANDBOX_IMAGE_TAG
 
 # Capability-derived proxy state. The proxy sidecar overlay and the
@@ -119,7 +122,10 @@ export EFFECTIVE_PROXY NO_ISOLATE_CONFIG
 
 # Assemble the effective Dockerfile from the resolved capabilities and point the
 # compose build at it (docker-compose.yaml reads ${AI_SANDBOX_DOCKERFILE}).
+# --hash embeds the composition hash as a LABEL so is_build_stale() can detect
+# composition changes by inspecting the built image without re-running the installer.
 "${PROJECT_ROOT}/docker/scripts/assemble-dockerfile.sh" \
+  --hash "${PROFILE_COMPOSITION_HASH}" \
   "${PROFILE_CAPABILITIES}" "${PROFILE_ASSEMBLED_DOCKERFILE}" >/dev/null
 export AI_SANDBOX_DOCKERFILE="${PROFILE_ASSEMBLED_DOCKERFILE}"
 
