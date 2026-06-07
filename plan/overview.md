@@ -23,7 +23,7 @@ Constraints carried through every task:
 
 ## Current status
 
-Tasks 001–004 complete. Phase 02 foundation and Phase 03 Dockerfile decomposition landed. Task 004 (CLI integration) merged: --profile/--mode flags, profile resolution phase in index.sh, capability-driven compose overlays. Tasks 005 (image tagging) and 006 (create-profile) complete in their worktrees, pending reconciliation against 004 before merge. Unit suite 50/50.
+Phase 04 complete: all three CLI integration tasks (004, 005, 006) merged. --profile/--mode flags, profile resolution phase, enhanced is_build_stale() with profile hash + file mtime checks, --hash support in assemble-dockerfile.sh, create-profile command. Unit suite 58/58. Phase 05 (Task 007: tests and QA gate) is next.
 
 ## Overview
 

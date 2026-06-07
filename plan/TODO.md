@@ -20,9 +20,9 @@ Phase 01 (documentation) is complete in a prior round and not relisted here.
 
 ### Phase 04 — CLI Integration
 
-- [x] [004-cli-profile-integration.md](./phase-04-cli-integration/004-cli-profile-integration.md) — tier `opus-medium` · branch `phase-04-task-04-cli-profile-integration` · commit `ba754458` · merge `…`
-- [ ] [005-image-tagging.md](./phase-04-cli-integration/005-image-tagging.md) — tier `sonnet-high` · branch `phase-04-task-05-image-tagging` · commit `…` · merge `…`
-- [ ] [006-create-profile-command.md](./phase-04-cli-integration/006-create-profile-command.md) — tier `sonnet-high` · branch `phase-04-task-06-create-profile-command` · commit `…` · merge `…`
+- [x] [004-cli-profile-integration.md](./phase-04-cli-integration/004-cli-profile-integration.md) — tier `opus-medium` · branch `phase-04-task-04-cli-profile-integration` · commit `ba754458` · merge `14ba804`
+- [x] [005-image-tagging.md](./phase-04-cli-integration/005-image-tagging.md) — tier `sonnet-high` · branch `phase-04-task-05-image-tagging` · commit `209ab4b` · merge `e964915`
+- [x] [006-create-profile-command.md](./phase-04-cli-integration/006-create-profile-command.md) — tier `sonnet-high` · branch `phase-04-task-06-create-profile-command` · commit `7078786` · merge `0c8e9a5`
 
 ### Phase 05 — Verification
 
