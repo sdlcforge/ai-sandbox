@@ -12,6 +12,7 @@ source ./options.sh
 source ./help.sh
 source ./kill-local.sh
 source ./status.sh
+source ./create-profile.sh
 
 ${__SOURCED__:+return}
 
@@ -27,6 +28,12 @@ fi
 # --- Phase: kill-local-ai short-circuit (no docker needed) ---
 if [ "${CMD}" == "kill-local-ai" ]; then
     kill_local_ai || exit 1
+    exit 0
+fi
+
+# --- Phase: create-profile short-circuit (no docker needed) ---
+if [ "${CMD}" == "create-profile" ]; then
+    create_profile "${ARGS[@]}" || exit 1
     exit 0
 fi
 
