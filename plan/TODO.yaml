@@ -98,9 +98,9 @@ phases:
         slug: tests-and-qa
         title: "Update Unit Tests and QA Gate"
         path: "plan/phase-05-tests-and-qa/001-tests-and-qa.md"
-        done: false
+        done: true
         tier: "sonnet-high"
         git:
-          branch: null
-          commit: []
-          merge: null
+          branch: phase-05-task-01-update-unit-tests-and-qa-gate
+          commit: [7a14b3b]
+          merge: 4e169f8

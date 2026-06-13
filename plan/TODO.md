@@ -21,4 +21,4 @@
 
 ## Phase 5: Tests and QA Gate
 
-- [ ] [001 Update Unit Tests and QA Gate](plan/phase-05-tests-and-qa/001-tests-and-qa.md) `sonnet-high` `…`
+- [x] [001 Update Unit Tests and QA Gate](plan/phase-05-tests-and-qa/001-tests-and-qa.md) `sonnet-high` `phase-05-task-01-update-unit-tests-and-qa-gate` `7a14b3b` `4e169f8`
