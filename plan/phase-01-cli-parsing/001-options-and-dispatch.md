@@ -116,6 +116,31 @@ This task touches two files with significant inter-dependency:
 
 3. **Verify the rollup builds:** After editing, run `make build` to ensure `bin/ai-sandbox.sh` is generated. The existing unit tests will fail on parse_options tests (expected — Phase 5 updates them), but the build must succeed and shellcheck must pass.
 
+## Status
+
+**Outcome:** succeeded
+**Date:** 2026-06-12
+**Commit:** 534bb28 (branch `phase-01-task-01-options-and-dispatch`)
+
+**Validation summary:**
+- `make build` — passed (rollup generates `bin/ai-sandbox.sh` without errors)
+- `make lint` (shellcheck) — passed, no issues
+- All four manual smoke tests — passed (see Validation section)
+
+**Affected source files (repo-relative):**
+- `src/options.sh`
+- `src/index.sh`
+
+**Assumptions applied:**
+- `new-profile` dispatch temporarily wires to `create_profile` (Phase 4 renames)
+- `create` and `list` command bodies are stubbed with echo placeholders
+- Compose exec targets the service name `ai-sandbox`, not the container name, so existing exec calls remain correct after Phase 2 updates `container_name`
+
+**Decisions made:**
+- `delete` command added to index.sh dispatch alongside `stop` and `clean` (design doc names it; task doc didn't explicitly call it out in dispatch, but it's in the CLI shape spec)
+- Deferred (leading) flag scan collects unknown flags as positionals and re-processes them in the command-specific phase, avoiding loss of flags like `--force` that appear after the command word
+- `QUIET` is not reset at the top of `parse_options()` — consistent with original behavior; `utils.sh` sets the default and `parse_options` only overrides when QUIET is unset (which doesn't happen in normal sourced usage)
+
 ## Validation
 
 ```bash
