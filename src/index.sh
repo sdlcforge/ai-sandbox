@@ -13,6 +13,7 @@ source ./help.sh
 source ./kill-local.sh
 source ./status.sh
 source ./create-profile.sh
+source ./create.sh
 
 ${__SOURCED__:+return}
 
@@ -48,13 +49,6 @@ if [ "${CMD}" = "new-profile" ]; then
     exit 0
 fi
 
-# `create` command — stub until Phase 3 implements the full create flow.
-if [ "${CMD}" = "create" ]; then
-    # TODO: Phase 3 implements create flow.
-    echo "create not yet implemented"
-    exit 0
-fi
-
 # --- Phase: docker pre-flight ---
 # `status` tolerates docker being down; it will just report the container as
 # stopped and no images. Anything else requires a running daemon.
@@ -78,6 +72,22 @@ PROJECT_ROOT="$(cd -P "${SCRIPT_DIR}/.." && pwd)"
 # --- Phase: plugin-conflict pre-flight (start/enter/up only) ---
 if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "up" ]; then
     check_host_plugin_conflicts || exit 1
+fi
+
+# --- Phase: restore saved profiles for start/enter (no config flags) ---
+# When start/enter is called without any config-changing flags, read the
+# profile list that was saved at `create` time so the container restarts with
+# its original profile composition without requiring the user to re-specify
+# --profile flags each time.
+if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
+    if [ "${CONFIG_FLAGS_PROVIDED}" != "true" ] && is_container_running_or_stopped; then
+        saved_profiles="$(docker inspect -f \
+            '{{index .Config.Labels "ai.sandbox.profiles"}}' \
+            "ai-sandbox-${SANDBOX_NAME}" 2>/dev/null || true)"
+        if [ -n "${saved_profiles}" ]; then
+            IFS=',' read -ra PROFILES <<< "${saved_profiles}"
+        fi
+    fi
 fi
 
 # --- Phase: resolve profiles ---
@@ -198,11 +208,18 @@ export TOOL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox"
 mkdir -p "${TOOL_CACHE_DIR}"
 
 # --- Phase: tool-version resolution + downloads (build-related commands) ---
-if [ "${CMD}" = "enter" ] || [ "${CMD}" = "start" ] || [ "${CMD}" = "up" ] || [ "${CMD}" = "build" ]; then
+if [ "${CMD}" = "enter" ] || [ "${CMD}" = "start" ] || [ "${CMD}" = "up" ] || [ "${CMD}" = "build" ] || [ "${CMD}" = "create" ]; then
     resolve_and_download_tools
 fi
 
 # --- Phase: command dispatch ---
+
+# For create: provision a new named sandbox instance and exit.
+if [ "${CMD}" == "create" ]; then
+    do_create || exit $?
+    exit 0
+fi
+
 if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
     # If a container is already running but its config differs from what this
     # invocation would produce, `compose up -d` will silently recreate it. Ask
