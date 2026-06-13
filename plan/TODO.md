@@ -1,29 +1,23 @@
-# TODO: Profiles Feature Implementation
+# TODO
 
 ## Purpose and scope
 
-Track the implementation tasks for the ai-sandbox profiles feature (Phases
-02–05). Spec source of truth:
-[`docs/ai-sandbox-profiles-spec.md`](../docs/ai-sandbox-profiles-spec.md).
-Phase 01 (documentation) is complete in a prior round and not relisted here.
+Tracking document for the active plan.
 
 ## Tasks
 
-### Phase 02 — Foundation
+### Phase 01 — Schema and Installer
 
-- [x] [001-bundled-profiles.md](./phase-02-foundation/001-bundled-profiles.md) — tier `sonnet-high` · branch `phase-02-task-01-bundled-profiles` · commit `aa35ade` · merge `c0bc86e`
-- [x] [002-profile-installer.md](./phase-02-foundation/002-profile-installer.md) — tier `opus-medium` · branch `phase-02-task-02-profile-installer` · commit `80fa42e` · merge `2466272`
+- [ ] [001-profile-schema-and-installer.md](./phase-01-schema-and-installer/001-profile-schema-and-installer.md) — tier `sonnet-high` · branch `…` · commit `…` · merge `…`
 
-### Phase 03 — Dockerfile Decomposition
+### Phase 02 — CLI Flags
 
-- [x] [003-dockerfile-decomposition.md](./phase-03-dockerfile-decomposition/003-dockerfile-decomposition.md) — tier `sonnet-high` · branch `phase-03-task-03-dockerfile-decomposition` · commit `81a5fc6` · merge `3167a11`
+- [ ] [001-cli-flags.md](./phase-02-cli-flags/001-cli-flags.md) — tier `sonnet-med` · branch `…` · commit `…` · merge `…`
 
-### Phase 04 — CLI Integration
+### Phase 03 — Container Plugin Setup
 
-- [x] [004-cli-profile-integration.md](./phase-04-cli-integration/004-cli-profile-integration.md) — tier `opus-medium` · branch `phase-04-task-04-cli-profile-integration` · commit `ba754458` · merge `14ba804`
-- [x] [005-image-tagging.md](./phase-04-cli-integration/005-image-tagging.md) — tier `sonnet-high` · branch `phase-04-task-05-image-tagging` · commit `209ab4b` · merge `e964915`
-- [x] [006-create-profile-command.md](./phase-04-cli-integration/006-create-profile-command.md) — tier `sonnet-high` · branch `phase-04-task-06-create-profile-command` · commit `7078786` · merge `0c8e9a5`
+- [ ] [001-container-plugin-setup.md](./phase-03-container-plugin-setup/001-container-plugin-setup.md) — tier `sonnet-high` · branch `…` · commit `…` · merge `…`
 
-### Phase 05 — Verification
+### Phase 04 — Tests and QA Gate
 
-- [x] [007-tests-and-qa.md](./phase-05-verification/007-tests-and-qa.md) — tier `opus-medium` · branch `phase-05-task-07-tests-and-qa-gate` · commit `5e5c9a9` · merge `51388aa`
+- [ ] [001-tests-and-qa.md](./phase-04-tests-and-qa/001-tests-and-qa.md) — tier `sonnet-high` · branch `…` · commit `…` · merge `…`

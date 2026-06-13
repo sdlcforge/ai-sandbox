@@ -1,73 +1,89 @@
-# Overview: Profiles Feature Implementation
+# Plugin Marketplace Support — Implementation Plan Overview
 
 ## Purpose and scope
 
-Implement the ai-sandbox **profiles** feature specified in
-[`docs/ai-sandbox-profiles-spec.md`](../docs/ai-sandbox-profiles-spec.md). The
-prior round (Phase 01) produced the spec and reference docs; this round writes
-the code: bundled profile YAML, the `profile-installer.js` Node boundary, a
-decomposed Dockerfile with capability fragments, CLI wiring for `--profile` /
-`--mode` (and removal of `--docker` / `--no-docker` / `--no-chromium`),
-composition-hash image tagging, the `create-profile` command, and the test
-updates that lock it all in.
+Add marketplace and plugin configuration support to `ai-sandbox`. Three new CLI flags (`--add-marketplace`, `--enable-plugin`, `--enable-all`) and corresponding profile YAML fields (`marketplaces`, `enable_all_plugins`) let projects launch sandbox containers with specific Claude Code plugins pre-configured — including local/private plugins from disk via `file://` URIs.
 
-Constraints carried through every task:
-- Edit `src/` modules only; `make build` rolls them into `bin/ai-sandbox.sh`
-  (never hand-edit the rollup). Preserve the `${__SOURCED__:+return}` guard.
-- `shellcheck` (`make lint`) must pass on all `src/`, `docker/`, `test/` files;
-  any `# shellcheck disable` needs an inline reason.
-- `js-yaml` is the YAML library (added in Task 001).
-- User is the sole user — removed flags become hard errors pointing at the
-  profile equivalent; no deprecation shims.
-- `make lint` + `make test` must pass at the plan's end.
+The primary use case is spinning up test sandbox containers with `claude-mem` (already on host) and a local `flow` plugin from `file:///path/on/disk` pre-configured, without requiring manual plugin setup inside the container each time.
 
 ## Current status
 
-COMPLETE. All 7 tasks across Phases 02–05 merged to main. Unit suite 61/61 green. Integration tests skipped (dev-environment preflight gate). src/index.sh bash 3.2 empty-array fix included. Profiles feature fully implemented.
+> **Note:** This document does NOT track the current state of implementation. Refer to plan/TODO.md for live task status.
 
 ## Overview
 
-Four implementation phases plus a verification phase, seven tasks total.
+### Background
+
+`ai-sandbox` wraps `docker compose` to run Claude Code in an isolated Ubuntu container. It mounts `~/.claude` from the host at runtime, so plugin state written inside the container persists on the host and vice versa. The existing profile YAML system supports a `plugins: [string]` field (plugin names to enable) but has no way to specify marketplace sources or register new marketplaces.
+
+### What is being built
+
+Three new CLI flags:
+
+- `--add-marketplace <ref>` (repeatable) — `ref` must start with `https://` or `file://`; registers the marketplace via `claude plugins marketplace add <ref>` at container init time
+- `--enable-plugin <name>` (repeatable) — enables a named plugin from any registered marketplace
+- `--enable-all` — enables all plugins from the last marketplace added
+
+Corresponding profile YAML fields:
+
+- `marketplaces: [string]` — list of marketplace refs (composed via union across profiles)
+- `enable_all_plugins: bool` — enables all plugins from the last marketplace (OR-composed: true if any profile or CLI flag sets it)
+- `plugins: [string]` — existing field; continues to hold individual plugin names to enable
+
+### Architecture decisions
+
+**Plugin commands run at container init time**, not image build time. Since `~/.claude` is mounted at runtime, any plugin state baked into the image would be overridden. An s6-overlay `cont-init.d` script (`10-plugin-setup`) runs after SSH and config overlay setup and handles marketplace registration and plugin enablement.
+
+**`~/.claude` is shared with the host.** Marketplace `add` and plugin `enable` commands write to `~/.claude`. This is accepted behavior — the user is explicitly choosing plugins. The init script must be **idempotent**: it checks whether a marketplace or plugin is already registered before running the command.
+
+**`file://` path handling.** When `--add-marketplace file:///some/path` is specified, that host path must be auto-mounted into the container at the same absolute path. `src/volume-override.sh` generates this bind mount as part of the per-run compose overlay, so `claude plugins marketplace add file:///some/path` resolves correctly inside the container. Mounts are read-only.
+
+**Environment variable handoff.** `profile-installer.js` emits `marketplaces` and `enable_all_plugins` in the `### PROFILE_JSON ###` output block. `src/index.sh` reads that JSON, merges any CLI-level overrides, and exports `AI_SANDBOX_MARKETPLACES`, `AI_SANDBOX_PLUGINS`, and `AI_SANDBOX_ENABLE_ALL_PLUGINS` into the compose environment, where the s6 init script reads them.
+
+### Phase sequence
+
+```
+Phase 01 — Schema and Installer (Foundation)
+    Task 001 — profile-schema-and-installer
+
+Phase 02 — CLI Flags (Interface)             [parallel-eligible with Phase 03]
+    Task 001 — cli-flags
+
+Phase 03 — Container Plugin Setup (Core Logic)  [parallel-eligible with Phase 02]
+    Task 001 — container-plugin-setup
+
+Phase 04 — Tests and QA Gate (Verification)
+    Task 001 — tests-and-qa
+```
+
+**Critical path:** Phase 01 → Phase 03 → Phase 04. Phases 02 and 03 can run concurrently once Phase 01 is merged.
 
 ### Dependency table
 
-| # | Task | Phase | Tier | Depends on | Parallel-eligible with |
-|---|------|-------|------|------------|------------------------|
-| 001 | Bundled profile YAML + js-yaml dep | 02 Foundation | `sonnet-high` | — | 003 |
-| 002 | `bin/profile-installer.js` | 02 Foundation | `opus-medium` | 001 | 003 |
-| 003 | Dockerfile decomposition + assembly | 03 Decomposition | `sonnet-high` | — | 001, 002 |
-| 004 | CLI: options.sh + index.sh wiring | 04 CLI | `opus-medium` | 002, 003 | — |
-| 005 | Image tagging by hash (utils.sh) | 04 CLI | `sonnet-high` | 002 | 006 |
-| 006 | `create-profile` command | 04 CLI | `sonnet-high` | 002 | 005 |
-| 007 | Test updates + build/lint/test gate | 05 Verification | `opus-medium` | 001–006 | — |
+| Task | Depends on | Parallel-eligible with |
+|------|------------|------------------------|
+| Phase 01 Task 001 | — | nothing initially |
+| Phase 02 Task 001 | Phase 01 Task 001 | Phase 03 Task 001 |
+| Phase 03 Task 001 | Phase 01 Task 001 | Phase 02 Task 001 |
+| Phase 04 Task 001 | Phase 02 Task 001, Phase 03 Task 001 | — |
 
-### Parallel-eligible groups
+### Files touched
 
-- **Group A (start immediately, in parallel):** Task 001 and Task 003. Task 003
-  touches only `docker/`; Task 001 touches `profiles/` + `package.json`. No file
-  overlap.
-- **Group B (after 002):** Task 005 and Task 006 are parallel-eligible with each
-  other. 005 edits `src/utils.sh`; 006 adds `src/create-profile.sh` + a small
-  `src/index.sh` dispatch branch. Note: Task 004 also edits `src/index.sh`
-  heavily — sequence 004 before/with care relative to 006's `index.sh` dispatch
-  add to avoid merge conflicts, OR have 006 limit its `index.sh` footprint to a
-  single dispatch branch + source line and rebase on 004. Recommended ordering:
-  004 first, then 005 + 006 in parallel.
+| File | Phases |
+|------|--------|
+| `docs/ai-sandbox-profiles-spec.md` | 01 |
+| `bin/profile-installer.js` | 01 |
+| `test/unit/profile_installer_spec.js` (or `.sh`) | 01, 04 |
+| `src/options.sh` | 02 |
+| `src/help.sh` | 02 |
+| `src/index.sh` | 02, 03 |
+| `src/volume-override.sh` | 03 |
+| `docker/rootfs/etc/cont-init.d/10-plugin-setup` | 03 |
+| `test/unit/ai_sandbox_spec.sh` | 04 |
 
-### Critical path
+### Constraints
 
-`001 → 002 → 004 → 007`
-
-Task 002 is the load-bearing interface; Task 004 is the heaviest integration
-(both `opus-medium`). Task 003 runs alongside the 001→002 chain and rejoins at
-004. Tasks 005 and 006 fan out after 002 and rejoin at 007.
-
-### Phase summary
-
-- **Phase 02 — Foundation:** bundled profiles + the Node installer that parses,
-  composes, validates, and emits the bash-consumable output blocks.
-- **Phase 03 — Dockerfile Decomposition:** base fragment + capability fragments
-  + assembly script (parallel with Phase 02).
-- **Phase 04 — CLI Integration:** flag changes, installer invocation, capability
-  → overlay/assembly wiring, hash-based image tagging, `create-profile`.
-- **Phase 05 — Verification:** test updates and the full build/lint/test gate.
+- Edit `src/` modules only; `make build` rolls them into `bin/ai-sandbox.sh` (never hand-edit the rollup). Preserve the `${__SOURCED__:+return}` guard.
+- `shellcheck` (`make lint`) must pass on all `src/`, `docker/`, `test/` files; any `# shellcheck disable` needs an inline reason.
+- `js-yaml` is already a dependency — no new Node deps needed.
+- `make lint` + `make test` must pass at the plan's end.
