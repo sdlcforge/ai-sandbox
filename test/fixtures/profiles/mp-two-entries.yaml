@@ -1,0 +1,5 @@
+metadata:
+  name: mp-two-entries
+  version: "1.0.0"
+marketplaces:
+  - https://registry-a.example.com/plugins

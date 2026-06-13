@@ -137,6 +137,38 @@ Path to a shell script run at image build time after all `packages` have been in
 
 Claude Code plugin names to install and enable when the image is built. Plugin names are matched exactly — no substring matching — consistent with the existing plugin-conflict preflight.
 
+> **Note:** Plugin names listed here are enabled individually. To register the marketplace that provides them, use the `marketplaces` field.
+
+#### `marketplaces` (list of strings)
+
+Marketplace sources to register inside the container at init time via `claude plugins marketplace add <ref>`. Each entry must start with `https://` or `file://`.
+
+```yaml
+marketplaces:
+  - https://registry.example.com/plugins
+  - file:///home/user/my-local-plugin
+```
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `[string]` |
+| Default | `[]` |
+| Composition | union — entries from all composed profiles are merged, duplicates removed, original order preserved |
+
+#### `enable_all_plugins` (boolean)
+
+When `true`, enables all plugins from the last registered marketplace.
+
+```yaml
+enable_all_plugins: true
+```
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `bool` |
+| Default | `false` |
+| Composition | OR — `true` if any composed profile or CLI flag sets it to `true` |
+
 #### `skills` (list of objects)
 
 Files or directories to copy into the container at image build time.
@@ -205,9 +237,18 @@ Multiple profiles are composed when `ai-sandbox start --profile a --profile b` i
 
 | Category | Fields | Rule |
 |----------|--------|------|
-| Lists | `packages`, `plugins`, `capabilities`, `skills`, `hooks`, `agents`, `network.allow`, `required_env`, `optional_env` | Union. Items from each profile are concatenated; duplicates are deduplicated (for simple string lists). Object lists (`skills`, `hooks`, `agents`) are not deduplicated — identical `{src, dst}` pairs from multiple profiles are kept once. |
+| Lists | `packages`, `plugins`, `marketplaces`, `capabilities`, `skills`, `hooks`, `agents`, `network.allow`, `required_env`, `optional_env` | Union. Items from each profile are concatenated; duplicates are deduplicated (for simple string lists). Object lists (`skills`, `hooks`, `agents`) are not deduplicated — identical `{src, dst}` pairs from multiple profiles are kept once. |
 | Scalars | `mode`, `setup_script` | Error on conflict. If two composed profiles both set the same scalar to different values, `profile-installer` exits nonzero with a message naming the conflicting profiles and the field. If only one profile sets a scalar, that value is used. If no profile sets a scalar, the field is absent in the merged result and the launcher applies its built-in default. |
+| Boolean OR | `enable_all_plugins` | `true` if any composed profile sets it to `true`; `false` otherwise. |
 | `metadata` | entire block | Ignored. The merged result has no `metadata` block. |
+
+#### Field-level composition summary
+
+| Field | Type | Composition |
+|-------|------|-------------|
+| `marketplaces` | `[string]` | union |
+| `enable_all_plugins` | `bool` | OR |
+| `plugins` | `[string]` | union |
 
 ### Scalar conflict example
 
@@ -333,6 +374,8 @@ PROFILE_COMPOSITION_HASH=a1b2c3d4
 {
   "packages": ["ripgrep", "fd-find"],
   "plugins": ["claude-mem"],
+  "marketplaces": ["https://registry.example.com/plugins"],
+  "enable_all_plugins": false,
   "network_allow": ["api.example.com", "10.0.0.0/8"],
   "required_env": ["WIDGET_API_KEY"],
   "optional_env": ["WIDGET_STAGING_URL"]

@@ -1,0 +1,4 @@
+metadata:
+  name: eap-true
+  version: "1.0.0"
+enable_all_plugins: true

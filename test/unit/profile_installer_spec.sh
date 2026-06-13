@@ -86,4 +86,114 @@ Describe 'bin/profile-installer.js'
       The output should include 'PROFILE_COMPOSITION_HASH='
     End
   End
+
+  Describe 'marketplaces field'
+    # Run installer from test/fixtures so fixture profiles are found via ./profiles/.
+    fixtures="${SHELLSPEC_PROJECT_ROOT}/test/fixtures"
+
+    It 'parses and emits a https:// marketplace entry in JSON output'
+      run_from_fixtures() {
+        cd "$fixtures" && node "$installer" --output json mp-https
+      }
+      When call run_from_fixtures
+      The status should be success
+      The output should include '"marketplaces"'
+      The output should include 'registry.example.com'
+    End
+
+    It 'accepts a file:// marketplace entry'
+      run_from_fixtures() {
+        cd "$fixtures" && node "$installer" --output json mp-file
+      }
+      When call run_from_fixtures
+      The status should be success
+      The output should include '"marketplaces"'
+      The output should include 'file://'
+    End
+
+    It 'rejects a marketplace entry that does not start with https:// or file://'
+      run_from_fixtures() {
+        cd "$fixtures" && node "$installer" --output json mp-bad
+      }
+      When run run_from_fixtures
+      The status should be failure
+      The stderr should include 'must start with https:// or file://'
+    End
+
+    It 'defaults marketplaces to [] when absent from the profile'
+      run_from_fixtures() {
+        cd "$fixtures" && node "$installer" --output json eap-absent
+      }
+      When call run_from_fixtures
+      The status should be success
+      The output should include '"marketplaces":[]'
+    End
+
+    It 'unions marketplaces from two profiles with no duplicates'
+      run_from_fixtures() {
+        cd "$fixtures" && node "$installer" --output json mp-two-entries mp-two-entries-b
+      }
+      When call run_from_fixtures
+      The status should be success
+      The output should include 'registry-a.example.com'
+      The output should include 'registry-b.example.com'
+    End
+
+    It 'deduplicates identical marketplace entries across profiles'
+      run_from_fixtures() {
+        cd "$fixtures" && node "$installer" --output json mp-two-entries mp-dup \
+          | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
+            const count = d.marketplaces.filter(m => m === 'https://registry-a.example.com/plugins').length;
+            process.stdout.write(String(count));
+          "
+      }
+      When call run_from_fixtures
+      The status should be success
+      The output should equal '1'
+    End
+  End
+
+  Describe 'enable_all_plugins field'
+    fixtures="${SHELLSPEC_PROJECT_ROOT}/test/fixtures"
+
+    It 'ORs enable_all_plugins: true from one profile into a two-profile composition'
+      run_from_fixtures() {
+        cd "$fixtures" && node "$installer" --output json eap-true eap-false \
+          | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
+            process.stdout.write(String(d.enable_all_plugins));
+          "
+      }
+      When call run_from_fixtures
+      The status should be success
+      The output should equal 'true'
+    End
+
+    It 'ORs enable_all_plugins: false from both profiles to false'
+      run_from_fixtures() {
+        cd "$fixtures" && node "$installer" --output json eap-false eap-absent \
+          | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
+            process.stdout.write(String(d.enable_all_plugins));
+          "
+      }
+      When call run_from_fixtures
+      The status should be success
+      The output should equal 'false'
+    End
+
+    It 'defaults enable_all_plugins to false when absent from the profile'
+      run_from_fixtures() {
+        cd "$fixtures" && node "$installer" --output json eap-absent \
+          | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
+            process.stdout.write(String(d.enable_all_plugins));
+          "
+      }
+      When call run_from_fixtures
+      The status should be success
+      The output should equal 'false'
+    End
+  End
 End
