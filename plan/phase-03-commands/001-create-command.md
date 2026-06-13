@@ -125,3 +125,37 @@ docker inspect -f '{{index .Config.Labels "ai.sandbox.managed"}}' ai-sandbox-smo
 # Expected: true
 bin/ai-sandbox.sh smoketest delete  # cleanup (Phase 3 task 002 implements delete)
 ```
+
+## Status
+
+**outcome:** succeeded
+**date:** 2026-06-12
+**branch:** phase-03-task-01-create-command
+
+### Validation summary
+
+| Check | Command | Result |
+|---|---|---|
+| make build | `make build` | passed |
+| make lint | `make lint` | passed — shellcheck clean across all src/ files including new create.sh |
+| structural: do_create and source in index.sh | `grep -n 'do_create\|source ./create' src/index.sh` | passed — line 16 (source), line 219 (do_create call) |
+| structural: is_container_running_or_stopped in utils.sh | `grep -n 'is_container_running_or_stopped' src/utils.sh` | passed — line 59 (function definition) |
+| functional smoke | requires Docker Desktop — not run in this agent environment | not-applicable |
+
+### Files affected (repo-relative from worktree)
+
+- `src/create.sh` — new file; implements `do_create()`
+- `src/utils.sh` — added `is_container_running_or_stopped()`
+- `src/index.sh` — added `source ./create.sh`; removed early `create` stub; added label-read step before profile-installer; added `create` to tool-download phase; added `create` dispatch after compose assembly
+- `bin/ai-sandbox.sh` — regenerated rollup output via `make build`
+
+### Decisions made
+
+- **Label-read step placement:** The task doc shows the label-read block but does not specify its exact location. Placed it BEFORE the profile-installer phase (after plugin-conflict preflight) rather than after compose assembly, because `PROFILES` must be populated before the profile-installer runs to take effect. A placement after compose assembly would reconstruct `PROFILES` too late to influence the profile resolution.
+- **`create` added to tool-download phase:** `do_create()` calls `ensure_image()` which calls `do_build()`, which needs tool version vars. Added `create` to the tool-download condition alongside `enter`/`start`/`up`/`build`.
+- **`create` collision check uses `docker ps -a --filter "name=^...$"`** exactly as specified in the task doc rather than `is_container_running_or_stopped`, because the latter only checks by inspect (does not enforce the exact-name anchor pattern).
+
+### Assumptions applied
+
+- Profile resolution and compose assembly run before `do_create()` is called — confirmed by placement in dispatch phase.
+- `ENTER_AFTER_CREATE` and `SANDBOX_PROFILES` are set by `parse_options()` — confirmed by reading `src/options.sh`.
