@@ -14,6 +14,7 @@ source ./kill-local.sh
 source ./status.sh
 source ./create-profile.sh
 source ./create.sh
+source ./list.sh
 
 ${__SOURCED__:+return}
 
@@ -26,9 +27,10 @@ export SANDBOX_NAME
 # --- Phase: global command short-circuits (no docker needed) ---
 
 # Bare invocation and explicit `list` both show the instance list.
+# Short-circuits before the Docker pre-flight so `list` works even when the
+# Docker daemon is down (do_list handles empty output gracefully).
 if [ "${CMD}" = "list" ]; then
-    # TODO: Phase 3 implements do_list; stub for now.
-    echo "list not yet implemented"
+    do_list
     exit 0
 fi
 
@@ -249,26 +251,37 @@ elif [ "${CMD}" == "root-exec" ]; then
     docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u root ai-sandbox "${ARGS[@]}"
 elif [ "${CMD}" == "status" ]; then
     do_status || exit $?
-elif [ "${CMD}" == "stop" ] || [ "${CMD}" == "delete" ] || [ "${CMD}" == "clean" ]; then
+elif [ "${CMD}" == "stop" ]; then
     if is_container_running; then
         confirm_stop_running "stop the running sandbox" || exit 1
     fi
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} stop
+    qecho "Sandbox '${SANDBOX_NAME}' stopped (container preserved)."
+
+elif [ "${CMD}" == "delete" ]; then
+    if is_container_running; then
+        confirm_stop_running "stop and delete the running sandbox" || exit 1
+    fi
     docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} down
-    if [ "${CMD}" == "clean" ]; then
-        OUTPUT=$(docker rm -f "ai-sandbox-${SANDBOX_NAME}" || true)
-        if [ $QUIET -ne 0 ] && [ "${OUTPUT}" = "ai-sandbox-${SANDBOX_NAME}" ]; then
-            echo "deleted '${OUTPUT}'"
-        fi
-        # Remove all ai-sandbox:* variant images.
-        IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}}' \
-            | awk -F: '$1 == "ai-sandbox" {print}' || true)
-        if [ -n "${IMAGES}" ]; then
-            # shellcheck disable=SC2086 # intentional word-splitting across tags
-            docker image rm -f ${IMAGES} >/dev/null 2>&1 || true
-            if [ $QUIET -ne 0 ]; then
-                echo "deleted images:"
-                printf '  %s\n' ${IMAGES}
-            fi
+    qecho "Sandbox '${SANDBOX_NAME}' deleted."
+
+elif [ "${CMD}" == "clean" ]; then
+    if is_container_running; then
+        confirm_stop_running "stop and delete the running sandbox" || exit 1
+    fi
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} down
+    # Remove the container by its explicit name in case compose down left it.
+    docker rm -f "$(sandbox_container_name)" 2>/dev/null || true
+    # Remove all ai-sandbox:* variant images. Images are shared across instances
+    # (keyed by composition hash), so all-images cleanup is intentional here.
+    IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}}' \
+        | awk -F: '$1 == "ai-sandbox" {print}' || true)
+    if [ -n "${IMAGES}" ]; then
+        # shellcheck disable=SC2086 # intentional word-splitting across tags
+        docker image rm -f ${IMAGES} >/dev/null 2>&1 || true
+        if [ $QUIET -ne 0 ]; then
+            echo "deleted images:"
+            printf '  %s\n' ${IMAGES}
         fi
     fi
 else

@@ -231,11 +231,19 @@ function do_build() {
 function cleanup_stale_container() {
     local state
     state=$(docker inspect -f '{{.State.Status}}' "$(sandbox_container_name)" 2>/dev/null) || return 0
-    if [ "$state" = "running" ]; then
-        return 0
-    fi
-    qecho "Cleaning up stale container (state: ${state})..."
-    docker compose ${COMPOSE_FILES} down 2>/dev/null || docker rm -f "$(sandbox_container_name)" 2>/dev/null || true
+    case "$state" in
+        running|exited|paused)
+            # Healthy states — let `docker compose up -d` handle the transition
+            # (it will start a stopped/exited container without recreating it when
+            # the config matches, and restart/recreate as needed otherwise).
+            return 0
+            ;;
+        *)
+            qecho "Cleaning up stale container (state: ${state})..."
+            docker compose -p "ai-sandbox-${SANDBOX_NAME}" ${COMPOSE_FILES} down 2>/dev/null \
+                || docker rm -f "$(sandbox_container_name)" 2>/dev/null || true
+            ;;
+    esac
 }
 
 # SSH agent forwarding helpers.
