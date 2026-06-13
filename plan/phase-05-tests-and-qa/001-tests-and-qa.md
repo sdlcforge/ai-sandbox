@@ -187,3 +187,17 @@ make test.unit  # must exit 0, all examples pass
 ```
 
 Report the final example count and confirm all pass.
+
+## Status
+
+**outcome:** succeeded
+**date:** 2026-06-12
+**validation summary:** All three QA gates passed. `make build` exit 0; `make lint` exit 0 (no shellcheck errors); `make test.unit` exit 0 — 73 examples, 0 failures.
+
+**affected source files:**
+- `test/unit/ai_sandbox_spec.sh`
+
+**decisions made:**
+- `'rejects reserved names as sandbox names'` test uses `parse_options status` (not `parse_options create` as the task doc draft suggested); `create` is a global command so it never routes through the per-instance reserved-name check — `status` is in RESERVED_NAMES but not GLOBAL_COMMANDS and correctly triggers the error.
+- The `warn_if_ssh_mount_stale` stale-warning test asserts `should include 'fix-ssh'` rather than `'ai-sandbox fix-ssh'` because the actual message embeds the sandbox name: `'ai-sandbox test fix-ssh'`, which does not contain the literal substring `'ai-sandbox fix-ssh'`.
+- Example count increased from 63 to 73 (added `sandbox_container_name` block, `list_instances` block, and new `parse_options` two-tier tests; removed two old single-tier tests).
