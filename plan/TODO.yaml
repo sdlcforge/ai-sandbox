@@ -73,22 +73,22 @@ phases:
         slug: new-profile-rename
         title: "Rename create-profile to new-profile"
         path: "plan/phase-04-renames-and-cleanup/001-new-profile-rename.md"
-        done: false
+        done: true
         tier: "sonnet-med"
         git:
-          branch: null
-          commit: []
-          merge: null
+          branch: phase-04-task-01-new-profile-rename
+          commit: [5de3124]
+          merge: 152130b
       - number: 2
         slug: help-and-status
         title: "Update Help Text and Status for Per-Instance Context"
         path: "plan/phase-04-renames-and-cleanup/002-help-and-status.md"
-        done: false
+        done: true
         tier: "sonnet-med"
         git:
-          branch: null
-          commit: []
-          merge: null
+          branch: phase-04-task-02-help-and-status
+          commit: [6168217]
+          merge: 63e9e04
 
   - number: 5
     slug: tests-and-qa

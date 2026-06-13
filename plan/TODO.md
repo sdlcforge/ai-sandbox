@@ -16,8 +16,8 @@
 
 ## Phase 4: Command Renames and Cleanup
 
-- [ ] [001 Rename create-profile to new-profile](plan/phase-04-renames-and-cleanup/001-new-profile-rename.md) `sonnet-med` `…`
-- [ ] [002 Update Help Text and Status for Per-Instance Context](plan/phase-04-renames-and-cleanup/002-help-and-status.md) `sonnet-med` `…`
+- [x] [001 Rename create-profile to new-profile](plan/phase-04-renames-and-cleanup/001-new-profile-rename.md) `sonnet-med` `phase-04-task-01-new-profile-rename` `5de3124` `152130b`
+- [x] [002 Update Help Text and Status for Per-Instance Context](plan/phase-04-renames-and-cleanup/002-help-and-status.md) `sonnet-med` `phase-04-task-02-help-and-status` `6168217` `63e9e04`
 
 ## Phase 5: Tests and QA Gate
 
