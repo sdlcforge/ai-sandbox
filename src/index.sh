@@ -12,7 +12,7 @@ source ./options.sh
 source ./help.sh
 source ./kill-local.sh
 source ./status.sh
-source ./create-profile.sh
+source ./new-profile.sh
 source ./create.sh
 source ./list.sh
 
@@ -44,10 +44,8 @@ if [ "${CMD}" = "kill-local-ai" ]; then
     exit 0
 fi
 
-# `new-profile` replaces the old `create-profile`; temporarily wires to
-# create_profile (Phase 4 will rename the function and source file).
 if [ "${CMD}" = "new-profile" ]; then
-    create_profile "${ARGS[@]+"${ARGS[@]}"}" || exit 1
+    new_profile "${ARGS[@]+"${ARGS[@]}"}" || exit 1
     exit 0
 fi
 
