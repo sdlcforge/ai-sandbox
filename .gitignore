@@ -6,6 +6,7 @@
 /node_modules
 /test/.shellspec-quick.log
 /qa
+/worktree
 
 # files
 CLAUDE.md

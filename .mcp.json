@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "flow-mcp": {
+      "type": "stdio",
+      "command": "/Users/zane/playground/sdlcforge/flow/plugins/flow/tools/flow-mcp/bin/flow-mcp"
+    }
+  }
+}
