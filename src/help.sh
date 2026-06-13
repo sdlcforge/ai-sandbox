@@ -30,7 +30,7 @@ Commands:
   root-exec <cmd>    Run <cmd> inside the container as root.
   kill-local-ai      Kill host claude/plugin processes that conflict with the VM.
                      Retries up to 4 times; warns if any survive.
-  create-profile     Scaffold a profile YAML by auto-discovering skills, hooks,
+  new-profile        Scaffold a profile YAML by auto-discovering skills, hooks,
                      and agents from ~/.claude/ and ./.claude/. Requires --name.
                      Options: --name <name> (required), --mode <mirror|static>,
                      --output <path>, --plugins <name,...>.

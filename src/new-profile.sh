@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# create-profile.sh — generate a profile YAML from local Claude assets.
+# new-profile.sh — generate a profile YAML from local Claude assets.
 #
 # YAML emission strategy: we use `node -e` with js-yaml.dump to guarantee
 # valid, correctly-quoted YAML output. Hand-rolled bash string concatenation
@@ -15,7 +15,7 @@
 # defaults to empty (no interactive prompting in V1 non-TTY mode).
 # Interactive prompting in V1 is not implemented; documented for V2.
 
-function create_profile() {
+function new_profile() {
     local name="" mode="mirror" output="" plugins_raw=""
     local -a plugins=()
     local args=("$@")
@@ -49,7 +49,7 @@ function create_profile() {
                 done
                 ;;
             *)
-                echo "Error: unknown option '${arg}' for create-profile" >&2
+                echo "Error: unknown option '${arg}' for new-profile" >&2
                 return 1
                 ;;
         esac
@@ -58,7 +58,7 @@ function create_profile() {
 
     # --- Validate --name (required; must be a valid POSIX filename component) ---
     if [ -z "${name}" ]; then
-        echo "Error: --name is required for create-profile" >&2
+        echo "Error: --name is required for new-profile" >&2
         return 1
     fi
     if [[ "${name}" == */* ]]; then

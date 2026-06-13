@@ -39,7 +39,7 @@ ai-sandbox logs -f
 | `build` | Build the Docker image |
 | `start` | Start the container and open a shell |
 | `attach` / `connect` | Connect to an already-running container |
-| `create-profile` | Scaffold a new profile YAML file by auto-discovering skills, hooks, and agents |
+| `new-profile` | Scaffold a new profile YAML file by auto-discovering skills, hooks, and agents |
 | `fix-ssh` | Recreate the container with the host's current `SSH_AUTH_SOCK` bind-mounted. Run this after a host logout / ssh-agent restart if `git push` inside the container fails — see [SSH agent forwarding](#ssh-agent-forwarding). |
 | `<any>` | Passed through to `docker compose` |
 
@@ -305,14 +305,14 @@ actually need Docker access and trust the workload.
   work on both sides, but a plugin shipping a native compiled hook would
   need explicit Linux-side handling.
 - *Symmetric mutual exclusion*: see the concurrency invariant note above.
-- *Profiles*: the profiles feature is specified but not yet implemented. The `--profile`, `--mode`, and `create-profile` surface described above reflects the planned interface.
+- *Profiles*: the profiles feature is specified but not yet implemented. The `--profile`, `--mode`, and `new-profile` surface described above reflects the planned interface.
 
 ## Further reading
 
 - [`docs/architecture.md`](docs/architecture.md) — how the CLI is structured,
   the phased command flow, and the design decisions behind per-variant image
   tagging, plugin mount generation, mutual exclusion, and the Docker proxy.
-- [`docs/ai-sandbox-profiles-spec.md`](docs/ai-sandbox-profiles-spec.md) — full profiles specification: YAML schema, composition rules, storage and discovery, `profile-installer.js` interface, and the `create-profile` command.
+- [`docs/ai-sandbox-profiles-spec.md`](docs/ai-sandbox-profiles-spec.md) — full profiles specification: YAML schema, composition rules, storage and discovery, `profile-installer.js` interface, and the `new-profile` command.
 - [`docs/next-steps.md`](docs/next-steps.md) — deferred features and known
   gaps (symmetric mutual exclusion, MCP service manager, plugin-binary
   architecture mismatch).
