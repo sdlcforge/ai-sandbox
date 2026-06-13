@@ -129,10 +129,28 @@ This task touches three files. Recommended checkpoints:
 
 The task is complete when:
 
-- [ ] `docs/ai-sandbox-profiles-spec.md` documents `marketplaces` and `enable_all_plugins` with type, composition rule, and an example.
-- [ ] `bin/profile-installer.js` rejects a profile with a `marketplaces` entry that doesn't start with `https://` or `file://`.
-- [ ] `bin/profile-installer.js` emits `marketplaces` and `enable_all_plugins` in the `### PROFILE_JSON ###` output block.
-- [ ] `enable_all_plugins` ORs correctly across a two-profile composition.
-- [ ] `marketplaces` unions correctly across a two-profile composition (no duplicates).
-- [ ] All new unit tests pass.
-- [ ] `make lint` passes (no regressions).
+- [x] `docs/ai-sandbox-profiles-spec.md` documents `marketplaces` and `enable_all_plugins` with type, composition rule, and an example.
+- [x] `bin/profile-installer.js` rejects a profile with a `marketplaces` entry that doesn't start with `https://` or `file://`.
+- [x] `bin/profile-installer.js` emits `marketplaces` and `enable_all_plugins` in the `### PROFILE_JSON ###` output block.
+- [x] `enable_all_plugins` ORs correctly across a two-profile composition.
+- [x] `marketplaces` unions correctly across a two-profile composition (no duplicates).
+- [x] All new unit tests pass.
+- [x] `make lint` passes (no regressions).
+
+---
+
+## Status
+
+**Outcome:** succeeded
+**Date:** 2026-06-13
+**Validation summary:** All 7 validation checks passed. Unit test suite expanded from 72 to 82 examples (10 new cases), all passing. `make lint` clean.
+
+**Affected files (repo-relative, in worktree):**
+- `docs/ai-sandbox-profiles-spec.md` — added `marketplaces` and `enable_all_plugins` field docs, cross-reference note on `plugins`, updated composition table, updated JSON blob example
+- `bin/profile-installer.js` — added both fields to `KNOWN_KEYS` and `STRING_LIST_FIELDS` (marketplaces), validation logic for URL prefix and boolean type, OR logic in `compose()`, `renderJsonBlob()` update
+- `test/unit/profile_installer_spec.sh` — added 10 new test cases across two new `Describe` blocks
+- `test/fixtures/profiles/*.yaml` — 9 fixture profiles for the new unit tests
+
+**Decisions made:**
+- Placed `marketplaces` validation (URL-prefix check) after the `STRING_LIST_FIELDS` generic type check so a non-list value is caught with a clear "must be a list of strings" error before the per-entry loop runs.
+- Kept `enable_all_plugins` out of `SCALAR_FIELDS` (which enforces string type) and handled it with a dedicated boolean check and OR compose logic, as the task specified.
