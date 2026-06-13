@@ -8,12 +8,12 @@ phases:
         slug: options-and-dispatch
         title: "Options and Dispatch"
         path: "plan/phase-01-cli-parsing/001-options-and-dispatch.md"
-        done: false
+        done: true
         tier: "sonnet-high"
         git:
-          branch: null
-          commit: []
-          merge: null
+          branch: phase-01-task-01-options-and-dispatch
+          commit: [534bb28]
+          merge: 442f78f
 
   - number: 2
     slug: container-namespacing

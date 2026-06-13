@@ -2,7 +2,7 @@
 
 ## Phase 1: CLI Parsing and Dispatch
 
-- [ ] [001 Options and Dispatch](plan/phase-01-cli-parsing/001-options-and-dispatch.md) `sonnet-high` `…`
+- [x] [001 Options and Dispatch](plan/phase-01-cli-parsing/001-options-and-dispatch.md) `sonnet-high` `phase-01-task-01-options-and-dispatch` `534bb28` `442f78f`
 
 ## Phase 2: Container Namespacing
 

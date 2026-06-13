@@ -1,0 +1,24 @@
+{
+  "plan_slug": "multi-instance-sandbox",
+  "todos": {
+    "follow_ups": [
+      {
+        "date": "2026-06-12",
+        "source": "plan/phase-01-cli-parsing/001-options-and-dispatch.md",
+        "note": "Existing parse_options() unit tests will fail with the new two-tier CLI interface (tests assume old single-tier syntax). Phase 5 must update them."
+      },
+      {
+        "date": "2026-06-12",
+        "source": "plan/phase-01-cli-parsing/001-options-and-dispatch.md",
+        "note": "stop command currently dispatches to docker compose down (same as delete). Phase 3 must differentiate: stop → docker compose stop (pause); delete → docker compose down (remove)."
+      },
+      {
+        "date": "2026-06-12",
+        "source": "plan/phase-01-cli-parsing/001-options-and-dispatch.md",
+        "note": "CMD_EXPLICIT global removed. Phase 5 should confirm no remaining consumers in codebase or tests."
+      }
+    ],
+    "blockers": [],
+    "decisions": []
+  }
+}
