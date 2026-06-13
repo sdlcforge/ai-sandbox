@@ -19,21 +19,39 @@ ${__SOURCED__:+return}
 # --- Phase: parse options ---
 parse_options "$@"
 
-# --- Phase: help short-circuit ---
-if [ "${CMD}" == "help" ]; then
+# Export SANDBOX_NAME early so all sourced modules can consume it.
+export SANDBOX_NAME
+
+# --- Phase: global command short-circuits (no docker needed) ---
+
+# Bare invocation and explicit `list` both show the instance list.
+if [ "${CMD}" = "list" ]; then
+    # TODO: Phase 3 implements do_list; stub for now.
+    echo "list not yet implemented"
+    exit 0
+fi
+
+if [ "${CMD}" = "help" ]; then
     print_help
     exit 0
 fi
 
-# --- Phase: kill-local-ai short-circuit (no docker needed) ---
-if [ "${CMD}" == "kill-local-ai" ]; then
+if [ "${CMD}" = "kill-local-ai" ]; then
     kill_local_ai || exit 1
     exit 0
 fi
 
-# --- Phase: create-profile short-circuit (no docker needed) ---
-if [ "${CMD}" == "create-profile" ]; then
-    create_profile "${ARGS[@]}" || exit 1
+# `new-profile` replaces the old `create-profile`; temporarily wires to
+# create_profile (Phase 4 will rename the function and source file).
+if [ "${CMD}" = "new-profile" ]; then
+    create_profile "${ARGS[@]+"${ARGS[@]}"}" || exit 1
+    exit 0
+fi
+
+# `create` command — stub until Phase 3 implements the full create flow.
+if [ "${CMD}" = "create" ]; then
+    # TODO: Phase 3 implements create flow.
+    echo "create not yet implemented"
     exit 0
 fi
 
@@ -45,17 +63,6 @@ if [ "${CMD}" != "status" ]; then
         docker desktop start
         check_docker "bailing out." || exit 1
     fi
-fi
-
-# --- Phase: auto-promote bare invocation to `connect` ---
-# If the user invoked bare `ai-sandbox` (no command, no config-changing flags)
-# and a container is already running, treat it as `connect` so we never stop a
-# sandbox the user didn't explicitly target. This must run before the
-# plugin-conflict preflight (which would otherwise fire on the default `enter`).
-if [ "${CMD_EXPLICIT}" != "true" ] \
-    && [ "${CONFIG_FLAGS_PROVIDED}" != "true" ] \
-    && is_container_running; then
-  CMD="connect"
 fi
 
 # --- Phase: resolve script dir / project root (follows symlinks) ---
@@ -130,7 +137,8 @@ export EFFECTIVE_PROXY NO_ISOLATE_CONFIG
 export AI_SANDBOX_DOCKERFILE="${PROFILE_ASSEMBLED_DOCKERFILE}"
 
 # --- Phase: assemble docker-compose file list ---
-GENERATED_COMPOSE="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox/docker-compose.generated.yaml"
+# Each instance has its own generated compose file to avoid cross-instance collisions.
+GENERATED_COMPOSE="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox/${SANDBOX_NAME}/docker-compose.generated.yaml"
 mkdir -p "$(dirname "${GENERATED_COMPOSE}")"
 generate_volume_override "${GENERATED_COMPOSE}"
 
@@ -160,8 +168,12 @@ if [ "${EFFECTIVE_PROXY}" = "true" ]; then
   COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.proxy.yaml"
 fi
 
-# --- Phase: XQuartz setup (macOS, start/empty cmd only) ---
-if { [ -z "${CMD}" ] || [ "${CMD}" == "start" ]; } && [ "$(uname)" = "Darwin" ]; then
+# Compose project name scopes all containers to this sandbox instance.
+COMPOSE_PROJECT="ai-sandbox-${SANDBOX_NAME}"
+export COMPOSE_PROJECT
+
+# --- Phase: XQuartz setup (macOS, start/enter only) ---
+if { [ "${CMD}" = "start" ] || [ "${CMD}" = "enter" ]; } && [ "$(uname)" = "Darwin" ]; then
     ensure_xquartz
 fi
 
@@ -186,7 +198,7 @@ export TOOL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox"
 mkdir -p "${TOOL_CACHE_DIR}"
 
 # --- Phase: tool-version resolution + downloads (build-related commands) ---
-if [ -z "${CMD}" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "start" ] || [ "${CMD}" == "up" ] || [ "${CMD}" == "build" ]; then
+if [ "${CMD}" = "enter" ] || [ "${CMD}" = "start" ] || [ "${CMD}" = "up" ] || [ "${CMD}" = "build" ]; then
     resolve_and_download_tools
 fi
 
@@ -200,7 +212,7 @@ if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
     fi
     ensure_image
     cleanup_stale_container
-    docker compose ${COMPOSE_FILES} up -d
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} up -d
     warn_if_ssh_mount_stale
 
     if [ "${CMD}" == "enter" ]; then
@@ -214,19 +226,20 @@ elif [ "${CMD}" == "fix-ssh" ]; then
 elif [ "${CMD}" == "build" ]; then
     do_build
 elif [ "${CMD}" == "user-exec" ]; then
-    docker compose ${COMPOSE_FILES} exec -u "${HOST_USER}" ai-sandbox "${ARGS[@]}"
+    # Compose exec targets the service name (ai-sandbox), not the container name.
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u "${HOST_USER}" ai-sandbox "${ARGS[@]}"
 elif [ "${CMD}" == "root-exec" ]; then
-    docker compose ${COMPOSE_FILES} exec -u root ai-sandbox "${ARGS[@]}"
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u root ai-sandbox "${ARGS[@]}"
 elif [ "${CMD}" == "status" ]; then
     do_status || exit $?
-elif [ "${CMD}" == "stop" ] || [ "${CMD}" == "clean" ]; then
+elif [ "${CMD}" == "stop" ] || [ "${CMD}" == "delete" ] || [ "${CMD}" == "clean" ]; then
     if is_container_running; then
         confirm_stop_running "stop the running sandbox" || exit 1
     fi
-    docker compose ${COMPOSE_FILES} down
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} down
     if [ "${CMD}" == "clean" ]; then
-        OUTPUT=$(docker rm -f ai-sandbox || true)
-        if [ $QUIET -ne 0 ] && [ "${OUTPUT}" == "ai-sandbox" ]; then
+        OUTPUT=$(docker rm -f "ai-sandbox-${SANDBOX_NAME}" || true)
+        if [ $QUIET -ne 0 ] && [ "${OUTPUT}" = "ai-sandbox-${SANDBOX_NAME}" ]; then
             echo "deleted '${OUTPUT}'"
         fi
         # Remove all ai-sandbox:* variant images.
@@ -242,5 +255,5 @@ elif [ "${CMD}" == "stop" ] || [ "${CMD}" == "clean" ]; then
         fi
     fi
 else
-    docker compose ${COMPOSE_FILES} "${ARGS[@]}"
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} "${ARGS[@]}"
 fi
