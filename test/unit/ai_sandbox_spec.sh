@@ -164,45 +164,95 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'sandbox_container_name()'
+    It 'returns ai-sandbox-<name> for the current SANDBOX_NAME'
+      SANDBOX_NAME=mybox
+      When call sandbox_container_name
+      The output should eq 'ai-sandbox-mybox'
+    End
+
+    It 'returns ai-sandbox- when SANDBOX_NAME is empty'
+      SANDBOX_NAME=
+      When call sandbox_container_name
+      The output should eq 'ai-sandbox-'
+    End
+  End
+
   Describe 'parse_options()'
-    It 'leaves PROFILES empty by default'
-      profile_count() { parse_options "$@"; echo "${#PROFILES[@]}"; }
-      When call profile_count
-      The output should eq 0
+    It 'defaults CMD to list on bare invocation'
+      When call parse_options
+      The variable CMD should eq list
+      The variable SANDBOX_NAME should eq ''
+    End
+
+    It 'routes list to CMD with empty SANDBOX_NAME'
+      When call parse_options list
+      The variable CMD should eq list
+      The variable SANDBOX_NAME should eq ''
+    End
+
+    It 'routes first arg to SANDBOX_NAME when not a global command'
+      When call parse_options mybox stop
+      The variable SANDBOX_NAME should eq mybox
+      The variable CMD should eq stop
+    End
+
+    It 'sets CMD to enter when sandbox name given with no command'
+      When call parse_options mybox
+      The variable SANDBOX_NAME should eq mybox
+      The variable CMD should eq enter
+    End
+
+    It 'routes create to CMD with sandbox name in SANDBOX_NAME'
+      When call parse_options create mybox --profile base
+      The variable CMD should eq create
+      The variable SANDBOX_NAME should eq mybox
+      The variable "PROFILES[*]" should eq base
     End
 
     It 'accumulates repeated --profile flags in order'
-      When call parse_options --profile base --profile docker
+      When call parse_options create mybox --profile base --profile docker
       The variable "PROFILES[*]" should eq 'base docker'
       The variable CONFIG_FLAGS_PROVIDED should eq true
     End
 
+    It 'sets ENTER_AFTER_CREATE from --enter on create'
+      When call parse_options create mybox --enter
+      The variable ENTER_AFTER_CREATE should eq true
+    End
+
     It 'sets MODE_OVERRIDE from --mode'
-      When call parse_options --mode static
+      When call parse_options create mybox --mode static
       The variable MODE_OVERRIDE should eq static
       The variable CONFIG_FLAGS_PROVIDED should eq true
     End
 
     It 'rejects an invalid --mode value'
-      When run parse_options --mode bogus
+      When run parse_options create mybox --mode bogus
       The status should be failure
       The stderr should include "must be 'mirror' or 'static'"
     End
 
+    It 'rejects reserved names as sandbox names'
+      When run parse_options status
+      The status should be failure
+      The stderr should include 'reserved'
+    End
+
     It 'errors and points to --profile docker when --docker is passed'
-      When run parse_options build --docker
+      When run parse_options create mybox --docker
       The status should be failure
       The stderr should include '--profile docker'
     End
 
     It 'errors and points to --profile docker when --no-docker is passed'
-      When run parse_options build --no-docker
+      When run parse_options create mybox --no-docker
       The status should be failure
       The stderr should include '--profile docker'
     End
 
     It 'errors and points to --profile chromium when --no-chromium is passed'
-      When run parse_options build --no-chromium
+      When run parse_options create mybox --no-chromium
       The status should be failure
       The stderr should include '--profile chromium'
     End
@@ -213,7 +263,7 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'sets NO_ISOLATE_CONFIG when --no-isolate-config is passed'
-      When call parse_options --no-isolate-config
+      When call parse_options create mybox --no-isolate-config
       The variable NO_ISOLATE_CONFIG should eq true
     End
   End
@@ -322,8 +372,10 @@ Describe 'ai-sandbox.sh'
   End
 
   Describe '_ssh_mount_is_fresh()'
+    setup() { SANDBOX_NAME="test"; export SSH_AUTH_SOCK="/tmp/agent.sock"; }
+    Before 'setup'
+
     It 'returns 0 when the label matches the current SSH_AUTH_SOCK'
-      export SSH_AUTH_SOCK="/tmp/agent.sock"
       docker() {
         if [ "$1" = "inspect" ]; then echo "/tmp/agent.sock"; return 0; fi
       }
@@ -341,7 +393,6 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'returns 2 when docker inspect fails (no container)'
-      export SSH_AUTH_SOCK="/tmp/agent.sock"
       docker() {
         if [ "$1" = "inspect" ]; then return 1; fi
       }
@@ -350,7 +401,6 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'returns 2 when the label is empty'
-      export SSH_AUTH_SOCK="/tmp/agent.sock"
       docker() {
         if [ "$1" = "inspect" ]; then echo ""; return 0; fi
       }
@@ -360,6 +410,9 @@ Describe 'ai-sandbox.sh'
   End
 
   Describe 'warn_if_ssh_mount_stale()'
+    setup() { SANDBOX_NAME="test"; }
+    Before 'setup'
+
     It 'warns to stderr when the mount is stale'
       export SSH_AUTH_SOCK="/tmp/new.sock"
       docker() {
@@ -367,7 +420,7 @@ Describe 'ai-sandbox.sh'
       }
       When call warn_if_ssh_mount_stale
       The stderr should include 'SSH_AUTH_SOCK has changed'
-      The stderr should include 'ai-sandbox fix-ssh'
+      The stderr should include 'fix-ssh'
       The status should be success
     End
 
@@ -392,7 +445,7 @@ Describe 'ai-sandbox.sh'
     End
   End
 
-  Describe 'create_profile()'
+  Describe 'new_profile()'
     setup() {
       export TMPDIR_CP="$(mktemp -d)"
       export HOME="${TMPDIR_CP}"
@@ -405,20 +458,20 @@ Describe 'ai-sandbox.sh'
 
     It 'writes the profile file and prints success'
       output_file="${TMPDIR_CP}/test-profile.yaml"
-      When call create_profile --name t --output "${output_file}"
+      When call new_profile --name t --output "${output_file}"
       The output should include 'Created profile:'
       The path "${output_file}" should be exist
       The status should be success
     End
 
     It 'errors when --name is missing'
-      When run create_profile --output /tmp/nope.yaml
+      When run new_profile --output /tmp/nope.yaml
       The status should be failure
       The stderr should include '--name is required'
     End
 
     It 'errors when --name contains a path separator'
-      When run create_profile --name bad/name --output /tmp/nope.yaml
+      When run new_profile --name bad/name --output /tmp/nope.yaml
       The status should be failure
       The stderr should include '/'
     End
@@ -508,6 +561,29 @@ Describe 'ai-sandbox.sh'
       When call cleanup_stale_container
       The output should include 'Cleaning up stale container'
       The variable removed should eq true
+    End
+  End
+
+  Describe 'list_instances()'
+    It 'emits rows for managed containers'
+      docker() {
+        if [ "$1" = "ps" ]; then
+          printf 'foo\trunning\tbase,docker\n'
+          printf 'bar\texited\tbase\n'
+          return 0
+        fi
+      }
+      When call list_instances
+      The output should include 'foo'
+      The output should include 'bar'
+      The status should be success
+    End
+
+    It 'emits nothing when no managed containers exist'
+      docker() { return 0; }
+      When call list_instances
+      The output should eq ''
+      The status should be success
     End
   End
 End
