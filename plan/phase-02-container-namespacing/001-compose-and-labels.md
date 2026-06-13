@@ -79,3 +79,33 @@ SANDBOX_NAME=test SANDBOX_PROFILES="" EFFECTIVE_MODE=mirror NO_ISOLATE_CONFIG=fa
   docker compose -f docker/docker-compose.yaml config 2>&1 | grep 'container_name'
 # Expected: container_name: ai-sandbox-test
 ```
+
+## Status
+
+**Outcome:** succeeded
+**Date:** 2026-06-12
+**Worktree branch:** phase-02-task-01-compose-and-labels
+
+### Validation summary
+
+| Check | Command | Result |
+|-------|---------|--------|
+| `make build` | `make build` | passed — rolled src/ to bin/ai-sandbox.sh |
+| `make lint` | `make lint` | passed — shellcheck clean |
+| container_name parameterized | `grep 'container_name' docker/docker-compose.yaml` | passed — `container_name: ai-sandbox-${SANDBOX_NAME}` |
+| new labels present | `grep 'ai.sandbox.managed\|ai.sandbox.instance\|ai.sandbox.profiles' docker/docker-compose.yaml` | passed — 3 matching lines |
+| compose config renders | `docker compose -f docker/docker-compose.yaml config \| grep container_name` | passed — `container_name: ai-sandbox-test` |
+| overlay files unaffected | reviewed all four overlay files | passed — all use service key `ai-sandbox`, not container_name |
+
+### Files modified
+
+- `docker/docker-compose.yaml`
+
+### Assumptions applied
+
+- `SANDBOX_NAME` and `SANDBOX_PROFILES` are already exported by `parse_options()` in `src/options.sh` and flow through as compose environment variables — confirmed, no additional export step needed.
+- `docker-compose.generated.yaml` does not exist as a static file (it is generated at runtime into `~/.cache/ai-sandbox/<name>/`); overlay file verification covered the four static overlays.
+
+### Decisions made
+
+- Added an explanatory comment block above the three new labels describing their purpose, consistent with the comment style used for existing labels in the file.

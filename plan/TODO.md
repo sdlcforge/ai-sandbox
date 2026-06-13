@@ -6,8 +6,8 @@
 
 ## Phase 2: Container Namespacing
 
-- [ ] [001 Docker Compose Parameterization and New Labels](plan/phase-02-container-namespacing/001-compose-and-labels.md) `sonnet-med` `…`
-- [ ] [002 Utils and Volume Override Namespacing](plan/phase-02-container-namespacing/002-utils-namespacing.md) `sonnet-high` `…`
+- [x] [001 Docker Compose Parameterization and New Labels](plan/phase-02-container-namespacing/001-compose-and-labels.md) `sonnet-med` `phase-02-task-01-compose-and-labels` `8d6c261` `e580ea3`
+- [x] [002 Utils and Volume Override Namespacing](plan/phase-02-container-namespacing/002-utils-namespacing.md) `sonnet-high` `phase-02-task-02-utils-namespacing` `752fa49` `1246d3d`
 
 ## Phase 3: Commands — create, list, stop/delete
 

@@ -119,3 +119,28 @@ grep -n 'list_instances' src/utils.sh
 bash -c '__SOURCED__=1 source bin/ai-sandbox.sh; SANDBOX_NAME=mybox; echo "$(sandbox_container_name)"'
 # Expected: ai-sandbox-mybox
 ```
+
+## Status
+
+**Outcome:** succeeded
+**Date:** 2026-06-12
+**Branch:** phase-02-task-02-utils-namespacing
+**Worktree:** `/Users/zane/playground/ai-sandbox/worktree/phase-02-task-02-utils-namespacing`
+
+**Validation summary:**
+
+- `make build` — passed
+- `make lint` — passed (shellcheck clean)
+- `grep -n "docker inspect.*ai-sandbox[^-]" src/utils.sh` — 0 matches (passed)
+- `grep -n "docker rm.*ai-sandbox[^-]" src/utils.sh` — 0 matches (passed)
+- `grep -n 'list_instances' src/utils.sh` — function definition at line 307 (passed)
+- `bash -c '__SOURCED__=1 source bin/ai-sandbox.sh; SANDBOX_NAME=mybox; echo "$(sandbox_container_name)"'` — output `ai-sandbox-mybox` (passed)
+
+**Files changed:**
+- `src/utils.sh` — added `sandbox_container_name()` helper; updated `is_container_running`, `running_config_matches`, `cleanup_stale_container`, `_ssh_mount_is_fresh` to use helper; added service-name comments to `start_shell` and `fix_ssh`; updated `warn_if_ssh_mount_stale` message; added `list_instances()`
+- `src/volume-override.sh` — added explanatory comment confirming no code change needed; Phase 1 `index.sh` already scopes `GENERATED_COMPOSE` per-instance
+
+**Assumptions applied:**
+- `SANDBOX_NAME` always set and non-empty at call time (Phase 1 enforcement)
+- Docker service names remain `ai-sandbox` (only container names change)
+- `docker ps --format '{{.Label "..."}}` syntax works on Docker Engine 23+ (Docker Desktop satisfies this)

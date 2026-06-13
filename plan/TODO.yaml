@@ -23,22 +23,22 @@ phases:
         slug: compose-and-labels
         title: "Docker Compose Parameterization and New Labels"
         path: "plan/phase-02-container-namespacing/001-compose-and-labels.md"
-        done: false
+        done: true
         tier: "sonnet-med"
         git:
-          branch: null
-          commit: []
-          merge: null
+          branch: phase-02-task-01-compose-and-labels
+          commit: [8d6c261]
+          merge: e580ea3
       - number: 2
         slug: utils-namespacing
         title: "Utils and Volume Override Namespacing"
         path: "plan/phase-02-container-namespacing/002-utils-namespacing.md"
-        done: false
+        done: true
         tier: "sonnet-high"
         git:
-          branch: null
-          commit: []
-          merge: null
+          branch: phase-02-task-02-utils-namespacing
+          commit: [752fa49]
+          merge: 1246d3d
 
   - number: 3
     slug: commands
