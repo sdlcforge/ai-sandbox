@@ -12,7 +12,7 @@ source ./options.sh
 source ./help.sh
 source ./kill-local.sh
 source ./status.sh
-source ./create-profile.sh
+source ./new-profile.sh
 
 ${__SOURCED__:+return}
 
