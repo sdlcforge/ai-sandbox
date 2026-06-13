@@ -7,7 +7,7 @@ STATUS_TEST_CHECK=${STATUS_TEST_CHECK:-false}
 # Map docker container state → one of: stopped | starting | running | stopping
 function _status_container_state() {
     local raw
-    raw="$(docker inspect -f '{{.State.Status}}' ai-sandbox 2>/dev/null || true)"
+    raw="$(docker inspect -f '{{.State.Status}}' "$(sandbox_container_name)" 2>/dev/null || true)"
     case "${raw}" in
         running) echo "running" ;;
         restarting) echo "starting" ;;
@@ -41,6 +41,9 @@ function _status_gather_images() {
         if _image_is_stale "${id}"; then stale=true; else stale=false; fi
         printf '%s\t%s\t%s\t%s\t%s\n' \
             "${tag}" "${created}" "${chromium:-unknown}" "${docker_en:-unknown}" "${stale}"
+    # 'ai-sandbox' here is the image name prefix, not the container name.
+    # All sandbox images are tagged ai-sandbox:<variant>, so this query is
+    # intentionally left as the literal prefix rather than using sandbox_container_name().
     done < <(docker images ai-sandbox --format '{{.Repository}}:{{.Tag}}	{{.ID}}	{{.CreatedAt}}' 2>/dev/null)
 }
 
@@ -151,6 +154,7 @@ function do_status() {
     if [ "${STATUS_JSON}" = "true" ]; then
         _render_status_json "${state}" "${images}" "${c_claude}" "${c_workers}"
     else
+        echo "Sandbox: ${SANDBOX_NAME}"
         _render_status_human "${state}" "${images}" "${c_claude}" "${c_workers}"
     fi
 }
