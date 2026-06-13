@@ -4,6 +4,13 @@
 #   - each installed plugin whose ${HOME}/.<plugin-name> dir exists on host
 #   - each entry in ${HOME}/.config/ai-sandbox/volume-maps (see README)
 # Writes a valid override to $1 even when nothing additional needs mounting.
+#
+# The output path ($1) is set by index.sh as:
+#   ${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox/${SANDBOX_NAME}/docker-compose.generated.yaml
+# This scoping (per-instance subdirectory) was established in Phase 1 (index.sh).
+# index.sh also runs `mkdir -p "$(dirname "${GENERATED_COMPOSE}")"` before calling
+# this function, so the per-instance subdirectory always exists. No path logic
+# needs to live here.
 function generate_volume_override() {
     local out="$1"
     local user_maps="${HOME}/.config/ai-sandbox/volume-maps"
