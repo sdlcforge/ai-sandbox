@@ -1,66 +1,61 @@
-purpose_and_scope: |
-  Add marketplace and plugin configuration support to ai-sandbox: three new CLI flags
-  (--add-marketplace, --enable-plugin, --enable-all) and corresponding profile YAML fields
-  (marketplaces, enable_all_plugins) that configure Claude Code plugins at container init time,
-  including local/private plugins via file:// URIs.
-
+slug: ""
+version: 0
+title: ""
 phases:
-  - number: 1
-    slug: schema-and-installer
-    title: Schema and Installer
-    tasks:
-      - number: 1
-        slug: profile-schema-and-installer
-        title: Profile Schema and Installer
-        path: phase-01-schema-and-installer/001-profile-schema-and-installer.md
-        done: false
-        tier: sonnet-high
-        git:
-          branch: null
-          commit: []
-          merge: null
-
-  - number: 2
-    slug: cli-flags
-    title: CLI Flags
-    tasks:
-      - number: 1
-        slug: cli-flags
-        title: CLI Flags
-        path: phase-02-cli-flags/001-cli-flags.md
-        done: false
-        tier: sonnet-med
-        git:
-          branch: null
-          commit: []
-          merge: null
-
-  - number: 3
-    slug: container-plugin-setup
-    title: Container Plugin Setup
-    tasks:
-      - number: 1
-        slug: container-plugin-setup
-        title: Container Plugin Setup
-        path: phase-03-container-plugin-setup/001-container-plugin-setup.md
-        done: false
-        tier: sonnet-high
-        git:
-          branch: null
-          commit: []
-          merge: null
-
-  - number: 4
-    slug: tests-and-qa
-    title: Tests and QA Gate
-    tasks:
-      - number: 1
-        slug: tests-and-qa
-        title: Tests and QA Gate
-        path: phase-04-tests-and-qa/001-tests-and-qa.md
-        done: false
-        tier: sonnet-high
-        git:
-          branch: null
-          commit: []
-          merge: null
+    - number: 1
+      slug: schema-and-installer
+      title: Schema and Installer
+      tasks:
+        - number: 1
+          slug: profile-schema-and-installer
+          title: Profile Schema and Installer
+          path: phase-01-schema-and-installer/001-profile-schema-and-installer.md
+          done: true
+          tier: sonnet-high
+          git:
+            branch: phase-01-task-01-profile-schema-and-installer
+            commit:
+                - 4d9ff29
+            merge: null
+    - number: 2
+      slug: cli-flags
+      title: CLI Flags
+      tasks:
+        - number: 1
+          slug: cli-flags
+          title: CLI Flags
+          path: phase-02-cli-flags/001-cli-flags.md
+          done: false
+          tier: sonnet-med
+          git:
+            branch: null
+            commit: []
+            merge: null
+    - number: 3
+      slug: container-plugin-setup
+      title: Container Plugin Setup
+      tasks:
+        - number: 1
+          slug: container-plugin-setup
+          title: Container Plugin Setup
+          path: phase-03-container-plugin-setup/001-container-plugin-setup.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
+    - number: 4
+      slug: tests-and-qa
+      title: Tests and QA Gate
+      tasks:
+        - number: 1
+          slug: tests-and-qa
+          title: Tests and QA Gate
+          path: phase-04-tests-and-qa/001-tests-and-qa.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null

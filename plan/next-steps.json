@@ -1,0 +1,14 @@
+{
+  "plan": "plugin-marketplace",
+  "todos": {
+    "follow_ups": [
+      {
+        "date": "2026-06-13",
+        "task": "phase-01-schema-and-installer/001-profile-schema-and-installer.md",
+        "note": "mid-task-commit.sh appears to operate on the main checkout rather than the worktree; running it from the worktree context failed (it committed to main which had no staged changes). Mid-task checkpoints were committed manually from the worktree instead. Investigate if the script is intended to work inside worktrees."
+      }
+    ],
+    "decisions": [],
+    "blockers": []
+  }
+}

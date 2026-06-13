@@ -8,7 +8,7 @@ Tracking document for the active plan.
 
 ### Phase 01 — Schema and Installer
 
-- [ ] [001-profile-schema-and-installer.md](./phase-01-schema-and-installer/001-profile-schema-and-installer.md) — tier `sonnet-high` · branch `…` · commit `…` · merge `…`
+- [x] [001-profile-schema-and-installer.md](./phase-01-schema-and-installer/001-profile-schema-and-installer.md) — tier `sonnet-high` · branch `phase-01-task-01-profile-schema-and-installer` · commit `4d9ff29` · merge `…`
 
 ### Phase 02 — CLI Flags
 
