@@ -11,8 +11,8 @@
 
 ## Phase 3: Commands — create, list, stop/delete
 
-- [ ] [001 Implement create Command](plan/phase-03-commands/001-create-command.md) `sonnet-high` `…`
-- [ ] [002 Implement list, stop Semantics, and delete Command](plan/phase-03-commands/002-list-stop-delete.md) `sonnet-med` `…`
+- [x] [001 Implement create Command](plan/phase-03-commands/001-create-command.md) `sonnet-high` `phase-03-task-01-create-command` `3594383` `748b24d`
+- [x] [002 Implement list, stop Semantics, and delete Command](plan/phase-03-commands/002-list-stop-delete.md) `sonnet-med` `phase-03-task-02-list-stop-delete` `ed1837f` `faae6fc`
 
 ## Phase 4: Command Renames and Cleanup
 

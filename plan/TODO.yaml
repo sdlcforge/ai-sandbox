@@ -48,22 +48,22 @@ phases:
         slug: create-command
         title: "Implement create Command"
         path: "plan/phase-03-commands/001-create-command.md"
-        done: false
+        done: true
         tier: "sonnet-high"
         git:
-          branch: null
-          commit: []
-          merge: null
+          branch: phase-03-task-01-create-command
+          commit: [3594383]
+          merge: 748b24d
       - number: 2
         slug: list-stop-delete
         title: "Implement list, stop Semantics, and delete Command"
         path: "plan/phase-03-commands/002-list-stop-delete.md"
-        done: false
+        done: true
         tier: "sonnet-med"
         git:
-          branch: null
-          commit: []
-          merge: null
+          branch: phase-03-task-02-list-stop-delete
+          commit: [ed1837f]
+          merge: faae6fc
 
   - number: 4
     slug: renames-and-cleanup

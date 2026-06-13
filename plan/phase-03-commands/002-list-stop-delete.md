@@ -139,6 +139,31 @@ Note: Docker uses `"exited"` for a stopped container that ran and stopped. The `
 - `src/utils.sh` — `cleanup_stale_container` update
 - Docker docs: `docker compose stop` vs `docker compose down`
 
+## Status
+
+**outcome:** succeeded
+**date:** 2026-06-12
+**commit:** ed1837f (branch: `phase-03-task-02-list-stop-delete`)
+
+**validation summary:**
+- `make build` — passed
+- `make lint` — passed (shellcheck clean across all src/ and test/ files including new `src/list.sh`)
+- `do_list` with no docker — prints "No sandboxes found." as expected
+- stop uses `compose stop` — confirmed via grep; exact command is `docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} stop`
+- delete uses `compose down` — confirmed via grep; exact command is `docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} down`
+- `cleanup_stale_container` preserves exited/paused/running — confirmed via grep; `running|exited|paused` case returns 0
+- unit tests: 63 examples, 10 failures, 4 warnings — all 10 failures and 4 warnings are pre-existing (parse_options and _ssh_mount_is_fresh tests); no regressions introduced; the 4 cleanup_stale_container warnings that existed pre-task are now resolved
+
+**files affected:**
+- `src/list.sh` — new file, `do_list()` function
+- `src/index.sh` — source list.sh, wire do_list, split stop/delete/clean dispatch
+- `src/utils.sh` — update `cleanup_stale_container` to preserve running|exited|paused
+- `test/unit/ai_sandbox_spec.sh` — update cleanup_stale_container tests for new semantics
+
+**decisions made:**
+- Task doc's validation grep patterns used simplified form (`compose stop`, `compose down`) that don't match the actual flag-rich invocation; verified with adjusted `grep -E 'compose.*stop$'` and `grep -E 'compose.*down'` patterns — both matched correctly.
+- Changed existing `cleanup_stale_container` tests that used `exited` to trigger cleanup: `exited` now means "stopped via compose stop" and should be preserved. Updated those tests to use `dead` state, and added new tests verifying `exited` and `paused` are preserved.
+
 ## Validation
 
 ```bash
