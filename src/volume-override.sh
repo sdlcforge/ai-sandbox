@@ -42,6 +42,28 @@ function generate_volume_override() {
         done < "${user_maps}"
     fi
 
+    # Add read-only bind mounts for file:// marketplace paths so they resolve
+    # identically inside the container (source == target path).
+    if [ -n "${AI_SANDBOX_MARKETPLACES:-}" ]; then
+        local _mp _host_path
+        local _mktplaces_copy="${AI_SANDBOX_MARKETPLACES}"
+        while [ -n "${_mktplaces_copy}" ]; do
+            _mp="${_mktplaces_copy%%|*}"
+            if [ "${_mp}" = "${_mktplaces_copy}" ]; then
+                _mktplaces_copy=""
+            else
+                _mktplaces_copy="${_mktplaces_copy#*|}"
+            fi
+            [ -z "${_mp}" ] && continue
+            case "${_mp}" in
+                file://*)
+                    _host_path="${_mp#file://}"
+                    mounts+=("${_host_path}:${_host_path}:ro")
+                    ;;
+            esac
+        done
+    fi
+
     {
         printf 'services:\n'
         printf '  ai-sandbox:\n'

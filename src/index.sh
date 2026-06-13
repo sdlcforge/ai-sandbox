@@ -137,6 +137,23 @@ else
 fi
 export EFFECTIVE_PROXY NO_ISOLATE_CONFIG
 
+# Extract plugin-marketplace configuration for container passthrough.
+# When phase-02 is present, PROFILE_JSON is already set by the CLI merge block;
+# otherwise extract it here from the raw installer output.
+if [ -z "${PROFILE_JSON:-}" ]; then
+  PROFILE_JSON="$(printf '%s\n' "${PROFILE_INSTALLER_OUTPUT}" \
+    | awk '/^### PROFILE_JSON ###$/{f=1;next} /^###/{f=0} f{print}')"
+  export PROFILE_JSON
+fi
+# Join arrays with | (not :) so URLs containing colons pass through correctly.
+AI_SANDBOX_MARKETPLACES="$(printf '%s\n' "${PROFILE_JSON}" \
+  | jq -r '(.marketplaces // []) | join("|")')"
+AI_SANDBOX_PLUGINS="$(printf '%s\n' "${PROFILE_JSON}" \
+  | jq -r '(.plugins // []) | join("|")')"
+AI_SANDBOX_ENABLE_ALL_PLUGINS="$(printf '%s\n' "${PROFILE_JSON}" \
+  | jq -r '.enable_all_plugins // false')"
+export AI_SANDBOX_MARKETPLACES AI_SANDBOX_PLUGINS AI_SANDBOX_ENABLE_ALL_PLUGINS
+
 # Assemble the effective Dockerfile from the resolved capabilities and point the
 # compose build at it (docker-compose.yaml reads ${AI_SANDBOX_DOCKERFILE}).
 # --hash embeds the composition hash as a LABEL so is_build_stale() can detect

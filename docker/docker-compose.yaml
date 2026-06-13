@@ -76,6 +76,11 @@ services:
       # is bind-mounted here (see volumes:). Set at runtime rather than baked
       # into the image so host-agent restarts don't require a rebuild.
       - SSH_AUTH_SOCK=/run/ai-sandbox/ssh-auth.sock
+      # Plugin marketplace configuration; set by the launcher when --add-marketplace
+      # or profile marketplaces are configured. Read by 10-plugin-setup at init time.
+      - AI_SANDBOX_MARKETPLACES=${AI_SANDBOX_MARKETPLACES:-}
+      - AI_SANDBOX_PLUGINS=${AI_SANDBOX_PLUGINS:-}
+      - AI_SANDBOX_ENABLE_ALL_PLUGINS=${AI_SANDBOX_ENABLE_ALL_PLUGINS:-false}
     dns:
       - 8.8.8.8
       - 8.8.4.4
