@@ -15,6 +15,9 @@
 #   STATUS_JSON   — "true" if --json was passed (per-instance commands only)
 #   STATUS_TEST_CHECK — "true" if --test-check was passed (per-instance commands only)
 #   QUIET         — 0 (verbose) or 1 (quiet); defaults to 0 for `status`, 1 otherwise
+#   CLI_MARKETPLACES — array of --add-marketplace refs (https:// or file://)
+#   CLI_PLUGINS   — array of --enable-plugin names
+#   CLI_ENABLE_ALL — "true" if --enable-all was passed
 # Also exports AI_SANDBOX_SKIP_PLUGIN_CHECK when --force is passed.
 function parse_options() {
     SANDBOX_NAME=""
@@ -29,6 +32,9 @@ function parse_options() {
     STATUS_JSON=false
     STATUS_TEST_CHECK=false
     ARGS=()
+    CLI_MARKETPLACES=()
+    CLI_PLUGINS=()
+    CLI_ENABLE_ALL=false
 
     # Global command words — first non-flag arg matching one of these is a global command.
     local -r GLOBAL_COMMANDS="create list help kill-local-ai new-profile"
@@ -77,7 +83,8 @@ function parse_options() {
     if [ "${CMD}" = "help" ]; then
         export SANDBOX_NAME SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
                NO_ISOLATE_CONFIG CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
-               STATUS_JSON STATUS_TEST_CHECK QUIET
+               STATUS_JSON STATUS_TEST_CHECK QUIET \
+               CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL
         if [ -z "${QUIET}" ]; then
             QUIET=1
         fi
@@ -183,6 +190,36 @@ function parse_options() {
                 NO_ISOLATE_CONFIG=true
                 CONFIG_FLAGS_PROVIDED=true
                 ;;
+            --add-marketplace)
+                i=$(( i + 1 ))
+                if [ "${i}" -ge "${#all_remaining[@]}" ]; then
+                    echo "Error: --add-marketplace requires a ref (https:// or file://)" 1>&2
+                    exit 1
+                fi
+                _ref="${all_remaining[${i}]}"
+                case "${_ref}" in
+                    https://*|file://*) ;;
+                    *)
+                        echo "Error: --add-marketplace ref must start with https:// or file:// (got '${_ref}')" 1>&2
+                        exit 1
+                        ;;
+                esac
+                CLI_MARKETPLACES+=("${_ref}")
+                CONFIG_FLAGS_PROVIDED=true
+                ;;
+            --enable-plugin)
+                i=$(( i + 1 ))
+                if [ "${i}" -ge "${#all_remaining[@]}" ]; then
+                    echo "Error: --enable-plugin requires a plugin name" 1>&2
+                    exit 1
+                fi
+                CLI_PLUGINS+=("${all_remaining[${i}]}")
+                CONFIG_FLAGS_PROVIDED=true
+                ;;
+            --enable-all)
+                CLI_ENABLE_ALL=true
+                CONFIG_FLAGS_PROVIDED=true
+                ;;
             --enter)
                 # Only meaningful for `create`; silently accepted for other commands
                 ENTER_AFTER_CREATE=true
@@ -217,7 +254,12 @@ function parse_options() {
         fi
     fi
 
+    # Note: CLI_MARKETPLACES and CLI_PLUGINS are bash arrays; bash cannot export
+    # arrays across process boundaries. They are consumed within the same shell
+    # session by index.sh before any subprocess boundary is crossed — same
+    # pattern as PROFILES.
     export SANDBOX_NAME SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
            NO_ISOLATE_CONFIG CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
-           STATUS_JSON STATUS_TEST_CHECK QUIET
+           STATUS_JSON STATUS_TEST_CHECK QUIET \
+           CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL
 }
