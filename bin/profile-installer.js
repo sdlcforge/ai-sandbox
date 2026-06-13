@@ -69,6 +69,8 @@ const KNOWN_KEYS = new Set([
   'packages',
   'setup_script',
   'plugins',
+  'marketplaces',
+  'enable_all_plugins',
   'skills',
   'hooks',
   'agents',
@@ -77,7 +79,7 @@ const KNOWN_KEYS = new Set([
   'network',
 ]);
 
-const STRING_LIST_FIELDS = ['packages', 'plugins', 'capabilities', 'required_env', 'optional_env'];
+const STRING_LIST_FIELDS = ['packages', 'plugins', 'marketplaces', 'capabilities', 'required_env', 'optional_env'];
 const OBJECT_LIST_FIELDS = ['skills', 'hooks', 'agents'];
 const SCALAR_FIELDS = ['mode', 'setup_script'];
 
@@ -224,6 +226,20 @@ function validateSchema(name, file, doc) {
       die(`profile "${name}" (${file}): field "${field}" must be a list of strings`);
     }
   }
+  // marketplaces entries must each start with https:// or file://.
+  if (doc.marketplaces !== undefined) {
+    for (const entry of doc.marketplaces) {
+      if (!entry.startsWith('https://') && !entry.startsWith('file://')) {
+        die(
+          `profile "${name}" (${file}): marketplaces entry "${entry}" must start with https:// or file://`
+        );
+      }
+    }
+  }
+  // enable_all_plugins must be a boolean.
+  if (doc.enable_all_plugins !== undefined && typeof doc.enable_all_plugins !== 'boolean') {
+    die(`profile "${name}" (${file}): field "enable_all_plugins" must be a boolean`);
+  }
   for (const field of SCALAR_FIELDS) {
     if (doc[field] !== undefined && typeof doc[field] !== 'string') {
       die(`profile "${name}" (${file}): field "${field}" must be a string`);
@@ -272,6 +288,8 @@ function compose(profiles) {
     capabilities: [],
     packages: [],
     plugins: [],
+    marketplaces: [],
+    enable_all_plugins: false,
     required_env: [],
     optional_env: [],
     network_allow: [],
@@ -306,11 +324,17 @@ function compose(profiles) {
     // String lists (union, dedup, first-occurrence order).
     unionInto(merged.packages, doc.packages);
     unionInto(merged.plugins, doc.plugins);
+    unionInto(merged.marketplaces, doc.marketplaces);
     unionInto(merged.capabilities, doc.capabilities);
     unionInto(merged.required_env, doc.required_env, p, 'required_env');
     unionInto(merged.optional_env, doc.optional_env);
     if (doc.network && doc.network.allow) {
       unionInto(merged.network_allow, doc.network.allow);
+    }
+
+    // enable_all_plugins: OR across all profiles.
+    if (doc.enable_all_plugins === true) {
+      merged.enable_all_plugins = true;
     }
 
     // Object lists (skills/hooks/agents) — resolve src relative to profile dir.
@@ -481,6 +505,8 @@ function renderJsonBlob(merged) {
   return JSON.stringify({
     packages: merged.packages,
     plugins: merged.plugins,
+    marketplaces: merged.marketplaces,
+    enable_all_plugins: merged.enable_all_plugins,
     capabilities: merged.capabilities.slice().sort(),
     network_allow: merged.network_allow,
     required_env: merged.required_env,
