@@ -426,6 +426,7 @@ Describe 'ai-sandbox.sh'
 
   Describe 'cleanup_stale_container()'
     It 'returns 0 when no container exists'
+      SANDBOX_NAME="test"
       docker() {
         if [ "$1" = "inspect" ]; then return 1; fi
       }
@@ -434,6 +435,7 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'is a no-op when container is running'
+      SANDBOX_NAME="test"
       docker() {
         if [ "$1" = "inspect" ]; then echo "running"; return 0; fi
       }
@@ -443,13 +445,38 @@ Describe 'ai-sandbox.sh'
       The status should be success
     End
 
-    It 'calls compose down when container is exited'
+    It 'is a no-op when container is exited (stopped via compose stop)'
+      SANDBOX_NAME="test"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo "exited"; return 0; fi
+      }
+      COMPOSE_FILES="-f docker-compose.yaml"
+      When call cleanup_stale_container
+      The output should eq ''
+      The status should be success
+    End
+
+    It 'is a no-op when container is paused'
+      SANDBOX_NAME="test"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo "paused"; return 0; fi
+      }
+      COMPOSE_FILES="-f docker-compose.yaml"
+      When call cleanup_stale_container
+      The output should eq ''
+      The status should be success
+    End
+
+    It 'calls compose down when container is in dead state'
+      SANDBOX_NAME="test"
       downed=false
       docker() {
         case "$1" in
-          inspect) echo "exited"; return 0 ;;
+          inspect) echo "dead"; return 0 ;;
           compose)
             shift
+            # skip -p <project> flag added by cleanup_stale_container
+            if [ "$1" = "-p" ]; then shift; shift; fi
             while [ "$1" = "-f" ]; do shift; shift; done
             if [ "$1" = "down" ]; then downed=true; fi
             ;;
@@ -462,12 +489,15 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'falls back to docker rm -f when compose down fails'
+      SANDBOX_NAME="test"
       removed=false
       docker() {
         case "$1" in
-          inspect) echo "exited"; return 0 ;;
+          inspect) echo "dead"; return 0 ;;
           compose)
             shift
+            # skip -p <project> flag added by cleanup_stale_container
+            if [ "$1" = "-p" ]; then shift; shift; fi
             while [ "$1" = "-f" ]; do shift; shift; done
             if [ "$1" = "down" ]; then return 1; fi
             ;;
