@@ -55,6 +55,11 @@ function start_shell() {
         "${banner}if [ -d \"${START_DIR}\" ]; then cd \"${START_DIR}\" && exec zsh; else exec zsh; fi"
 }
 
+# Return 0 if the ai-sandbox container exists (running or stopped), 1 otherwise.
+function is_container_running_or_stopped() {
+    docker inspect "$(sandbox_container_name)" >/dev/null 2>&1
+}
+
 # Return 0 if the ai-sandbox container is currently in `running` state, 1 otherwise.
 function is_container_running() {
     local state
