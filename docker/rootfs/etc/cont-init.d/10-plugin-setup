@@ -1,0 +1,86 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# 10-plugin-setup: Register Claude Code marketplaces and enable plugins at
+# container start. Reads AI_SANDBOX_MARKETPLACES and AI_SANDBOX_PLUGINS
+# (pipe-separated to avoid collisions with colons in URLs), and
+# AI_SANDBOX_ENABLE_ALL_PLUGINS (true/false).
+# Idempotent and non-fatal — warns on errors but never blocks container startup.
+set -u
+
+if [ -z "${AI_SANDBOX_MARKETPLACES:-}" ] && [ -z "${AI_SANDBOX_PLUGINS:-}" ]; then
+    exit 0
+fi
+
+# claude lives under the host user's bun install; not on root's PATH.
+CLAUDE_BIN="${HOST_HOME}/.bun/bin/claude"
+if [ ! -x "${CLAUDE_BIN}" ]; then
+    printf '[10-plugin-setup] warn: claude not found at %s; skipping plugin setup\n' \
+        "${CLAUDE_BIN}" >&2
+    exit 0
+fi
+
+# Run plugin commands as the host user so ~/.claude resolves to the bind-mounted
+# directory and files are written with the correct ownership.
+_run() { /command/s6-setuidgid "${HOST_USER}" env HOME="${HOST_HOME}" "$@"; }
+
+_last_marketplace=""
+
+# Register marketplaces (pipe-separated).
+if [ -n "${AI_SANDBOX_MARKETPLACES:-}" ]; then
+    _copy="${AI_SANDBOX_MARKETPLACES}"
+    while [ -n "${_copy}" ]; do
+        _mp="${_copy%%|*}"
+        if [ "${_mp}" = "${_copy}" ]; then
+            _copy=""
+        else
+            _copy="${_copy#*|}"
+        fi
+        [ -z "${_mp}" ] && continue
+
+        if _run "${CLAUDE_BIN}" plugins marketplace list 2>/dev/null | grep -qF "${_mp}"; then
+            printf '[10-plugin-setup] marketplace already registered: %s\n' "${_mp}"
+        else
+            printf '[10-plugin-setup] registering marketplace: %s\n' "${_mp}"
+            _run "${CLAUDE_BIN}" plugins marketplace add "${_mp}" 2>&1 \
+                || printf '[10-plugin-setup] warn: failed to register marketplace: %s\n' \
+                    "${_mp}" >&2
+        fi
+        _last_marketplace="${_mp}"
+    done
+fi
+
+# Enable individual plugins (pipe-separated).
+if [ -n "${AI_SANDBOX_PLUGINS:-}" ]; then
+    _copy="${AI_SANDBOX_PLUGINS}"
+    while [ -n "${_copy}" ]; do
+        _plugin="${_copy%%|*}"
+        if [ "${_plugin}" = "${_copy}" ]; then
+            _copy=""
+        else
+            _copy="${_copy#*|}"
+        fi
+        [ -z "${_plugin}" ] && continue
+
+        if _run "${CLAUDE_BIN}" plugins list 2>/dev/null | grep -qF "${_plugin}"; then
+            printf '[10-plugin-setup] plugin already enabled: %s\n' "${_plugin}"
+        else
+            printf '[10-plugin-setup] enabling plugin: %s\n' "${_plugin}"
+            _run "${CLAUDE_BIN}" plugins enable "${_plugin}" 2>&1 \
+                || printf '[10-plugin-setup] warn: failed to enable plugin: %s\n' \
+                    "${_plugin}" >&2
+        fi
+    done
+fi
+
+# Enable all plugins from all registered marketplaces if requested.
+if [ "${AI_SANDBOX_ENABLE_ALL_PLUGINS:-false}" = "true" ]; then
+    if [ -n "${_last_marketplace}" ]; then
+        printf '[10-plugin-setup] enabling all plugins\n'
+        _run "${CLAUDE_BIN}" plugins enable --all 2>&1 \
+            || printf '[10-plugin-setup] warn: failed to enable all plugins\n' >&2
+    else
+        printf '[10-plugin-setup] warn: enable-all set but no marketplace was configured\n' >&2
+    fi
+fi
+
+exit 0
