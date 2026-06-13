@@ -16,7 +16,7 @@ phases:
             branch: phase-01-task-01-profile-schema-and-installer
             commit:
                 - 4d9ff29
-            merge: null
+            merge: 2bcb542
     - number: 2
       slug: cli-flags
       title: CLI Flags
