@@ -7,6 +7,13 @@ function qecho() {
     if [ ${QUIET} -ne 0 ]; then echo "$@"; fi
 }
 
+# Returns the container name for the current SANDBOX_NAME.
+# All docker inspect / docker rm -f calls that target the running container
+# must use this helper rather than the literal string 'ai-sandbox'.
+function sandbox_container_name() {
+    printf 'ai-sandbox-%s\n' "${SANDBOX_NAME}"
+}
+
 function check_docker() {
     qecho -n "Checking docker is running... "
     if ! docker info > /dev/null 2>&1; then
@@ -43,6 +50,7 @@ function start_shell() {
     # runtime detector.
     # shellcheck disable=SC2016 # ${DOCKER_HOST} must be expanded by the in-container shell, not the host
     local banner='if [ -n "${DOCKER_HOST:-}" ]; then printf "\033[1;33m%s\033[0m\n" "WARNING: This container is running with docker support activated. This gives the container access to docker on the host and it may be possible for the AI or another program to breakout of the container via this access." >&2; fi; '
+    # 'ai-sandbox' here is the compose service name, not the container name.
     docker compose ${COMPOSE_FILES} exec -u ${HOST_USER} ai-sandbox bash -c \
         "${banner}if [ -d \"${START_DIR}\" ]; then cd \"${START_DIR}\" && exec zsh; else exec zsh; fi"
 }
@@ -50,7 +58,7 @@ function start_shell() {
 # Return 0 if the ai-sandbox container is currently in `running` state, 1 otherwise.
 function is_container_running() {
     local state
-    state=$(docker inspect -f '{{.State.Status}}' ai-sandbox 2>/dev/null) || return 1
+    state=$(docker inspect -f '{{.State.Status}}' "$(sandbox_container_name)" 2>/dev/null) || return 1
     [ "${state}" = "running" ]
 }
 
@@ -71,12 +79,13 @@ function profile_has_capability() {
 # / NO_ISOLATE_CONFIG / EFFECTIVE_PROXY from caller scope.
 function running_config_matches() {
     is_container_running || return 2
-    local cur_image cur_hash cur_mode cur_no_isolate cur_proxy
-    cur_image=$(docker inspect -f '{{.Config.Image}}' ai-sandbox 2>/dev/null || true)
-    cur_hash=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.profile-hash"}}' ai-sandbox 2>/dev/null || true)
-    cur_mode=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.mode"}}' ai-sandbox 2>/dev/null || true)
-    cur_no_isolate=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.no-isolate-config"}}' ai-sandbox 2>/dev/null || true)
-    cur_proxy=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.docker-proxy"}}' ai-sandbox 2>/dev/null || true)
+    local cur_image cur_hash cur_mode cur_no_isolate cur_proxy ctr_name
+    ctr_name="$(sandbox_container_name)"
+    cur_image=$(docker inspect -f '{{.Config.Image}}' "${ctr_name}" 2>/dev/null || true)
+    cur_hash=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.profile-hash"}}' "${ctr_name}" 2>/dev/null || true)
+    cur_mode=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.mode"}}' "${ctr_name}" 2>/dev/null || true)
+    cur_no_isolate=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.no-isolate-config"}}' "${ctr_name}" 2>/dev/null || true)
+    cur_proxy=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.docker-proxy"}}' "${ctr_name}" 2>/dev/null || true)
     [ "${cur_image}" = "${AI_SANDBOX_IMAGE_TAG:-}" ] || return 1
     [ "${cur_hash}" = "${PROFILE_COMPOSITION_HASH:-}" ] || return 1
     [ "${cur_mode:-mirror}" = "${EFFECTIVE_MODE:-mirror}" ] || return 1
@@ -216,12 +225,12 @@ function do_build() {
 
 function cleanup_stale_container() {
     local state
-    state=$(docker inspect -f '{{.State.Status}}' ai-sandbox 2>/dev/null) || return 0
+    state=$(docker inspect -f '{{.State.Status}}' "$(sandbox_container_name)" 2>/dev/null) || return 0
     if [ "$state" = "running" ]; then
         return 0
     fi
     qecho "Cleaning up stale container (state: ${state})..."
-    docker compose ${COMPOSE_FILES} down 2>/dev/null || docker rm -f ai-sandbox 2>/dev/null || true
+    docker compose ${COMPOSE_FILES} down 2>/dev/null || docker rm -f "$(sandbox_container_name)" 2>/dev/null || true
 }
 
 # SSH agent forwarding helpers.
@@ -241,7 +250,7 @@ function _ssh_mount_is_fresh() {
     local recorded
     recorded=$(docker inspect -f \
         '{{index .Config.Labels "ai.sandbox.ssh-auth-sock-host"}}' \
-        ai-sandbox 2>/dev/null) || return 2
+        "$(sandbox_container_name)" 2>/dev/null) || return 2
     [ -z "${recorded}" ] && return 2
     [ "${recorded}" = "${SSH_AUTH_SOCK:-}" ]
 }
@@ -254,7 +263,7 @@ function warn_if_ssh_mount_stale() {
         1)
             echo "warn: host SSH_AUTH_SOCK has changed since the container was created." >&2
             echo "      SSH-backed operations (e.g. git push) will fail inside the container." >&2
-            echo "      Run 'ai-sandbox fix-ssh' to refresh the socket mount." >&2
+            echo "      Run 'ai-sandbox ${SANDBOX_NAME} fix-ssh' to refresh the socket mount." >&2
             return 0
             ;;
     esac
@@ -285,8 +294,22 @@ function fix_ssh() {
         echo "verify SSH_AUTH_SOCK points at a live socket, then retry." >&2
         return 1
     fi
+    # 'ai-sandbox' here is the compose service name, not the container name.
     docker compose ${COMPOSE_FILES} up -d --force-recreate --no-deps ai-sandbox
     qecho "Container recreated with SSH_AUTH_SOCK=${SSH_AUTH_SOCK}"
+}
+
+# Emit tab-separated rows for each managed ai-sandbox container:
+#   name<TAB>state<TAB>profiles
+# Sorted by container name. Uses docker ps -a with label filter.
+# Requires Docker Engine 23+ for the .Label "..." format syntax
+# (Docker Desktop on macOS satisfies this).
+function list_instances() {
+    docker ps -a \
+        --filter "label=ai.sandbox.managed=true" \
+        --format '{{.Label "ai.sandbox.instance"}}\t{{.State}}\t{{.Label "ai.sandbox.profiles"}}' \
+        2>/dev/null \
+    | sort
 }
 
 # List installed claude plugin names (without @marketplace suffix), one per line.
