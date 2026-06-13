@@ -30,7 +30,7 @@ services:
         ZSH_IN_DOCKER_SH: ${ZSH_IN_DOCKER_SH:-}
         GIT_USER_NAME: ${GIT_USER_NAME}
         GIT_USER_EMAIL: ${GIT_USER_EMAIL}
-    container_name: ai-sandbox
+    container_name: ai-sandbox-${SANDBOX_NAME}
     stdin_open: true
     tty: true
     labels:
@@ -46,6 +46,14 @@ services:
       ai.sandbox.mode: "${EFFECTIVE_MODE:-mirror}"
       ai.sandbox.no-isolate-config: "${NO_ISOLATE_CONFIG:-false}"
       ai.sandbox.docker-proxy: "${EFFECTIVE_PROXY:-false}"
+      # Multi-instance management labels. ai.sandbox.managed marks containers
+      # created by this tool (for `list`). ai.sandbox.instance records the
+      # instance name for filtering. ai.sandbox.profiles records the comma-
+      # separated profile list set at `create` time; subsequent `start`
+      # invocations read this label to reconstruct the PROFILES array.
+      ai.sandbox.managed: "true"
+      ai.sandbox.instance: "${SANDBOX_NAME}"
+      ai.sandbox.profiles: "${SANDBOX_PROFILES:-}"
     volumes:
       # Map host directories to same absolute paths in container.
       # ~/.claude is shared so plugins inside the VM see the same state as the host.
