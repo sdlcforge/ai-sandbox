@@ -15,6 +15,12 @@ Global commands:
                              --mode <mode>      Override mode: mirror or static.
                              --no-isolate-config  Share host ~/.config (read-write).
                              --enter            Open a shell after creating.
+                             --add-marketplace <ref>  Register a plugin marketplace (https:// or
+                                                file://). Repeatable; file:// paths are auto-
+                                                mounted read-only into the container.
+                             --enable-plugin <name>   Enable a named plugin from any registered
+                                                marketplace. Repeatable.
+                             --enable-all       Enable all plugins from the last marketplace.
   list                     List all managed sandbox instances.
   new-profile              Scaffold a profile YAML from local Claude assets.
                              Requires --name. Options: --name, --mode, --output, --plugins.

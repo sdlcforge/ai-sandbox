@@ -266,6 +266,53 @@ Describe 'ai-sandbox.sh'
       When call parse_options create mybox --no-isolate-config
       The variable NO_ISOLATE_CONFIG should eq true
     End
+
+    It 'accepts --add-marketplace with https:// ref'
+      When call parse_options create mybox --add-marketplace https://registry.example.com
+      The variable "CLI_MARKETPLACES[*]" should eq 'https://registry.example.com'
+      The variable CONFIG_FLAGS_PROVIDED should eq true
+    End
+
+    It 'accepts --add-marketplace with file:// ref'
+      When call parse_options create mybox --add-marketplace file:///home/user/plugin
+      The variable "CLI_MARKETPLACES[*]" should eq 'file:///home/user/plugin'
+    End
+
+    It 'rejects --add-marketplace with invalid scheme'
+      When run parse_options create mybox --add-marketplace ftp://bad.example.com
+      The status should be failure
+      The stderr should include 'https:// or file://'
+    End
+
+    It 'errors when --add-marketplace is given no ref'
+      When run parse_options create mybox --add-marketplace
+      The status should be failure
+      The stderr should include '--add-marketplace requires'
+    End
+
+    It 'accumulates repeated --add-marketplace refs in order'
+      When call parse_options create mybox \
+        --add-marketplace https://one.example.com \
+        --add-marketplace file:///two
+      The variable "CLI_MARKETPLACES[*]" should eq 'https://one.example.com file:///two'
+    End
+
+    It 'accepts --enable-plugin and sets CLI_PLUGINS'
+      When call parse_options create mybox --enable-plugin flow
+      The variable "CLI_PLUGINS[*]" should eq flow
+      The variable CONFIG_FLAGS_PROVIDED should eq true
+    End
+
+    It 'accumulates repeated --enable-plugin names'
+      When call parse_options create mybox --enable-plugin flow --enable-plugin claude-mem
+      The variable "CLI_PLUGINS[*]" should eq 'flow claude-mem'
+    End
+
+    It 'sets CLI_ENABLE_ALL from --enable-all'
+      When call parse_options create mybox --enable-all
+      The variable CLI_ENABLE_ALL should eq true
+      The variable CONFIG_FLAGS_PROVIDED should eq true
+    End
   End
 
   Describe 'is_build_stale()'

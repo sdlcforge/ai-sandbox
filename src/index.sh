@@ -113,6 +113,36 @@ eval "${PROFILE_ENV_BLOCK}"
 export PROFILE_MODE PROFILE_CAPABILITIES PROFILE_IMAGE_TAG \
   PROFILE_COMPOSITION_HASH PROFILE_ASSEMBLED_DOCKERFILE
 
+# Extract the JSON blob for downstream structured-data access (plugin config,
+# capability list, network allow). Merged with CLI-supplied flags below.
+PROFILE_JSON="$(printf '%s\n' "${PROFILE_INSTALLER_OUTPUT}" \
+  | awk '/^### PROFILE_JSON ###$/{f=1;next} /^###/{f=0} f{print}')"
+
+# Merge CLI-supplied marketplace/plugin values into the JSON blob.
+# CLI values union with profile-declared values; enable_all_plugins ORs.
+if [ "${#CLI_MARKETPLACES[@]}" -gt 0 ] || [ "${#CLI_PLUGINS[@]}" -gt 0 ] || [ "${CLI_ENABLE_ALL}" = "true" ]; then
+  if [ "${#CLI_MARKETPLACES[@]}" -gt 0 ]; then
+    _cli_marketplaces_json="$(printf '%s\n' "${CLI_MARKETPLACES[@]}" | jq -R . | jq -s .)"
+  else
+    _cli_marketplaces_json='[]'
+  fi
+  if [ "${#CLI_PLUGINS[@]}" -gt 0 ]; then
+    _cli_plugins_json="$(printf '%s\n' "${CLI_PLUGINS[@]}" | jq -R . | jq -s .)"
+  else
+    _cli_plugins_json='[]'
+  fi
+  _cli_enable_all_json=false
+  [ "${CLI_ENABLE_ALL}" = "true" ] && _cli_enable_all_json=true
+  PROFILE_JSON="$(printf '%s\n' "${PROFILE_JSON}" | jq \
+      --argjson cm "${_cli_marketplaces_json}" \
+      --argjson cp "${_cli_plugins_json}" \
+      --argjson ea "${_cli_enable_all_json}" \
+      '.marketplaces = ((.marketplaces // []) + $cm | unique) |
+       .plugins      = ((.plugins      // []) + $cp | unique) |
+       .enable_all_plugins = ((.enable_all_plugins // false) or $ea)')"
+fi
+export PROFILE_JSON
+
 # MODE_OVERRIDE wins; else the profile's mode; else mirror (legacy default).
 if [ -n "${MODE_OVERRIDE}" ]; then
   EFFECTIVE_MODE="${MODE_OVERRIDE}"
