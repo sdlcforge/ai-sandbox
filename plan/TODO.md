@@ -1,29 +1,24 @@
-# TODO: Profiles Feature Implementation
+# TODO: multi-instance-sandbox
 
-## Purpose and scope
+## Phase 1: CLI Parsing and Dispatch
 
-Track the implementation tasks for the ai-sandbox profiles feature (Phases
-02–05). Spec source of truth:
-[`docs/ai-sandbox-profiles-spec.md`](../docs/ai-sandbox-profiles-spec.md).
-Phase 01 (documentation) is complete in a prior round and not relisted here.
+- [ ] [001 Options and Dispatch](plan/phase-01-cli-parsing/001-options-and-dispatch.md) `sonnet-high` `…`
 
-## Tasks
+## Phase 2: Container Namespacing
 
-### Phase 02 — Foundation
+- [ ] [001 Docker Compose Parameterization and New Labels](plan/phase-02-container-namespacing/001-compose-and-labels.md) `sonnet-med` `…`
+- [ ] [002 Utils and Volume Override Namespacing](plan/phase-02-container-namespacing/002-utils-namespacing.md) `sonnet-high` `…`
 
-- [x] [001-bundled-profiles.md](./phase-02-foundation/001-bundled-profiles.md) — tier `sonnet-high` · branch `phase-02-task-01-bundled-profiles` · commit `aa35ade` · merge `c0bc86e`
-- [x] [002-profile-installer.md](./phase-02-foundation/002-profile-installer.md) — tier `opus-medium` · branch `phase-02-task-02-profile-installer` · commit `80fa42e` · merge `2466272`
+## Phase 3: Commands — create, list, stop/delete
 
-### Phase 03 — Dockerfile Decomposition
+- [ ] [001 Implement create Command](plan/phase-03-commands/001-create-command.md) `sonnet-high` `…`
+- [ ] [002 Implement list, stop Semantics, and delete Command](plan/phase-03-commands/002-list-stop-delete.md) `sonnet-med` `…`
 
-- [x] [003-dockerfile-decomposition.md](./phase-03-dockerfile-decomposition/003-dockerfile-decomposition.md) — tier `sonnet-high` · branch `phase-03-task-03-dockerfile-decomposition` · commit `81a5fc6` · merge `3167a11`
+## Phase 4: Command Renames and Cleanup
 
-### Phase 04 — CLI Integration
+- [ ] [001 Rename create-profile to new-profile](plan/phase-04-renames-and-cleanup/001-new-profile-rename.md) `sonnet-med` `…`
+- [ ] [002 Update Help Text and Status for Per-Instance Context](plan/phase-04-renames-and-cleanup/002-help-and-status.md) `sonnet-med` `…`
 
-- [x] [004-cli-profile-integration.md](./phase-04-cli-integration/004-cli-profile-integration.md) — tier `opus-medium` · branch `phase-04-task-04-cli-profile-integration` · commit `ba754458` · merge `14ba804`
-- [x] [005-image-tagging.md](./phase-04-cli-integration/005-image-tagging.md) — tier `sonnet-high` · branch `phase-04-task-05-image-tagging` · commit `209ab4b` · merge `e964915`
-- [x] [006-create-profile-command.md](./phase-04-cli-integration/006-create-profile-command.md) — tier `sonnet-high` · branch `phase-04-task-06-create-profile-command` · commit `7078786` · merge `0c8e9a5`
+## Phase 5: Tests and QA Gate
 
-### Phase 05 — Verification
-
-- [x] [007-tests-and-qa.md](./phase-05-verification/007-tests-and-qa.md) — tier `opus-medium` · branch `phase-05-task-07-tests-and-qa-gate` · commit `5e5c9a9` · merge `51388aa`
+- [ ] [001 Update Unit Tests and QA Gate](plan/phase-05-tests-and-qa/001-tests-and-qa.md) `sonnet-high` `…`

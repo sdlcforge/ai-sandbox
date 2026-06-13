@@ -1,0 +1,106 @@
+plan_slug: multi-instance-sandbox
+phases:
+  - number: 1
+    slug: cli-parsing
+    title: "CLI Parsing and Dispatch"
+    tasks:
+      - number: 1
+        slug: options-and-dispatch
+        title: "Options and Dispatch"
+        path: "plan/phase-01-cli-parsing/001-options-and-dispatch.md"
+        done: false
+        tier: "sonnet-high"
+        git:
+          branch: null
+          commit: []
+          merge: null
+
+  - number: 2
+    slug: container-namespacing
+    title: "Container Namespacing"
+    tasks:
+      - number: 1
+        slug: compose-and-labels
+        title: "Docker Compose Parameterization and New Labels"
+        path: "plan/phase-02-container-namespacing/001-compose-and-labels.md"
+        done: false
+        tier: "sonnet-med"
+        git:
+          branch: null
+          commit: []
+          merge: null
+      - number: 2
+        slug: utils-namespacing
+        title: "Utils and Volume Override Namespacing"
+        path: "plan/phase-02-container-namespacing/002-utils-namespacing.md"
+        done: false
+        tier: "sonnet-high"
+        git:
+          branch: null
+          commit: []
+          merge: null
+
+  - number: 3
+    slug: commands
+    title: "Commands — create, list, stop/delete"
+    tasks:
+      - number: 1
+        slug: create-command
+        title: "Implement create Command"
+        path: "plan/phase-03-commands/001-create-command.md"
+        done: false
+        tier: "sonnet-high"
+        git:
+          branch: null
+          commit: []
+          merge: null
+      - number: 2
+        slug: list-stop-delete
+        title: "Implement list, stop Semantics, and delete Command"
+        path: "plan/phase-03-commands/002-list-stop-delete.md"
+        done: false
+        tier: "sonnet-med"
+        git:
+          branch: null
+          commit: []
+          merge: null
+
+  - number: 4
+    slug: renames-and-cleanup
+    title: "Command Renames and Cleanup"
+    tasks:
+      - number: 1
+        slug: new-profile-rename
+        title: "Rename create-profile to new-profile"
+        path: "plan/phase-04-renames-and-cleanup/001-new-profile-rename.md"
+        done: false
+        tier: "sonnet-med"
+        git:
+          branch: null
+          commit: []
+          merge: null
+      - number: 2
+        slug: help-and-status
+        title: "Update Help Text and Status for Per-Instance Context"
+        path: "plan/phase-04-renames-and-cleanup/002-help-and-status.md"
+        done: false
+        tier: "sonnet-med"
+        git:
+          branch: null
+          commit: []
+          merge: null
+
+  - number: 5
+    slug: tests-and-qa
+    title: "Tests and QA Gate"
+    tasks:
+      - number: 1
+        slug: tests-and-qa
+        title: "Update Unit Tests and QA Gate"
+        path: "plan/phase-05-tests-and-qa/001-tests-and-qa.md"
+        done: false
+        tier: "sonnet-high"
+        git:
+          branch: null
+          commit: []
+          merge: null
