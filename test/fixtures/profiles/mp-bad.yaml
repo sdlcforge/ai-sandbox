@@ -1,0 +1,5 @@
+metadata:
+  name: mp-bad
+  version: "1.0.0"
+marketplaces:
+  - ftp://bad-protocol.example.com

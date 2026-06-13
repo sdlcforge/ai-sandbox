@@ -1,0 +1,4 @@
+metadata:
+  name: eap-false
+  version: "1.0.0"
+enable_all_plugins: false
