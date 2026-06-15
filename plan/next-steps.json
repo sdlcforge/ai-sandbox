@@ -4,21 +4,23 @@
     "follow_ups": [
       {
         "date": "2026-06-12",
-        "source": "plan/phase-01-cli-parsing/001-options-and-dispatch.md",
-        "note": "Existing parse_options() unit tests will fail with the new two-tier CLI interface (tests assume old single-tier syntax). Phase 5 must update them."
+        "note": "Integration tests for create/list/stop/delete against a live Docker daemon were not written. Follow-up in a future QA plan."
       },
       {
         "date": "2026-06-12",
-        "source": "plan/phase-01-cli-parsing/001-options-and-dispatch.md",
-        "note": "stop command currently dispatches to docker compose down (same as delete). Phase 3 must differentiate: stop → docker compose stop (pause); delete → docker compose down (remove)."
-      },
-      {
-        "date": "2026-06-12",
-        "source": "plan/phase-01-cli-parsing/001-options-and-dispatch.md",
-        "note": "CMD_EXPLICIT global removed. Phase 5 should confirm no remaining consumers in codebase or tests."
+        "note": "ai-sandbox list when Docker daemon is down prints 'No sandboxes found.' A future improvement could distinguish daemon-not-running from no managed containers."
       }
     ],
     "blockers": [],
-    "decisions": []
+    "decisions": [
+      {
+        "date": "2026-06-12",
+        "note": "Label-only instance state: no XDG state files. Existence is determined from docker ps -a --filter label=ai.sandbox.managed=true."
+      },
+      {
+        "date": "2026-06-12",
+        "note": "stop preserves the container (docker compose stop); delete removes it (docker compose down). cleanup_stale_container treats exited as healthy."
+      }
+    ]
   }
 }
