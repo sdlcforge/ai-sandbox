@@ -313,6 +313,129 @@ Describe 'ai-sandbox.sh'
       The variable CLI_ENABLE_ALL should eq true
       The variable CONFIG_FLAGS_PROVIDED should eq true
     End
+
+    It 'errors when --enable-plugin is given no name'
+      When run parse_options create mybox --enable-plugin
+      The status should be failure
+      The stderr should include '--enable-plugin requires'
+    End
+
+    It 'CLI_ENABLE_ALL defaults to false when --enable-all is absent'
+      When call parse_options create mybox
+      The variable CLI_ENABLE_ALL should eq false
+    End
+
+    It '--clean sets CLEAN_SLATE to true'
+      When call parse_options create mybox --clean
+      The variable CLEAN_SLATE should eq true
+    End
+
+    It '--clean sets CONFIG_FLAGS_PROVIDED to true'
+      When call parse_options create mybox --clean
+      The variable CONFIG_FLAGS_PROVIDED should eq true
+    End
+
+    It 'CLEAN_SLATE defaults to false when --clean is absent'
+      When call parse_options create mybox
+      The variable CLEAN_SLATE should eq false
+    End
+
+    It '--clean can be combined with --add-marketplace and --enable-all'
+      When call parse_options create mybox --clean \
+        --add-marketplace file:///path/to/mp --enable-all
+      The variable CLEAN_SLATE should eq true
+      The variable "CLI_MARKETPLACES[*]" should eq 'file:///path/to/mp'
+      The variable CLI_ENABLE_ALL should eq true
+    End
+  End
+
+  Describe 'generate_volume_override() clean-slate mode' unit
+    setup() {
+      export TMPDIR_VO="$(mktemp -d)"
+      export HOME="${TMPDIR_VO}"
+      export OUT="${TMPDIR_VO}/compose-override.yaml"
+      unset AI_SANDBOX_MARKETPLACES
+      unset AI_SANDBOX_CLEAN_SLATE
+    }
+    cleanup() {
+      rm -rf "${TMPDIR_VO}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'skips plugin dir mounts when AI_SANDBOX_CLEAN_SLATE=true'
+      mkdir -p "${HOME}/.myplugin"
+      mkdir -p "${HOME}/.claude/plugins"
+      printf '{"plugins":{"myplugin@test":{}}}' \
+        > "${HOME}/.claude/plugins/installed_plugins.json"
+      export AI_SANDBOX_CLEAN_SLATE=true
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should not include '.myplugin'
+      The status should be success
+    End
+
+    It 'still mounts file:// marketplace paths when AI_SANDBOX_CLEAN_SLATE=true'
+      export AI_SANDBOX_CLEAN_SLATE=true
+      export AI_SANDBOX_MARKETPLACES="file:///srv/marketplace"
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should include '/srv/marketplace:/srv/marketplace:ro'
+      The status should be success
+    End
+
+    It 'mounts plugin dirs when AI_SANDBOX_CLEAN_SLATE is false (default behavior)'
+      mkdir -p "${HOME}/.myplugin"
+      mkdir -p "${HOME}/.claude/plugins"
+      printf '{"plugins":{"myplugin@test":{}}}' \
+        > "${HOME}/.claude/plugins/installed_plugins.json"
+      export AI_SANDBOX_CLEAN_SLATE=false
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should include '.myplugin'
+      The status should be success
+    End
+
+    It 'produces empty volumes list when clean and no marketplaces'
+      export AI_SANDBOX_CLEAN_SLATE=true
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should include 'volumes: []'
+      The status should be success
+    End
+  End
+
+  Describe 'generate_volume_override() file:// marketplace mounts' unit
+    setup() {
+      export TMPDIR_MP="$(mktemp -d)"
+      export HOME="${TMPDIR_MP}"
+      export OUT="${TMPDIR_MP}/compose-override.yaml"
+      unset AI_SANDBOX_CLEAN_SLATE
+    }
+    cleanup() {
+      rm -rf "${TMPDIR_MP}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'adds a read-only bind mount for a file:// marketplace entry'
+      export AI_SANDBOX_MARKETPLACES="file:///srv/my-marketplace"
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should include '/srv/my-marketplace:/srv/my-marketplace:ro'
+      The status should be success
+    End
+
+    It 'does not add a mount for https:// marketplace entries'
+      export AI_SANDBOX_MARKETPLACES="https://registry.example.com"
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should not include 'registry.example.com'
+      The status should be success
+    End
+
+    It 'handles multiple entries when pipe-separated'
+      export AI_SANDBOX_MARKETPLACES="file:///srv/mp1|https://remote.example.com|file:///srv/mp2"
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should include '/srv/mp1:/srv/mp1:ro'
+      The contents of file "${OUT}" should include '/srv/mp2:/srv/mp2:ro'
+      The contents of file "${OUT}" should not include 'remote.example.com'
+      The status should be success
+    End
   End
 
   Describe 'is_build_stale()'
