@@ -31,7 +31,7 @@ phases:
             branch: phase-02-task-01-compose-restructuring
             commit:
                 - 5fa27b8
-            merge: null
+            merge: d2eb226
     - number: 3
       slug: tests-and-qa
       title: Tests and QA Gate
