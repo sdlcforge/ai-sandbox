@@ -1,0 +1,26 @@
+{
+  "plan_slug": "multi-instance-sandbox",
+  "todos": {
+    "follow_ups": [
+      {
+        "date": "2026-06-12",
+        "note": "Integration tests for create/list/stop/delete against a live Docker daemon were not written. Follow-up in a future QA plan."
+      },
+      {
+        "date": "2026-06-12",
+        "note": "ai-sandbox list when Docker daemon is down prints 'No sandboxes found.' A future improvement could distinguish daemon-not-running from no managed containers."
+      }
+    ],
+    "blockers": [],
+    "decisions": [
+      {
+        "date": "2026-06-12",
+        "note": "Label-only instance state: no XDG state files. Existence is determined from docker ps -a --filter label=ai.sandbox.managed=true."
+      },
+      {
+        "date": "2026-06-12",
+        "note": "stop preserves the container (docker compose stop); delete removes it (docker compose down). cleanup_stale_container treats exited as healthy."
+      }
+    ]
+  }
+}
