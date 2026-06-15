@@ -46,6 +46,7 @@ services:
       ai.sandbox.mode: "${EFFECTIVE_MODE:-mirror}"
       ai.sandbox.no-isolate-config: "${NO_ISOLATE_CONFIG:-false}"
       ai.sandbox.docker-proxy: "${EFFECTIVE_PROXY:-false}"
+      ai.sandbox.clean-slate: "${AI_SANDBOX_CLEAN_SLATE:-false}"
       # Multi-instance management labels. ai.sandbox.managed marks containers
       # created by this tool (for `list`). ai.sandbox.instance records the
       # instance name for filtering. ai.sandbox.profiles records the comma-
@@ -56,15 +57,12 @@ services:
       ai.sandbox.profiles: "${SANDBOX_PROFILES:-}"
     volumes:
       # Map host directories to same absolute paths in container.
-      # ~/.claude is shared so plugins inside the VM see the same state as the host.
-      # The pre-flight in bin/ai-sandbox.sh enforces mutual exclusion — host and VM
-      # must not run claude or plugin workers simultaneously, or shared SQLite state
-      # can be corrupted.
+      # ~/.claude is added by docker-compose.mirror-claude.yaml in mirror mode
+      # (omitted in clean-slate mode so the container gets a fresh empty ~/.claude).
       # ~/.config handling is split into two overlay compose files:
       #   - docker-compose.isolate-config.yaml (default): read-only lower + overlayfs
       #   - docker-compose.shared-config.yaml  (--no-isolate-config): rw passthrough
       # Additional per-plugin mounts are generated dynamically into docker-compose.generated.yaml.
-      - ${HOST_HOME}/.claude:${HOST_HOME}/.claude
       - ${HOST_HOME}/playground:${HOST_HOME}/playground
       # SSH agent socket: host path is bind-mounted to a stable in-container path
       # (decouples container env from host path changes).

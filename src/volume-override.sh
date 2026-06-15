@@ -17,13 +17,16 @@ function generate_volume_override() {
     local -a mounts=()
     local plugin name line src dst
 
-    while IFS= read -r plugin; do
-        [ -z "${plugin}" ] && continue
-        name=".${plugin}"
-        if [ -d "${HOME}/${name}" ]; then
-            mounts+=("${HOME}/${name}:${HOME}/${name}")
-        fi
-    done < <(list_installed_plugins)
+    # Skip host plugin directory mounts in clean-slate mode.
+    if [ "${AI_SANDBOX_CLEAN_SLATE:-false}" != "true" ]; then
+        while IFS= read -r plugin; do
+            [ -z "${plugin}" ] && continue
+            name=".${plugin}"
+            if [ -d "${HOME}/${name}" ]; then
+                mounts+=("${HOME}/${name}:${HOME}/${name}")
+            fi
+        done < <(list_installed_plugins)
+    fi
 
     if [ -f "${user_maps}" ]; then
         while IFS= read -r line || [ -n "${line}" ]; do

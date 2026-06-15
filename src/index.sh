@@ -210,6 +210,12 @@ if profile_has_capability chromium; then
   COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.chromium.yaml"
 fi
 
+# ~/.claude mount: applied in all non-clean-slate invocations regardless of mode.
+# In clean-slate mode the container gets a fresh empty ~/.claude directory.
+if [ "${CLEAN_SLATE:-false}" != "true" ]; then
+  COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.mirror-claude.yaml"
+fi
+
 # Host-identity / config overlays only apply in mirror mode. static mode is
 # self-contained: no ~/.config overlay is applied (see decisions in task report
 # for the V1 scope of static-mode mount suppression).

@@ -1,0 +1,9 @@
+# Applied in non-clean-slate mode (the default). Bind-mounts the host's
+# ~/.claude into the container at the same absolute path so plugins and
+# Claude Code state are shared between host and container.
+# Omitted in clean-slate mode (--clean) so the container starts with a
+# fresh, empty ~/.claude directory.
+services:
+  ai-sandbox:
+    volumes:
+      - ${HOST_HOME}/.claude:${HOST_HOME}/.claude
