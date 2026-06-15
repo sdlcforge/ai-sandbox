@@ -1,26 +1,49 @@
 {
-  "plan_slug": "multi-instance-sandbox",
   "todos": {
     "follow_ups": [
       {
         "date": "2026-06-12",
+        "plan": "multi-instance-sandbox",
         "note": "Integration tests for create/list/stop/delete against a live Docker daemon were not written. Follow-up in a future QA plan."
       },
       {
         "date": "2026-06-12",
+        "plan": "multi-instance-sandbox",
         "note": "ai-sandbox list when Docker daemon is down prints 'No sandboxes found.' A future improvement could distinguish daemon-not-running from no managed containers."
+      },
+      {
+        "date": "2026-06-14",
+        "plan": "plugin-marketplace",
+        "note": "Phase 04 (Tests and QA Gate) was not executed. Unit tests for --add-marketplace/--enable-plugin/--enable-all flag parsing, generate_volume_override with file:// marketplaces, and profile-installer JSON output were not written. Carry forward into the next plan's QA phase."
+      },
+      {
+        "date": "2026-06-13",
+        "plan": "plugin-marketplace",
+        "note": "mid-task-commit.sh operates on the main checkout rather than the task worktree. Mid-task checkpoints were committed manually instead. Investigate and fix or document."
       }
     ],
-    "blockers": [],
     "decisions": [
       {
         "date": "2026-06-12",
+        "plan": "multi-instance-sandbox",
         "note": "Label-only instance state: no XDG state files. Existence is determined from docker ps -a --filter label=ai.sandbox.managed=true."
       },
       {
         "date": "2026-06-12",
+        "plan": "multi-instance-sandbox",
         "note": "stop preserves the container (docker compose stop); delete removes it (docker compose down). cleanup_stale_container treats exited as healthy."
+      },
+      {
+        "date": "2026-06-13",
+        "plan": "plugin-marketplace",
+        "note": "Plugin marketplace refs are passed through the container environment as pipe-separated strings (AI_SANDBOX_MARKETPLACES, AI_SANDBOX_PLUGINS) rather than colon-separated, because marketplace URLs contain colons."
+      },
+      {
+        "date": "2026-06-13",
+        "plan": "plugin-marketplace",
+        "note": "The 10-plugin-setup cont-init script runs claude CLI commands as the host user so ~/.claude resolves to the bind-mounted directory with correct ownership."
       }
-    ]
+    ],
+    "blockers": []
   }
 }
