@@ -16,4 +16,4 @@ Tracking document for the active plan.
 
 ### Phase 03 — Tests and QA Gate
 
-- [ ] [001-tests-and-qa.md](./phase-03-tests-and-qa/001-tests-and-qa.md) — tier `sonnet-high` · branch `…` · commit `…` · merge `…`
+- [x] [001-tests-and-qa.md](./phase-03-tests-and-qa/001-tests-and-qa.md) — tier `sonnet-high` · branch `phase-03-task-01-tests-and-qa-gate` · commit `32a6c7c` · merge `…`

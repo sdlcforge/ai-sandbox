@@ -40,9 +40,10 @@ phases:
           slug: tests-and-qa
           title: Unit Tests and QA Gate (--clean + plugin-marketplace backfill)
           path: phase-03-tests-and-qa/001-tests-and-qa.md
-          done: false
+          done: true
           tier: sonnet-high
           git:
-            branch: null
-            commit: []
+            branch: phase-03-task-01-tests-and-qa-gate
+            commit:
+                - 32a6c7c
             merge: null
