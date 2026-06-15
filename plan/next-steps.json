@@ -12,9 +12,9 @@
         "note": "ai-sandbox list when Docker daemon is down prints 'No sandboxes found.' A future improvement could distinguish daemon-not-running from no managed containers."
       },
       {
-        "date": "2026-06-14",
-        "plan": "plugin-marketplace",
-        "note": "Phase 04 (Tests and QA Gate) was not executed. Unit tests for --add-marketplace/--enable-plugin/--enable-all flag parsing, generate_volume_override with file:// marketplaces, and profile-installer JSON output were not written. Carry forward into the next plan's QA phase."
+        "date": "2026-06-15",
+        "plan": "plugin-marketplace / clean-slate-mode",
+        "note": "profile-installer JSON output tests were not written (partially backfilled in clean-slate-mode Phase 03: flag parsing and generate_volume_override file:// tests were added). Remaining gap: profile-installer node script unit tests."
       },
       {
         "date": "2026-06-13",
@@ -48,6 +48,21 @@
         "date": "2026-06-13",
         "plan": "plugin-marketplace",
         "note": "The 10-plugin-setup cont-init script runs claude CLI commands as the host user so ~/.claude resolves to the bind-mounted directory with correct ownership."
+      },
+      {
+        "date": "2026-06-15",
+        "plan": "clean-slate-mode",
+        "note": "--clean always forces EFFECTIVE_MODE=static, overriding MODE_OVERRIDE and profile mode. This ensures ~/.config overlays are never applied in clean mode."
+      },
+      {
+        "date": "2026-06-15",
+        "plan": "clean-slate-mode",
+        "note": "~/.claude mount extracted to docker-compose.mirror-claude.yaml overlay, included by default and skipped in clean mode. Mirrors the ~/.config overlay pattern."
+      },
+      {
+        "date": "2026-06-15",
+        "plan": "clean-slate-mode",
+        "note": "Clean mode suppresses implicit host state (plugin dir mounts, ~/.claude bind-mount) but NOT explicitly-requested resources (file:// marketplace mounts still applied via generate_volume_override)."
       }
     ],
     "blockers": []
