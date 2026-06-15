@@ -20,6 +20,12 @@
         "date": "2026-06-13",
         "plan": "plugin-marketplace",
         "note": "mid-task-commit.sh operates on the main checkout rather than the task worktree. Mid-task checkpoints were committed manually instead. Investigate and fix or document."
+      },
+      {
+        "date": "2026-06-15",
+        "plan": "clean-slate-mode",
+        "task": "phase-02-compose-and-volumes/001-compose-restructuring.md",
+        "note": "Validation check 4 (docker compose config parse for docker-compose.mirror-claude.yaml) was not-applicable — no live Docker daemon in task agent context. Low-risk: file mirrors docker-compose.shared-config.yaml. Verify manually or via integration test."
       }
     ],
     "decisions": [

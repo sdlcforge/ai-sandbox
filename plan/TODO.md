@@ -12,7 +12,7 @@ Tracking document for the active plan.
 
 ### Phase 02 — Compose Restructuring and Volume Suppression
 
-- [ ] [001-compose-restructuring.md](./phase-02-compose-and-volumes/001-compose-restructuring.md) — tier `sonnet-high` · branch `…` · commit `…` · merge `…`
+- [x] [001-compose-restructuring.md](./phase-02-compose-and-volumes/001-compose-restructuring.md) — tier `sonnet-high` · branch `phase-02-task-01-compose-restructuring` · commit `5fa27b8` · merge `…`
 
 ### Phase 03 — Tests and QA Gate
 

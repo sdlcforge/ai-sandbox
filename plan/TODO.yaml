@@ -25,11 +25,12 @@ phases:
           slug: compose-restructuring
           title: Extract ~/.claude Mount and Add Clean Overlay Logic
           path: phase-02-compose-and-volumes/001-compose-restructuring.md
-          done: false
+          done: true
           tier: sonnet-high
           git:
-            branch: null
-            commit: []
+            branch: phase-02-task-01-compose-restructuring
+            commit:
+                - 5fa27b8
             merge: null
     - number: 3
       slug: tests-and-qa
