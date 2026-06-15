@@ -118,3 +118,21 @@ grep -n "inspect.*'ai-sandbox'" src/status.sh
 grep 'Sandbox:' src/status.sh
 # Expected: the echo line in do_status or _render_status_human
 ```
+
+## Status
+
+- **outcome:** succeeded
+- **date:** 2026-06-12
+- **branch:** phase-04-task-02-help-and-status
+- **validation summary:**
+  - `make build` — passed (clean rollup, no errors)
+  - `make lint` — passed (shellcheck clean across all src/, docker/, test/ files)
+  - help grep for `create|new-profile|delete|list` — passed (all four terms matched)
+  - `grep -n "inspect.*'ai-sandbox'" src/status.sh` — passed (0 matches)
+  - `grep 'Sandbox:' src/status.sh` — passed (`echo "Sandbox: ${SANDBOX_NAME}"` present in `do_status()`)
+- **files changed:**
+  - `src/help.sh` — full rewrite for two-tier CLI shape
+  - `src/status.sh` — `_status_container_state()` now uses `sandbox_container_name()`; clarifying comment added to `_status_gather_images()`; `do_status()` emits `Sandbox: ${SANDBOX_NAME}` before human-render output
+- **decisions made:**
+  - Placed `echo "Sandbox: ${SANDBOX_NAME}"` directly in `do_status()` (before calling `_render_status_human`) rather than inside `_render_status_human` — this keeps the sandbox identification at the dispatch layer and leaves the render helper focused on the container/image data it already received.
+  - The image-name comment in `_status_gather_images()` is three lines (repo-relative clarity note) rather than one to make the distinction between image prefix and container name explicit.
