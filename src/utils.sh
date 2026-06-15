@@ -91,11 +91,13 @@ function running_config_matches() {
     cur_mode=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.mode"}}' "${ctr_name}" 2>/dev/null || true)
     cur_no_isolate=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.no-isolate-config"}}' "${ctr_name}" 2>/dev/null || true)
     cur_proxy=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.docker-proxy"}}' "${ctr_name}" 2>/dev/null || true)
+    cur_clean=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.clean-slate"}}' "${ctr_name}" 2>/dev/null || true)
     [ "${cur_image}" = "${AI_SANDBOX_IMAGE_TAG:-}" ] || return 1
     [ "${cur_hash}" = "${PROFILE_COMPOSITION_HASH:-}" ] || return 1
     [ "${cur_mode:-mirror}" = "${EFFECTIVE_MODE:-mirror}" ] || return 1
     [ "${cur_no_isolate:-false}" = "${NO_ISOLATE_CONFIG:-false}" ] || return 1
     [ "${cur_proxy:-false}" = "${EFFECTIVE_PROXY:-false}" ] || return 1
+    [ "${cur_clean:-false}" = "${AI_SANDBOX_CLEAN_SLATE:-false}" ] || return 1
     return 0
 }
 

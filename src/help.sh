@@ -21,6 +21,10 @@ Global commands:
                              --enable-plugin <name>   Enable a named plugin from any registered
                                                 marketplace. Repeatable.
                              --enable-all       Enable all plugins from the last marketplace.
+                             --clean            Start with no host ~/.claude bind-mount, no
+                                                ~/.config overlay, and no plugin dir mounts.
+                                                Implies static mode. Container gets a fresh
+                                                empty ~/.claude; Claude Code is still installed.
   list                     List all managed sandbox instances.
   new-profile              Scaffold a profile YAML from local Claude assets.
                              Requires --name. Options: --name, --mode, --output, --plugins.

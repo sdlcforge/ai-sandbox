@@ -144,12 +144,18 @@ fi
 export PROFILE_JSON
 
 # MODE_OVERRIDE wins; else the profile's mode; else mirror (legacy default).
-if [ -n "${MODE_OVERRIDE}" ]; then
+# --clean always forces static mode regardless of MODE_OVERRIDE or profile mode.
+if [ "${CLEAN_SLATE:-false}" = "true" ]; then
+  EFFECTIVE_MODE=static
+elif [ -n "${MODE_OVERRIDE}" ]; then
   EFFECTIVE_MODE="${MODE_OVERRIDE}"
 else
   EFFECTIVE_MODE="${PROFILE_MODE:-mirror}"
 fi
 export EFFECTIVE_MODE
+
+AI_SANDBOX_CLEAN_SLATE="${CLEAN_SLATE:-false}"
+export AI_SANDBOX_CLEAN_SLATE
 
 # Per-composition image tag consumed by docker/docker-compose.yaml.
 # profile_image_suffix() reads PROFILE_COMPOSITION_HASH set above from the

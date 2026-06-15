@@ -18,6 +18,7 @@
 #   CLI_MARKETPLACES — array of --add-marketplace refs (https:// or file://)
 #   CLI_PLUGINS   — array of --enable-plugin names
 #   CLI_ENABLE_ALL — "true" if --enable-all was passed
+#   CLEAN_SLATE   — "true" if --clean was passed (no host ~/.claude or plugin mounts)
 # Also exports AI_SANDBOX_SKIP_PLUGIN_CHECK when --force is passed.
 function parse_options() {
     SANDBOX_NAME=""
@@ -35,6 +36,7 @@ function parse_options() {
     CLI_MARKETPLACES=()
     CLI_PLUGINS=()
     CLI_ENABLE_ALL=false
+    CLEAN_SLATE=false
 
     # Global command words — first non-flag arg matching one of these is a global command.
     local -r GLOBAL_COMMANDS="create list help kill-local-ai new-profile"
@@ -84,7 +86,7 @@ function parse_options() {
         export SANDBOX_NAME SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
                NO_ISOLATE_CONFIG CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
                STATUS_JSON STATUS_TEST_CHECK QUIET \
-               CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL
+               CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE
         if [ -z "${QUIET}" ]; then
             QUIET=1
         fi
@@ -220,6 +222,10 @@ function parse_options() {
                 CLI_ENABLE_ALL=true
                 CONFIG_FLAGS_PROVIDED=true
                 ;;
+            --clean)
+                CLEAN_SLATE=true
+                CONFIG_FLAGS_PROVIDED=true
+                ;;
             --enter)
                 # Only meaningful for `create`; silently accepted for other commands
                 ENTER_AFTER_CREATE=true
@@ -261,5 +267,5 @@ function parse_options() {
     export SANDBOX_NAME SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
            NO_ISOLATE_CONFIG CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
            STATUS_JSON STATUS_TEST_CHECK QUIET \
-           CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL
+           CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE
 }
