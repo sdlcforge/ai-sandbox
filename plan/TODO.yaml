@@ -1,0 +1,46 @@
+slug: "clean-slate-mode"
+version: 0
+title: "Clean-Slate Mode (--clean flag)"
+phases:
+  - number: 1
+    slug: cli-and-state
+    title: CLI Flag and State Propagation
+    tasks:
+      - number: 1
+        slug: clean-flag-and-propagation
+        title: --clean Flag, State Propagation, and Help Text
+        path: phase-01-cli-and-state/001-clean-flag-and-propagation.md
+        done: false
+        tier: sonnet-med
+        git:
+          branch: null
+          commit: []
+          merge: null
+  - number: 2
+    slug: compose-and-volumes
+    title: Compose Restructuring and Volume Suppression
+    tasks:
+      - number: 1
+        slug: compose-restructuring
+        title: Extract ~/.claude Mount and Add Clean Overlay Logic
+        path: phase-02-compose-and-volumes/001-compose-restructuring.md
+        done: false
+        tier: sonnet-high
+        git:
+          branch: null
+          commit: []
+          merge: null
+  - number: 3
+    slug: tests-and-qa
+    title: Tests and QA Gate
+    tasks:
+      - number: 1
+        slug: tests-and-qa
+        title: Unit Tests and QA Gate (--clean + plugin-marketplace backfill)
+        path: phase-03-tests-and-qa/001-tests-and-qa.md
+        done: false
+        tier: sonnet-high
+        git:
+          branch: null
+          commit: []
+          merge: null
