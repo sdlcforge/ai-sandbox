@@ -188,3 +188,27 @@ The `user_maps` file loop (reading `~/.config/ai-sandbox/volume-maps`) should al
 - The `ai.sandbox.clean-slate` label is written to the base compose so it is always stamped on the container. `running_config_matches` (updated in Phase 01) reads this label to detect when switching between clean and non-clean would require a container recreate.
 - The `~/.claude` volume comment in `docker-compose.yaml` should clearly state that the mount now lives in `docker-compose.mirror-claude.yaml` so future maintainers know where to find it.
 - `is_build_stale` scans `docker/` for newer files; adding `docker-compose.mirror-claude.yaml` is automatically included in that scan — no changes to `is_build_stale` needed.
+
+## Status
+
+**outcome:** succeeded
+**date:** 2026-06-15
+**branch:** phase-02-task-01-compose-restructuring
+
+**validation summary:**
+1. `make build` — passed (exit 0, rollup completed without errors)
+2. `make lint` — passed (shellcheck clean across all source files, no new issues)
+3. Manual verification checks (informational) — confirmed by static inspection:
+   - `docker/docker-compose.mirror-claude.yaml` created with the `${HOST_HOME}/.claude:${HOST_HOME}/.claude` mount
+   - `src/index.sh` conditionally appends `mirror-claude.yaml` when `CLEAN_SLATE != true`
+   - In clean-slate mode the `if [ "${EFFECTIVE_MODE}" = "mirror" ]` config block is also skipped (mode forced to `static` by Phase 01), so both guards cooperate correctly
+   - `src/volume-override.sh` plugin loop guarded by `AI_SANDBOX_CLEAN_SLATE != true`; `file://` marketplace loop and `user_maps` loop are intentionally left unguarded
+4. Docker compose config parse check (informational) — deferred; requires a live Docker daemon with env vars set; structure is syntactically consistent with the existing overlay files
+**unit tests:** 90 examples, 0 failures (`make test.unit`)
+
+**affected source files (repo-relative):**
+- `docker/docker-compose.yaml`
+- `docker/docker-compose.mirror-claude.yaml` (new)
+- `src/index.sh`
+- `src/volume-override.sh`
+- `bin/ai-sandbox.sh` (regenerated rollup)
