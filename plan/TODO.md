@@ -12,11 +12,11 @@ Tracking document for the active plan.
 
 ### Phase 02 — CLI Flags
 
-- [ ] [001-cli-flags.md](./phase-02-cli-flags/001-cli-flags.md) — tier `sonnet-med` · branch `…` · commit `…` · merge `…`
+- [x] [001-cli-flags.md](./phase-02-cli-flags/001-cli-flags.md) — tier `sonnet-med` · branch `phase-02-task-01-cli-flags` · commit `2911d3e` · merge `a6773ac`
 
 ### Phase 03 — Container Plugin Setup
 
-- [ ] [001-container-plugin-setup.md](./phase-03-container-plugin-setup/001-container-plugin-setup.md) — tier `sonnet-high` · branch `…` · commit `…` · merge `…`
+- [x] [001-container-plugin-setup.md](./phase-03-container-plugin-setup/001-container-plugin-setup.md) — tier `sonnet-high` · branch `phase-03-task-01-container-plugin-setup` · commit `dda4f62` · merge `542d18b`
 
 ### Phase 04 — Tests and QA Gate
 

@@ -25,12 +25,13 @@ phases:
           slug: cli-flags
           title: CLI Flags
           path: phase-02-cli-flags/001-cli-flags.md
-          done: false
+          done: true
           tier: sonnet-med
           git:
-            branch: null
-            commit: []
-            merge: null
+            branch: phase-02-task-01-cli-flags
+            commit:
+                - 2911d3e
+            merge: a6773ac
     - number: 3
       slug: container-plugin-setup
       title: Container Plugin Setup
@@ -39,12 +40,13 @@ phases:
           slug: container-plugin-setup
           title: Container Plugin Setup
           path: phase-03-container-plugin-setup/001-container-plugin-setup.md
-          done: false
+          done: true
           tier: sonnet-high
           git:
-            branch: null
-            commit: []
-            merge: null
+            branch: phase-03-task-01-container-plugin-setup
+            commit:
+                - dda4f62
+            merge: 542d18b
     - number: 4
       slug: tests-and-qa
       title: Tests and QA Gate

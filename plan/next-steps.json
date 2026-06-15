@@ -6,9 +6,23 @@
         "date": "2026-06-13",
         "task": "phase-01-schema-and-installer/001-profile-schema-and-installer.md",
         "note": "mid-task-commit.sh appears to operate on the main checkout rather than the worktree; running it from the worktree context failed (it committed to main which had no staged changes). Mid-task checkpoints were committed manually from the worktree instead. Investigate if the script is intended to work inside worktrees."
+      },
+      {
+        "date": "2026-06-14",
+        "task": "phase-04-tests-and-qa/001-tests-and-qa.md",
+        "note": "Phase 04 (Tests and QA Gate) was not executed during this session. Phases 01–03 shipped the feature (profile schema, CLI flags, container plugin setup) but the unit test suite for flag parsing, generate_volume_override with file:// marketplaces, and profile-installer JSON output was not written. Carry forward into the next plan's QA phase."
       }
     ],
-    "decisions": [],
+    "decisions": [
+      {
+        "date": "2026-06-13",
+        "note": "Plugin marketplace refs are passed through the container environment as pipe-separated strings (AI_SANDBOX_MARKETPLACES, AI_SANDBOX_PLUGINS) rather than colon-separated, because marketplace URLs contain colons."
+      },
+      {
+        "date": "2026-06-13",
+        "note": "The 10-plugin-setup cont-init script runs claude CLI commands as the host user so ~/.claude resolves to the bind-mounted directory with correct ownership."
+      }
+    ],
     "blockers": []
   }
 }
