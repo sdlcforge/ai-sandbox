@@ -69,11 +69,6 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 PROJECT_ROOT="$(cd -P "${SCRIPT_DIR}/.." && pwd)"
 
-# --- Phase: plugin-conflict pre-flight (start/enter/up only) ---
-if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "up" ]; then
-    check_host_plugin_conflicts || exit 1
-fi
-
 # --- Phase: restore saved profiles for start/enter (no config flags) ---
 # When start/enter is called without any config-changing flags, read the
 # profile list that was saved at `create` time so the container restarts with
@@ -153,6 +148,14 @@ else
   EFFECTIVE_MODE="${PROFILE_MODE:-mirror}"
 fi
 export EFFECTIVE_MODE
+
+# --- Phase: plugin-conflict pre-flight (start/enter/up, mirror mode only) ---
+# Static mode doesn't mount ~/.claude from the host, so there's no shared SQLite
+# state that could be corrupted by concurrent host processes.
+if { [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ] || [ "${CMD}" == "up" ]; } \
+        && [ "${EFFECTIVE_MODE}" = "mirror" ]; then
+    check_host_plugin_conflicts || exit 1
+fi
 
 AI_SANDBOX_CLEAN_SLATE="${CLEAN_SLATE:-false}"
 export AI_SANDBOX_CLEAN_SLATE
@@ -241,8 +244,8 @@ fi
 COMPOSE_PROJECT="ai-sandbox-${SANDBOX_NAME}"
 export COMPOSE_PROJECT
 
-# --- Phase: XQuartz setup (macOS, start/enter only) ---
-if { [ "${CMD}" = "start" ] || [ "${CMD}" = "enter" ]; } && [ "$(uname)" = "Darwin" ]; then
+# --- Phase: XQuartz setup (macOS, chromium capability, start/enter only) ---
+if { [ "${CMD}" = "start" ] || [ "${CMD}" = "enter" ]; } && [ "$(uname)" = "Darwin" ] && profile_has_capability chromium; then
     ensure_xquartz
 fi
 
