@@ -174,6 +174,7 @@ RUN echo "${HOST_USER} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/entrypoint_scr
 # === LAYER 12: Shell config ===
 USER ${HOST_USER}
 RUN echo "export PATH=\$PATH:${HOST_HOME}/.bun/bin:${HOST_HOME}/.local/bin:${HOST_HOME}/go/bin" >> ${HOST_HOME}/.zshenv
+ENV PATH="${HOST_HOME}/.bun/bin:${HOST_HOME}/.local/bin:${HOST_HOME}/go/bin:${PATH}"
 # Enable 'ctrl + a', 'ctrl + e', etc.
 RUN echo "bindkey -e" >> ${HOST_HOME}/.zshrc
 RUN echo "PROMPT='%F{red}%~%f %# '" >> ${HOST_HOME}/.zshrc

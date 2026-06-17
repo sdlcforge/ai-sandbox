@@ -1,0 +1,8 @@
+# Applied in clean-slate mode when OAuth credentials are available on the host.
+# Passes credentials into the container via environment variable so the init
+# script (04-write-credentials) can write them directly, bypassing Docker
+# Desktop's virtiofs keep_cache which would otherwise serve a stale bind mount.
+services:
+  ai-sandbox:
+    environment:
+      - AI_SANDBOX_CREDENTIALS_JSON_B64

@@ -1,0 +1,37 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# 05-install-claude: Install Claude Code at container startup if it is not
+# already present in the image. This is a no-op for images that pre-install
+# claude at build time (layer 10), and a bootstrap step for images that don't.
+# Runs before 10-plugin-setup so the binary is available for plugin commands.
+set -u
+
+CLAUDE_BIN="${HOST_HOME}/.bun/bin/claude"
+BUN_BIN="${HOST_HOME}/.bun/bin/bun"
+
+if [ -x "${CLAUDE_BIN}" ]; then
+    exit 0
+fi
+
+if [ ! -x "${BUN_BIN}" ]; then
+    printf '[05-install-claude] warn: bun not found at %s; cannot install claude\n' \
+        "${BUN_BIN}" >&2
+    exit 0
+fi
+
+printf '[05-install-claude] claude not found; installing @anthropic-ai/claude-code via bun\n'
+/command/s6-setuidgid "${HOST_USER}" env HOME="${HOST_HOME}" \
+    "${BUN_BIN}" install -g @anthropic-ai/claude-code 2>&1 \
+    || { printf '[05-install-claude] warn: claude install failed\n' >&2; exit 0; }
+
+# Ensure the symlink exists if bun didn't create it.
+if [ ! -e "${CLAUDE_BIN}" ]; then
+    _cli=$(find "${HOST_HOME}/.bun/install/global/node_modules/@anthropic-ai/claude-code" \
+               -name 'cli.js' -maxdepth 2 2>/dev/null | head -1)
+    if [ -n "${_cli}" ]; then
+        ln -s "${_cli}" "${CLAUDE_BIN}"
+    fi
+fi
+
+printf '[05-install-claude] claude installed\n'
+exit 0

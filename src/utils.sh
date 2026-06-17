@@ -230,6 +230,24 @@ function do_build() {
     docker compose ${COMPOSE_FILES} build --ssh "default=${SSH_AUTH_SOCK}"
 }
 
+# Remove all ai-sandbox:* variant images from the local daemon.
+# Images are shared across instances (keyed by composition hash), so this
+# sweeps every variant rather than just the one for the current sandbox.
+function do_clean_images() {
+    local IMAGES
+    IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}}' \
+        | awk -F: '$1 == "ai-sandbox" {print}' || true)
+    if [ -n "${IMAGES}" ]; then
+        # shellcheck disable=SC2086 # intentional word-splitting across image tags
+        docker image rm -f ${IMAGES} >/dev/null 2>&1 || true
+        if [ "${QUIET}" -ne 0 ]; then
+            echo "deleted images:"
+            # shellcheck disable=SC2086 # same as above
+            printf '  %s\n' ${IMAGES}
+        fi
+    fi
+}
+
 function cleanup_stale_container() {
     local state
     state=$(docker inspect -f '{{.State.Status}}' "$(sandbox_container_name)" 2>/dev/null) || return 0

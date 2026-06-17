@@ -233,11 +233,24 @@ Describe 'ai-sandbox.sh'
       The stderr should include "must be 'mirror' or 'static'"
     End
 
-    It 'rejects reserved names as sandbox names'
-      When run parse_options status
-      The status should be failure
-      The stderr should include 'reserved'
+    It 'routes a bare per-instance command to CMD with empty SANDBOX_NAME'
+      When call parse_options clean
+      The variable CMD should eq clean
+      The variable SANDBOX_NAME should eq ''
     End
+
+    It 'routes status as a per-instance command on the default sandbox'
+      When call parse_options status
+      The variable CMD should eq status
+      The variable SANDBOX_NAME should eq ''
+    End
+
+    It 'still routes <name> <cmd> correctly for per-instance commands'
+      When call parse_options mybox clean
+      The variable SANDBOX_NAME should eq mybox
+      The variable CMD should eq clean
+    End
+
 
     It 'errors and points to --profile docker when --docker is passed'
       When run parse_options create mybox --docker

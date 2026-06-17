@@ -120,6 +120,14 @@ Describe 'Container internals' integration
     End
   End
 
+  Describe 'Claude Code'
+    It 'is installed and on PATH'
+      When call ./bin/ai-sandbox.sh --quiet user-exec claude --version
+      The output should be present
+      The status should be success
+    End
+  End
+
   Describe 'git-delta'
     It 'is installed'
       When call ./bin/ai-sandbox.sh --quiet user-exec zsh -c "delta --version"

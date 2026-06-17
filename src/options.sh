@@ -113,6 +113,22 @@ function parse_options() {
             fi
         done
 
+        # Per-instance command words that may appear without a sandbox-name prefix.
+        # When the first positional arg matches one of these, route to CMD with an
+        # empty (default) SANDBOX_NAME instead of treating the word as a sandbox
+        # name.  Without this, `ai-sandbox clean` parses as SANDBOX_NAME=clean /
+        # CMD=enter, which triggers the plugin-conflict check and enters the wrong
+        # sandbox.
+        local -r PER_INSTANCE_COMMANDS="start enter attach connect fix-ssh build user-exec root-exec status stop delete clean up"
+        local is_per_instance_cmd=false
+        local pic
+        for pic in ${PER_INSTANCE_COMMANDS}; do
+            if [ "${first_arg}" = "${pic}" ]; then
+                is_per_instance_cmd=true
+                break
+            fi
+        done
+
         if [ "${is_global}" = "true" ]; then
             CMD="${first_arg}"
             # remaining args after the command word
@@ -122,6 +138,12 @@ function parse_options() {
                 SANDBOX_NAME="${remaining[0]}"
                 remaining=("${remaining[@]:1}")
             fi
+        elif [ "${is_per_instance_cmd}" = "true" ]; then
+            # Command word used without a sandbox-name prefix; apply to the
+            # default (empty-name) sandbox.
+            SANDBOX_NAME=""
+            CMD="${first_arg}"
+            remaining=("${remaining[@]:1}")
         else
             # Per-instance: first arg is sandbox name
             SANDBOX_NAME="${first_arg}"

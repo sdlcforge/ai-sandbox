@@ -8,6 +8,7 @@ source ./plugin-conflicts.sh
 source ./volume-override.sh
 source ./tool-versions.sh
 source ./xquartz.sh
+source ./credentials.sh
 source ./options.sh
 source ./help.sh
 source ./kill-local.sh
@@ -202,6 +203,15 @@ export AI_SANDBOX_MARKETPLACES AI_SANDBOX_PLUGINS AI_SANDBOX_ENABLE_ALL_PLUGINS
   "${PROFILE_CAPABILITIES}" "${PROFILE_ASSEMBLED_DOCKERFILE}" >/dev/null
 export AI_SANDBOX_DOCKERFILE="${PROFILE_ASSEMBLED_DOCKERFILE}"
 
+# --- Phase: credential snapshot (clean-slate mode, start/enter/create/up only) ---
+# Export AI_SANDBOX_CREDENTIALS_JSON_B64 before compose assembly so the claude-auth
+# compose file is included only when credentials are actually available.
+if [ "${CLEAN_SLATE:-false}" = "true" ] && \
+   { [ "${CMD}" = "start" ] || [ "${CMD}" = "enter" ] || \
+     [ "${CMD}" = "create" ] || [ "${CMD}" = "up" ]; }; then
+    ensure_clean_slate_credentials
+fi
+
 # --- Phase: assemble docker-compose file list ---
 # Each instance has its own generated compose file to avoid cross-instance collisions.
 GENERATED_COMPOSE="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox/${SANDBOX_NAME}/docker-compose.generated.yaml"
@@ -214,9 +224,13 @@ if profile_has_capability chromium; then
 fi
 
 # ~/.claude mount: applied in all non-clean-slate invocations regardless of mode.
-# In clean-slate mode the container gets a fresh empty ~/.claude directory.
+# In clean-slate mode the container gets a fresh empty ~/.claude directory, but
+# credentials are injected via AI_SANDBOX_CREDENTIALS_JSON_B64 (env var passthrough)
+# so the container init script can write them directly, bypassing virtiofs caching.
 if [ "${CLEAN_SLATE:-false}" != "true" ]; then
   COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.mirror-claude.yaml"
+elif [ -n "${AI_SANDBOX_CREDENTIALS_JSON_B64:-}" ]; then
+  COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.claude-auth.yaml"
 fi
 
 # Host-identity / config overlays only apply in mirror mode. static mode is
@@ -332,18 +346,7 @@ elif [ "${CMD}" == "clean" ]; then
     docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} down
     # Remove the container by its explicit name in case compose down left it.
     docker rm -f "$(sandbox_container_name)" 2>/dev/null || true
-    # Remove all ai-sandbox:* variant images. Images are shared across instances
-    # (keyed by composition hash), so all-images cleanup is intentional here.
-    IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}}' \
-        | awk -F: '$1 == "ai-sandbox" {print}' || true)
-    if [ -n "${IMAGES}" ]; then
-        # shellcheck disable=SC2086 # intentional word-splitting across tags
-        docker image rm -f ${IMAGES} >/dev/null 2>&1 || true
-        if [ $QUIET -ne 0 ]; then
-            echo "deleted images:"
-            printf '  %s\n' ${IMAGES}
-        fi
-    fi
+    do_clean_images
 else
     docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} "${ARGS[@]}"
 fi
