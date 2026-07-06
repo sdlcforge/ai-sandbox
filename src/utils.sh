@@ -142,7 +142,28 @@ function restore_saved_config() {
             CLEAN_SLATE="${saved_clean}"
         fi
         if [ -n "${saved_marketplaces}" ]; then
-            IFS='|' read -ra CLI_MARKETPLACES <<< "${saved_marketplaces}"
+            # Re-validate the https://|file:// scheme constraint here too --
+            # src/options.sh's --add-marketplace parser enforces it on
+            # freshly-typed input, but a restored value comes from a
+            # persisted docker label rather than this run's CLI args, so it
+            # must be independently checked before being trusted. Drop (with
+            # a warning) any entry that doesn't match, rather than restoring
+            # it verbatim.
+            local _restored_mp _validated_marketplaces=() _mp
+            IFS='|' read -ra _restored_mp <<< "${saved_marketplaces}"
+            for _mp in "${_restored_mp[@]}"; do
+                case "${_mp}" in
+                    https://*|file://*)
+                        _validated_marketplaces+=("${_mp}")
+                        ;;
+                    *)
+                        echo "Warning: dropping restored marketplace ref with invalid scheme (must be https:// or file://): '${_mp}'" 1>&2
+                        ;;
+                esac
+            done
+            if [ "${#_validated_marketplaces[@]}" -gt 0 ]; then
+                CLI_MARKETPLACES=("${_validated_marketplaces[@]}")
+            fi
         fi
         if [ -n "${saved_plugins}" ]; then
             IFS='|' read -ra CLI_PLUGINS <<< "${saved_plugins}"
