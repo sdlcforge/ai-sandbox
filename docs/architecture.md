@@ -149,6 +149,8 @@ durable, auto-reapplied on every subsequent bare `enter`/`start`. What was
 previously a one-shot compromise becomes self-perpetuating across future,
 otherwise-clean sessions. This is particularly relevant in the default
 `mirror` mode, where `~/.claude` is bind-mounted read-write from the host.
+See [Config persistence and restore](#config-persistence-and-restore) below
+for the full label/restore contract.
 
 ### `~/.config` is copy-on-write by default
 
@@ -249,10 +251,92 @@ Troubleshooting pointer: `ai-sandbox user-exec zsh -c 'ssh-add -l'` inside
 the container should list host keys; a real end-to-end check is `ssh -T
 git@github.com` looking for `successfully authenticated`.
 
+### Config persistence and restore
+
+`docker/docker-compose.yaml` writes a single canonical label,
+`ai.sandbox.config`, capturing every config-changing CLI input as
+base64-encoded JSON: `profiles`, `mode`, `no_isolate_config`, `clean_slate`,
+`marketplaces`, `plugins`, `enable_all_plugins`, plus a `version` field
+(currently always `1`, present for future extensibility — no code branches on
+it today). `src/index.sh` assembles this JSON after the CLI-merge phase (once
+`PROFILES`/`MODE_OVERRIDE`/`NO_ISOLATE_CONFIG`/`CLEAN_SLATE`/
+`CLI_MARKETPLACES`/`CLI_PLUGINS`/`CLI_ENABLE_ALL` are all final) and exports
+it as `AI_SANDBOX_CONFIG_B64`, mirroring the `AI_SANDBOX_CREDENTIALS_JSON_B64`
+pattern already used for clean-slate credentials (`src/credentials.sh`).
+Marketplaces and plugins are persisted as the **CLI deltas**
+(`CLI_MARKETPLACES`/`CLI_PLUGINS`), not the profile-merged effective set —
+the profile-contributed entries are reproduced for free by re-running
+`profile-installer.js` on restore, so only the CLI additions need to
+round-trip through the label.
+
+**Input vs. derived.** The launcher re-derives the entire effective
+configuration from these inputs on every invocation — `profile-installer.js`
+composition, the CLI merge, `EFFECTIVE_MODE`/`EFFECTIVE_PROXY`/
+`AI_SANDBOX_IMAGE_TAG` (see [Profile system](#profile-system)) — so only the
+raw *inputs* need to survive between invocations; everything else is safe to
+recompute fresh every time and is never trusted across invocations.
+
+**Restore (`restore_saved_config`, `src/utils.sh`).** On a bare `start`/`enter`
+(no config-changing flags passed — the existing `CONFIG_FLAGS_PROVIDED !=
+true` gate), this reads only the `ai.sandbox.config` label, base64-decodes
+and extracts each field via `jq`, and rehydrates all seven input globals.
+Each field is only assigned when present, so a missing or empty label is a
+natural no-op. **There is no fallback of any kind** — a container with no
+`ai.sandbox.config` label (including any container created before this label
+existed) simply keeps today's un-configured default behavior on a bare
+`enter`/`start` (mirror mode, no clean-slate, no profiles). This is a
+deliberate product decision (no external users of this tool yet; a single
+label-based config regime is preferred over supporting a legacy fallback in
+parallel), not a gap to be closed later. Restored marketplace entries are
+re-validated against the `https://`/`file://` scheme constraint before being
+trusted — a persisted label is not the same trust boundary as freshly-typed
+`--add-marketplace` input — dropping (with a warning) any entry that doesn't
+match rather than restoring it verbatim.
+
+**Matches (`running_config_matches`, `src/utils.sh`).** Compares the running
+container's labels against the current invocation's freshly-resolved
+effective values across the full derived-config dimension set: image tag,
+`ai.sandbox.profile-hash`, `ai.sandbox.mode`, `ai.sandbox.no-isolate-config`,
+`ai.sandbox.docker-proxy`, `ai.sandbox.clean-slate`, and three additional
+derived labels — `ai.sandbox.marketplaces`, `ai.sandbox.plugins`,
+`ai.sandbox.enable-all-plugins` — populated from the effective
+`AI_SANDBOX_MARKETPLACES`/`AI_SANDBOX_PLUGINS`/`AI_SANDBOX_ENABLE_ALL_PLUGINS`
+env vars (the same values the container's `10-plugin-setup` init consumes).
+An explicit invocation that changes any of these (e.g. `enter
+--add-marketplace NEW` on a container created without it) is now correctly
+detected as a config change and triggers the stop-and-recreate prompt instead
+of silently never applying.
+
+**Why restore and matches don't read the same labels.** They operate at
+different pipeline stages, not out of inconsistency: restore runs *before*
+`profile-installer.js` re-resolves anything, so it must seed the raw input
+globals; matches runs *after* resolution, comparing the freshly re-derived
+effective values against what's already baked into the running container.
+The reconciliation that matters is that both sides now cover the complete
+dimension set — restore reconstructs every input, so after a bare-enter
+restore `running_config_matches` returns true by construction and never
+false-prompts; matches compares every derived dimension an explicit
+invocation could change, so a real config change is never silently dropped.
+Future maintainers should not try to "unify" the two into reading one literal
+label set — their differing pipeline stages make that impossible by design.
+
+**Why base64.** Plain JSON in a label works technically (Compose interpolates
+already-parsed YAML scalars), but a literal `$` in a value — a marketplace
+URL — would be read as a Compose interpolation token, and `docker inspect`
+Go-template quoting is fragile around embedded quotes. Base64 sidesteps both:
+the label value is inert `[A-Za-z0-9+/=]`, safe from Compose and YAML alike.
+The cost — opacity via a raw `docker inspect` — is mitigated by the retained
+plain labels (`ai.sandbox.profiles`, `ai.sandbox.mode`, etc., used by `list`
+and by `matches`) and by `ai-sandbox status`/`detail`'s decoded
+`Configuration:` display (see
+[Status as both human and machine interface](#status-as-both-human-and-machine-interface)
+below).
+
 ### Status as both human and machine interface
 
-`ai-sandbox status` has three modes driven by flags, all fed by a single
-gather pass (`src/status.sh`):
+`ai-sandbox status` (and its pure alias `detail`, normalized to the same `CMD`
+value during option parsing) has three modes driven by flags, all fed by a
+single gather pass (`src/status.sh`):
 
 - default → human-readable text
 - `--json` → `jq`-constructed JSON
@@ -261,6 +345,15 @@ gather pass (`src/status.sh`):
 The `--test-check` mode is specifically designed as a gate for test harnesses
 (`make test.integration` calls it before running ShellSpec), so it stays
 silent and honors `AI_SANDBOX_SKIP_PLUGIN_CHECK` / `--force`.
+
+Since the full-config-restore work, both the default and `--json` modes also
+decode and surface the persisted `ai.sandbox.config` label (when present) as a
+fourth data source alongside container state, image list, and blocking-process
+conflicts: a human-readable `Configuration:` section (rendered as YAML via the
+Python `yq` wrapper, falling back to `jq .` when `yq` is unavailable or the
+wrong variant) and a `config` JSON key in `--json` output. See
+[Config persistence and restore](#config-persistence-and-restore) above for
+what that label contains and how it is produced.
 
 ### Profile system
 
