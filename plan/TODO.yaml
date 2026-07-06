@@ -16,3 +16,13 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 2
+          slug: reconcile-running-config-match
+          title: Reconcile Running-Config Match To Full Dimension Set
+          path: phase-01-full-config-restore/002-reconcile-running-config-match.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
