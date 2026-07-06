@@ -369,6 +369,31 @@ Describe 'ai-sandbox.sh'
       The variable "CLI_MARKETPLACES[*]" should eq 'file:///path/to/mp'
       The variable CLI_ENABLE_ALL should eq true
     End
+
+    It 'rejects an invalid sandbox name given via the bare per-instance form'
+      When run parse_options flow.rook
+      The status should be failure
+      The stderr should include 'invalid'
+      The stderr should include "flow.rook"
+    End
+
+    It 'rejects an invalid sandbox name given via the create form'
+      When run parse_options create flow.rook
+      The status should be failure
+      The stderr should include 'invalid'
+    End
+
+    It 'rejects an uppercase sandbox name'
+      When run parse_options FlowRook
+      The status should be failure
+      The stderr should include 'invalid'
+    End
+
+    It 'accepts a valid sandbox name with hyphens, underscores, and digits'
+      When call parse_options flow-rook_2
+      The variable SANDBOX_NAME should eq 'flow-rook_2'
+      The variable CMD should eq enter
+    End
   End
 
   Describe 'generate_volume_override() clean-slate mode' unit
