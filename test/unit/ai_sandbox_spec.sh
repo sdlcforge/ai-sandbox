@@ -841,6 +841,152 @@ Describe 'ai-sandbox.sh'
       The variable SANDBOX_NAME should eq 'flow-rook_2'
       The variable CMD should eq enter
     End
+
+    It 'normalizes the bare "detail" alias to CMD=status'
+      When call parse_options detail
+      The variable CMD should eq status
+      The variable SANDBOX_NAME should eq ''
+    End
+
+    It 'normalizes the "<name> detail" alias to CMD=status'
+      When call parse_options myname detail
+      The variable CMD should eq status
+      The variable SANDBOX_NAME should eq myname
+    End
+
+    It 'defaults QUIET=0 for the "detail" alias, same as "status"'
+      QUIET=
+      When call parse_options detail
+      The variable CMD should eq status
+      The variable QUIET should eq 0
+    End
+  End
+
+  Describe 'do_status() — Configuration: display (ai.sandbox.config label decode)'
+    # Helper: base64-encode a config-input JSON payload exactly as
+    # src/index.sh's assembly block does, mirroring the restore_saved_config()
+    # tests' mocking style for the same label.
+    encode_config() {
+      printf '%s' "$1" | base64 | tr -d '\n'
+    }
+
+    setup() {
+      SANDBOX_NAME="test"
+      STATUS_JSON=false
+      STATUS_TEST_CHECK=false
+      AI_SANDBOX_SKIP_PLUGIN_CHECK=1
+    }
+    Before 'setup'
+
+    It 'renders a Configuration: section as decoded YAML when the label is present (human output)'
+      config_b64="$(encode_config '{"version":1,"mode":"static","profiles":["base"]}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          elif [[ "$*" == *"State.Status"* ]]; then
+            echo "running"
+          fi
+          return 0
+        fi
+        return 0
+      }
+      When call do_status
+      The output should include 'Configuration:'
+      The output should include 'mode: static'
+    End
+
+    It 'omits the Configuration: section entirely when the label is absent (human output)'
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          # ai.sandbox.config label absent -- docker inspect prints an empty line.
+          if [[ "$*" == *"State.Status"* ]]; then
+            echo "running"
+          fi
+          return 0
+        fi
+        return 0
+      }
+      When call do_status
+      The output should not include 'Configuration:'
+    End
+
+    It 'still renders Configuration: for a stopped container with a persisted label (docker inspect works on stopped containers)'
+      config_b64="$(encode_config '{"version":1,"mode":"mirror"}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          elif [[ "$*" == *"State.Status"* ]]; then
+            echo "exited"
+          fi
+          return 0
+        fi
+        return 0
+      }
+      When call do_status
+      The output should include 'Container: stopped'
+      The output should include 'Configuration:'
+      The output should include 'mode: mirror'
+    End
+
+    It 'includes a config key with the decoded object in --json output when the label is present'
+      STATUS_JSON=true
+      config_b64="$(encode_config '{"version":1,"mode":"static"}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          elif [[ "$*" == *"State.Status"* ]]; then
+            echo "running"
+          fi
+          return 0
+        fi
+        return 0
+      }
+      When call do_status
+      The output should include '"config"'
+      The output should include '"mode": "static"'
+    End
+
+    It 'includes config: null in --json output when the label is absent'
+      STATUS_JSON=true
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"State.Status"* ]]; then
+            echo "running"
+          fi
+          return 0
+        fi
+        return 0
+      }
+      When call do_status
+      The output should include '"config": null'
+    End
+
+    It 'falls back to pretty-printed JSON via jq when yq is unavailable or the wrong variant (human output)'
+      # Shadow the `yq` command with a function that fails, simulating both
+      # "not on PATH" and "wrong variant" (mikefarah/yq would similarly fail
+      # or misbehave on the kislyuk-specific `-y .` invocation). `command -v`
+      # resolves shell functions too, so this exercises the same
+      # `command -v yq` gate the implementation uses.
+      yq() { return 1; }
+      config_b64="$(encode_config '{"version":1,"mode":"static"}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          elif [[ "$*" == *"State.Status"* ]]; then
+            echo "running"
+          fi
+          return 0
+        fi
+        return 0
+      }
+      When call do_status
+      The output should include 'Configuration:'
+      The output should include '"mode": "static"'
+    End
   End
 
   Describe 'generate_volume_override() clean-slate mode' unit
