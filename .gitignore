@@ -1,12 +1,13 @@
 # dirs
 /.ai-sandbox*.startup.log
 /.claude/settings.local.json
+/.flow/
 /bin
 !/bin/profile-installer.js
 /node_modules
 /test/.shellspec-quick.log
 /qa
-/worktree
+/worktrees
 
 # files
 CLAUDE.md
