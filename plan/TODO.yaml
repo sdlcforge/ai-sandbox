@@ -5,6 +5,7 @@ phases:
     - number: 1
       slug: restore-fix
       title: Restore Fix
+      diff_base: f435cd200e89f0ab440bfd922699f39d999cd6fa
       tasks:
         - number: 1
           slug: restore-mode-and-clean-slate-on-bare-enter
