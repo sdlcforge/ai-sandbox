@@ -181,3 +181,24 @@ plan's scope):
   record from a prior plan (`enter-mode-restore`) noting a task agent's connection
   dropped after committing but before reporting; manager verified the commit directly.
   No action needed.
+
+## Final Task State
+
+# TODO
+
+## Purpose and scope
+
+Tracking document for the active plan.
+
+## Tasks
+
+### Phase 01 — Full Config Restore
+
+- [x] [001-persist-and-restore-full-config-inputs.md](./phase-01-full-config-restore/001-persist-and-restore-full-config-inputs.md) — tier `sonnet-high` · branch `phase-01-task-01-persist-and-restore-full-confi` · commit `e7db5ed` · merge `e4bade38cb2c7ad29105f125f9bed669fc8ded09`
+- [x] [002-reconcile-running-config-match.md](./phase-01-full-config-restore/002-reconcile-running-config-match.md) — tier `sonnet-high` · branch `phase-01-task-02-reconcile-running-config-match` · commit `beb233a` · merge `17005b6fa45ec0fb40cfe79c703f0a59fe01534c`
+- [x] [003-add-detail-alias-and-config-display.md](./phase-01-full-config-restore/003-add-detail-alias-and-config-display.md) — tier `sonnet-high` · branch `phase-01-task-03-add-detail-alias-and-config-di` · commit `50f8541` · merge `55cc455c3bf8fb50aca238a3fb9a0a5b144db90d`
+- [x] [004-add-managed-image-label.md](./phase-01-full-config-restore/004-add-managed-image-label.md) — tier `haiku-med` · branch `phase-01-task-04-add-managed-image-label` · commit `c29b7db` · merge `b2f224870b7c788670f6a92754bb815543d89f17`
+
+### Phase 02 — Documentation Updates
+
+- [x] [001-update-architecture-docs.md](./phase-02-doc-updates/001-update-architecture-docs.md) — tier `sonnet-high` · branch `phase-02-task-01-update-architecture-docs` · commit `d6b8412` · merge `36ed5e16e06db60f151d6f44535ee2e5cca55fe7`
