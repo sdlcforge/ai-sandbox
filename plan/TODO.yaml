@@ -64,7 +64,7 @@ phases:
           slug: update-architecture-docs
           title: Update Architecture Docs
           path: phase-02-doc-updates/001-update-architecture-docs.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: Added a 'Config persistence and restore' subsection to docs/architecture.md's Key design decisions, documenting the ai.sandbox.config label, the input-vs-derived model, restore_saved_config's no-fallback behavior, the new marketplace-scheme validation, and running_config_matches's nine-dimension comparison. Updated the Docker-access section's forward-reference and the Status-as-interface section to cover task 003's detail alias and Configuration display. docs/ai-sandbox-profiles-spec.md confirmed to need no change. Docs-only change, no code touched.
           git:
