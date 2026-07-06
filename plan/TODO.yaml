@@ -48,7 +48,7 @@ phases:
             branch: phase-01-task-04-add-managed-image-label
             commit:
                 - c29b7db
-            merge: null
+            merge: b2f224870b7c788670f6a92754bb815543d89f17
     - number: 2
       slug: doc-updates
       title: Documentation Updates
