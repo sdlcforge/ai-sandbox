@@ -5,6 +5,7 @@ phases:
     - number: 1
       slug: full-config-restore
       title: Full Config Restore
+      diff_base: cf4049ba07ed5c36cd8bc54ce1e3c0b3cad7cfc6
       tasks:
         - number: 1
           slug: persist-and-restore-full-config-inputs
