@@ -55,3 +55,8 @@ items:
       date: "2026-07-06"
       tag: doc-updates
       text: '[phase-02-doc-updates/001-update-architecture-docs.md] Task document Status section could not be updated (same worktree-boundary limitation as prior tasks in this plan). No action needed.'
+    - title: 'Manager note (not from task agent): the task '
+      id: 2e9z
+      date: "2026-07-06"
+      tag: doc-updates
+      text: '[phase-02-doc-updates/001-update-architecture-docs.md] Manager note (not from task agent): the task agent''s changes were initially left uncommitted in the worktree; manager reviewed the diff against the reported work and committed it directly (d6b8412) before applying this report.'
