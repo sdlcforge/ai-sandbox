@@ -37,6 +37,7 @@ phases:
           path: phase-01-full-config-restore/003-add-detail-alias-and-config-display.md
           done: false
           tier: sonnet-high
+          digest: 'Added detail as a pure alias for status in src/options.sh (PER_INSTANCE_COMMANDS, RESERVED_NAMES, single normalization point to CMD=status covering both bare and <name> detail forms) — zero downstream CMD==status checks needed changes. Extended src/status.sh to decode and display the ai.sandbox.config label: human output gets a Configuration: section via yq -y . (confirmed kislyuk/yq) falling back gracefully to jq . when yq is absent/non-functional; JSON output gets a config key (null when absent). Fixed a genuine exit-code-leak bug the new code introduced, caught by the new absent-label regression test. Updated README (CLI reference table, yq optional prerequisite). make build/lint/test.unit all pass (145 examples, 0 failures).'
           git:
             branch: phase-01-task-03-add-detail-alias-and-config-di
             commit:
