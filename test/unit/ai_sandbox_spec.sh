@@ -251,6 +251,15 @@ Describe 'ai-sandbox.sh'
       The variable CMD should eq clean
     End
 
+    It 'defaults CMD to enter when sandbox name is followed by flags with no command word'
+      When call parse_options mybox --add-marketplace file:///two --enable-plugin flow --clean
+      The variable SANDBOX_NAME should eq mybox
+      The variable CMD should eq enter
+      The variable "CLI_MARKETPLACES[*]" should eq 'file:///two'
+      The variable "CLI_PLUGINS[*]" should eq flow
+      The variable CLEAN_SLATE should eq true
+    End
+
 
     It 'errors and points to --profile docker when --docker is passed'
       When run parse_options create mybox --docker

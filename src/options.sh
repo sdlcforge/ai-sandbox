@@ -158,8 +158,11 @@ function parse_options() {
             done
 
             remaining=("${remaining[@]:1}")
-            # Second positional arg is the per-instance command; default to "enter"
-            if [ "${#remaining[@]}" -gt 0 ]; then
+            # Second positional arg is the per-instance command; default to "enter".
+            # If the next token looks like a flag (e.g. --add-marketplace, --clean) rather
+            # than a command word, leave it for Phase 3's flag parser instead of
+            # swallowing it as CMD.
+            if [ "${#remaining[@]}" -gt 0 ] && [[ "${remaining[0]}" != -* ]]; then
                 CMD="${remaining[0]}"
                 remaining=("${remaining[@]:1}")
             else
