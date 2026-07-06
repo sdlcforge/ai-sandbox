@@ -78,35 +78,77 @@ function profile_has_capability() {
     return 1
 }
 
-# Restore PROFILES / MODE_OVERRIDE / CLEAN_SLATE from the labels saved on the
-# container at `create` time, when the current invocation didn't pass any
-# config-changing flags itself. Called for `start`/`enter`; when
-# CONFIG_FLAGS_PROVIDED is "true" (i.e. --profile/--mode/--clean/etc. was
-# explicitly passed this run) or no container exists yet, returns immediately
-# without touching PROFILES / MODE_OVERRIDE / CLEAN_SLATE, so the explicit
-# flags on the current invocation always win.
-# shellcheck disable=SC2034 # PROFILES/MODE_OVERRIDE/CLEAN_SLATE are globals consumed downstream by src/index.sh (profile-resolution and EFFECTIVE_MODE phases), not local to this function
+# Restore PROFILES / MODE_OVERRIDE / NO_ISOLATE_CONFIG / CLEAN_SLATE /
+# CLI_MARKETPLACES / CLI_PLUGINS / CLI_ENABLE_ALL -- the complete seven-
+# dimension config-input record (see plan/notes/config-persistence-design.md)
+# -- from the single ai.sandbox.config label saved on the container at
+# `create` time, when the current invocation didn't pass any config-changing
+# flags itself. Called for `start`/`enter`; when CONFIG_FLAGS_PROVIDED is
+# "true" (i.e. --profile/--mode/--no-isolate-config/--add-marketplace/
+# --enable-plugin/--enable-all/--clean was explicitly passed this run) or no
+# container exists yet, returns immediately without touching any of the seven
+# globals, so the explicit flags on the current invocation always win.
+#
+# No fallback of any kind: only the single ai.sandbox.config label is read.
+# When the label is absent or empty -- including on any container created
+# before this label existed -- the function does nothing further. This is an
+# explicit product decision (design note Sec 2.5/2.6: no external users yet, a
+# single label-based config regime is preferred over supporting two), not a
+# gap to guard against.
+# shellcheck disable=SC2034 # PROFILES/MODE_OVERRIDE/NO_ISOLATE_CONFIG/CLEAN_SLATE/CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL are globals consumed downstream by src/index.sh (profile-resolution, EFFECTIVE_MODE, and CLI-merge phases), not local to this function
 function restore_saved_config() {
     if [ "${CONFIG_FLAGS_PROVIDED}" != "true" ] && is_container_running_or_stopped; then
-        local ctr_name saved_profiles saved_mode saved_clean
+        local ctr_name saved_config_b64 saved_config_json
+        local saved_profiles saved_mode saved_no_isolate saved_clean
+        local saved_marketplaces saved_plugins saved_enable_all
         ctr_name="$(sandbox_container_name)"
-        saved_profiles="$(docker inspect -f \
-            '{{index .Config.Labels "ai.sandbox.profiles"}}' \
+        saved_config_b64="$(docker inspect -f \
+            '{{index .Config.Labels "ai.sandbox.config"}}' \
             "${ctr_name}" 2>/dev/null || true)"
+        [ -n "${saved_config_b64}" ] || return 0
+
+        saved_config_json="$(printf '%s' "${saved_config_b64}" | base64 -d 2>/dev/null || true)"
+        [ -n "${saved_config_json}" ] || return 0
+
+        # Extract each field with its own jq call (one per input dimension) so
+        # every value is independently guarded rather than packed into a
+        # delimited line -- packing risks a delimiter collision (and, with
+        # whitespace-class separators like tab, bash `read`'s IFS collapses
+        # leading/trailing empty fields, silently shifting values). Lists are
+        # joined with '|' (not ',') so entries such as marketplace URLs that
+        # may contain a comma pass through correctly -- same convention as
+        # AI_SANDBOX_MARKETPLACES in src/index.sh. Booleans are tested against
+        # `null` explicitly (rather than jq's `//` operator) because `//`
+        # treats a `false` value itself as absent, which would otherwise make
+        # an explicitly-saved `false` indistinguishable from a missing field.
+        saved_profiles="$(printf '%s' "${saved_config_json}" | jq -r '(.profiles // []) | join("|")' 2>/dev/null || true)"
+        saved_mode="$(printf '%s' "${saved_config_json}" | jq -r '.mode // ""' 2>/dev/null || true)"
+        saved_no_isolate="$(printf '%s' "${saved_config_json}" | jq -r 'if .no_isolate_config == null then "" else (.no_isolate_config | tostring) end' 2>/dev/null || true)"
+        saved_clean="$(printf '%s' "${saved_config_json}" | jq -r 'if .clean_slate == null then "" else (.clean_slate | tostring) end' 2>/dev/null || true)"
+        saved_marketplaces="$(printf '%s' "${saved_config_json}" | jq -r '(.marketplaces // []) | join("|")' 2>/dev/null || true)"
+        saved_plugins="$(printf '%s' "${saved_config_json}" | jq -r '(.plugins // []) | join("|")' 2>/dev/null || true)"
+        saved_enable_all="$(printf '%s' "${saved_config_json}" | jq -r 'if .enable_all_plugins == null then "" else (.enable_all_plugins | tostring) end' 2>/dev/null || true)"
+
         if [ -n "${saved_profiles}" ]; then
-            IFS=',' read -ra PROFILES <<< "${saved_profiles}"
+            IFS='|' read -ra PROFILES <<< "${saved_profiles}"
         fi
-        saved_mode="$(docker inspect -f \
-            '{{index .Config.Labels "ai.sandbox.mode"}}' \
-            "${ctr_name}" 2>/dev/null || true)"
         if [ -n "${saved_mode}" ]; then
             MODE_OVERRIDE="${saved_mode}"
         fi
-        saved_clean="$(docker inspect -f \
-            '{{index .Config.Labels "ai.sandbox.clean-slate"}}' \
-            "${ctr_name}" 2>/dev/null || true)"
+        if [ -n "${saved_no_isolate}" ]; then
+            NO_ISOLATE_CONFIG="${saved_no_isolate}"
+        fi
         if [ -n "${saved_clean}" ]; then
             CLEAN_SLATE="${saved_clean}"
+        fi
+        if [ -n "${saved_marketplaces}" ]; then
+            IFS='|' read -ra CLI_MARKETPLACES <<< "${saved_marketplaces}"
+        fi
+        if [ -n "${saved_plugins}" ]; then
+            IFS='|' read -ra CLI_PLUGINS <<< "${saved_plugins}"
+        fi
+        if [ -n "${saved_enable_all}" ]; then
+            CLI_ENABLE_ALL="${saved_enable_all}"
         fi
     fi
 }

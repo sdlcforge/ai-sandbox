@@ -132,6 +132,55 @@ if [ "${#CLI_MARKETPLACES[@]}" -gt 0 ] || [ "${#CLI_PLUGINS[@]}" -gt 0 ] || [ "$
 fi
 export PROFILE_JSON
 
+# --- Phase: assemble the full config-input record for persistence ---
+# Capture all seven config-input dimensions (see
+# plan/notes/config-persistence-design.md) as a single JSON record, then
+# base64-encode it single-line -- mirroring src/credentials.sh's
+# AI_SANDBOX_CREDENTIALS_JSON_B64 pattern -- for safe embedding in the
+# ai.sandbox.config Docker label (docker/docker-compose.yaml).
+# restore_saved_config() decodes this label to rehydrate all seven inputs on a
+# bare start/enter. Persist CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL (the
+# CLI deltas), not the profile-merged PROFILE_JSON set: profile-contributed
+# entries are reproduced for free by re-running profile-installer.js on
+# restore, so only the CLI additions need to round-trip through the label.
+if [ "${#PROFILES[@]}" -gt 0 ]; then
+  _config_profiles_json="$(printf '%s\n' "${PROFILES[@]}" | jq -R . | jq -s .)"
+else
+  _config_profiles_json='[]'
+fi
+if [ "${#CLI_MARKETPLACES[@]}" -gt 0 ]; then
+  _config_marketplaces_json="$(printf '%s\n' "${CLI_MARKETPLACES[@]}" | jq -R . | jq -s .)"
+else
+  _config_marketplaces_json='[]'
+fi
+if [ "${#CLI_PLUGINS[@]}" -gt 0 ]; then
+  _config_plugins_json="$(printf '%s\n' "${CLI_PLUGINS[@]}" | jq -R . | jq -s .)"
+else
+  _config_plugins_json='[]'
+fi
+_config_enable_all_json=false
+[ "${CLI_ENABLE_ALL}" = "true" ] && _config_enable_all_json=true
+_config_no_isolate_json=false
+[ "${NO_ISOLATE_CONFIG}" = "true" ] && _config_no_isolate_json=true
+_config_clean_slate_json=false
+[ "${CLEAN_SLATE:-false}" = "true" ] && _config_clean_slate_json=true
+
+AI_SANDBOX_CONFIG_JSON="$(jq -n \
+    --argjson profiles "${_config_profiles_json}" \
+    --arg mode "${MODE_OVERRIDE}" \
+    --argjson no_isolate_config "${_config_no_isolate_json}" \
+    --argjson clean_slate "${_config_clean_slate_json}" \
+    --argjson marketplaces "${_config_marketplaces_json}" \
+    --argjson plugins "${_config_plugins_json}" \
+    --argjson enable_all_plugins "${_config_enable_all_json}" \
+    '{version: 1, profiles: $profiles, mode: $mode,
+      no_isolate_config: $no_isolate_config, clean_slate: $clean_slate,
+      marketplaces: $marketplaces, plugins: $plugins,
+      enable_all_plugins: $enable_all_plugins}')"
+# macOS base64 may line-wrap; tr -d '\n' guarantees a single-line label value.
+AI_SANDBOX_CONFIG_B64="$(printf '%s' "${AI_SANDBOX_CONFIG_JSON}" | base64 | tr -d '\n')"
+export AI_SANDBOX_CONFIG_B64
+
 # MODE_OVERRIDE wins; else the profile's mode; else mirror (legacy default).
 # --clean always forces static mode regardless of MODE_OVERRIDE or profile mode.
 if [ "${CLEAN_SLATE:-false}" = "true" ]; then

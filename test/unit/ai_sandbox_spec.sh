@@ -179,27 +179,32 @@ Describe 'ai-sandbox.sh'
   End
 
   Describe 'restore_saved_config()'
-    It 'restores PROFILES, MODE_OVERRIDE, and CLEAN_SLATE together when CONFIG_FLAGS_PROVIDED=false and the container exists'
-      # Direct regression test for the bug's root cause: a sandbox created via
-      # `create --mode static` records ai.sandbox.mode=static; after this fix, a
-      # bare `enter` restores MODE_OVERRIDE=static. Per the unchanged
-      # EFFECTIVE_MODE computation (src/index.sh:142-159), this guarantees
-      # EFFECTIVE_MODE=static, which makes the src/index.sh:156-159 preflight
-      # gate (`... && EFFECTIVE_MODE = mirror`) evaluate false and skip
-      # check_host_plugin_conflicts -- the first symptom in the bug report.
+    # Helper: base64-encode a config-input JSON payload exactly as
+    # src/index.sh's assembly block does, for use as the mocked
+    # `ai.sandbox.config` label value below.
+    encode_config() {
+      printf '%s' "$1" | base64 | tr -d '\n'
+    }
+
+    It 'restores all seven config-input dimensions from a mocked ai.sandbox.config label (full round trip)'
+      # Direct regression test for the design note's restore-side requirement:
+      # a sandbox created with a full set of config-changing flags records the
+      # complete input record in the single ai.sandbox.config label; a bare
+      # `enter` must reconstruct every one of the seven dimensions from it.
       SANDBOX_NAME="test"
       CONFIG_FLAGS_PROVIDED=false
       PROFILES=()
       MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
       CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      config_b64="$(encode_config '{"version":1,"profiles":["base","docker"],"mode":"static","no_isolate_config":true,"clean_slate":true,"marketplaces":["https://registry.example.com/plugins"],"plugins":["claude-mem"],"enable_all_plugins":true}')"
       docker() {
         if [ "$1" = "inspect" ]; then
-          if [[ "$*" == *"ai.sandbox.profiles"* ]]; then
-            echo "base,docker"
-          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
-            echo "static"
-          elif [[ "$*" == *"ai.sandbox.clean-slate"* ]]; then
-            echo "true"
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
           fi
           return 0
         fi
@@ -207,21 +212,111 @@ Describe 'ai-sandbox.sh'
       When call restore_saved_config
       The variable "PROFILES[*]" should eq 'base docker'
       The variable MODE_OVERRIDE should eq static
+      The variable NO_ISOLATE_CONFIG should eq true
       The variable CLEAN_SLATE should eq true
+      The variable "CLI_MARKETPLACES[*]" should eq 'https://registry.example.com/plugins'
+      The variable "CLI_PLUGINS[*]" should eq 'claude-mem'
+      The variable CLI_ENABLE_ALL should eq true
     End
 
-    It 'does not restore anything when CONFIG_FLAGS_PROVIDED=true'
+    It 'restores NO_ISOLATE_CONFIG=true specifically (regression: previously silently dropped, causing a false-positive recreate prompt)'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      config_b64="$(encode_config '{"version":1,"profiles":[],"mode":"","no_isolate_config":true,"clean_slate":false,"marketplaces":[],"plugins":[],"enable_all_plugins":false}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable NO_ISOLATE_CONFIG should eq true
+      The variable CLEAN_SLATE should eq false
+    End
+
+    It 'restores CLI_MARKETPLACES, CLI_PLUGINS, and CLI_ENABLE_ALL (regression: followup AL7i -- previously silently dropped)'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      config_b64="$(encode_config '{"version":1,"profiles":[],"mode":"","no_isolate_config":false,"clean_slate":false,"marketplaces":["https://registry.example.com/plugins","file:///opt/local-marketplace"],"plugins":["claude-mem","other-plugin"],"enable_all_plugins":true}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable "CLI_MARKETPLACES[*]" should eq 'https://registry.example.com/plugins file:///opt/local-marketplace'
+      The variable "CLI_PLUGINS[*]" should eq 'claude-mem other-plugin'
+      The variable CLI_ENABLE_ALL should eq true
+    End
+
+    It 'exits cleanly and leaves defaults untouched when the ai.sandbox.config label is absent/empty'
+      # No fallback is implemented (explicit product decision, design note Sec
+      # 2.5/2.6): a container missing the label -- including any created
+      # before this change -- simply restores nothing. This is a lighter
+      # assertion than a fallback-restore test, since no fallback exists.
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=(sentinel)
+      MODE_OVERRIDE="sentinel-mode"
+      NO_ISOLATE_CONFIG=sentinel-no-isolate
+      CLEAN_SLATE=sentinel-clean
+      CLI_MARKETPLACES=(sentinel-marketplace)
+      CLI_PLUGINS=(sentinel-plugin)
+      CLI_ENABLE_ALL=sentinel-enable-all
+      docker() {
+        # ai.sandbox.config label absent -- docker inspect prints an empty line.
+        if [ "$1" = "inspect" ]; then return 0; fi
+      }
+      When call restore_saved_config
+      The status should be success
+      The variable "PROFILES[*]" should eq 'sentinel'
+      The variable MODE_OVERRIDE should eq sentinel-mode
+      The variable NO_ISOLATE_CONFIG should eq sentinel-no-isolate
+      The variable CLEAN_SLATE should eq sentinel-clean
+      The variable "CLI_MARKETPLACES[*]" should eq 'sentinel-marketplace'
+      The variable "CLI_PLUGINS[*]" should eq 'sentinel-plugin'
+      The variable CLI_ENABLE_ALL should eq sentinel-enable-all
+    End
+
+    It 'does not restore anything when CONFIG_FLAGS_PROVIDED=true (explicit flags this run always win)'
       SANDBOX_NAME="test"
       CONFIG_FLAGS_PROVIDED=true
       PROFILES=(sentinel)
       MODE_OVERRIDE="sentinel-mode"
+      NO_ISOLATE_CONFIG=sentinel-no-isolate
       CLEAN_SLATE=sentinel-clean
+      CLI_MARKETPLACES=(sentinel-marketplace)
+      CLI_PLUGINS=(sentinel-plugin)
+      CLI_ENABLE_ALL=sentinel-enable-all
       called=false
       docker() { called=true; }
       When call restore_saved_config
       The variable "PROFILES[*]" should eq 'sentinel'
       The variable MODE_OVERRIDE should eq sentinel-mode
+      The variable NO_ISOLATE_CONFIG should eq sentinel-no-isolate
       The variable CLEAN_SLATE should eq sentinel-clean
+      The variable "CLI_MARKETPLACES[*]" should eq 'sentinel-marketplace'
+      The variable "CLI_PLUGINS[*]" should eq 'sentinel-plugin'
+      The variable CLI_ENABLE_ALL should eq sentinel-enable-all
       The variable called should eq false
     End
 
@@ -236,28 +331,6 @@ Describe 'ai-sandbox.sh'
       }
       When call restore_saved_config
       The variable "PROFILES[*]" should eq 'sentinel'
-      The variable MODE_OVERRIDE should eq sentinel-mode
-      The variable CLEAN_SLATE should eq sentinel-clean
-    End
-
-    It 'leaves MODE_OVERRIDE and CLEAN_SLATE unchanged when their labels are empty/absent (legacy container), while still restoring PROFILES'
-      SANDBOX_NAME="test"
-      CONFIG_FLAGS_PROVIDED=false
-      PROFILES=()
-      MODE_OVERRIDE="sentinel-mode"
-      CLEAN_SLATE=sentinel-clean
-      docker() {
-        if [ "$1" = "inspect" ]; then
-          if [[ "$*" == *"ai.sandbox.profiles"* ]]; then
-            echo "base"
-          fi
-          # mode / clean-slate labels don't exist on this legacy container --
-          # docker inspect prints an empty line for them.
-          return 0
-        fi
-      }
-      When call restore_saved_config
-      The variable "PROFILES[*]" should eq 'base'
       The variable MODE_OVERRIDE should eq sentinel-mode
       The variable CLEAN_SLATE should eq sentinel-clean
     End

@@ -55,6 +55,12 @@ services:
       ai.sandbox.managed: "true"
       ai.sandbox.instance: "${SANDBOX_NAME}"
       ai.sandbox.profiles: "${SANDBOX_PROFILES:-}"
+      # Canonical config-input record: base64-encoded JSON capturing all seven
+      # config-changing CLI inputs (profiles, mode, no-isolate-config,
+      # clean-slate, marketplaces, plugins, enable-all-plugins). Sole source
+      # restore_saved_config() reads to rehydrate a bare start/enter; see
+      # plan/notes/config-persistence-design.md.
+      ai.sandbox.config: "${AI_SANDBOX_CONFIG_B64:-}"
     volumes:
       # Map host directories to same absolute paths in container.
       # ~/.claude is added by docker-compose.mirror-claude.yaml in mirror mode
