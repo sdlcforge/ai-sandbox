@@ -15,5 +15,6 @@ phases:
           tier: sonnet-med
           git:
             branch: phase-01-task-01-restore-mode-and-clean-slate-o
-            commit: []
+            commit:
+                - 4fbee0523d8d3d9ca512d445698a635b12f4c6f2
             merge: null
