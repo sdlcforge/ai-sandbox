@@ -71,4 +71,4 @@ phases:
             branch: phase-02-task-01-update-architecture-docs
             commit:
                 - d6b8412
-            merge: null
+            merge: 36ed5e16e06db60f151d6f44535ee2e5cca55fe7
