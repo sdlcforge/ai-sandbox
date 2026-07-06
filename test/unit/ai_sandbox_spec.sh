@@ -178,6 +178,178 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'restore_saved_config()'
+    It 'restores PROFILES, MODE_OVERRIDE, and CLEAN_SLATE together when CONFIG_FLAGS_PROVIDED=false and the container exists'
+      # Direct regression test for the bug's root cause: a sandbox created via
+      # `create --mode static` records ai.sandbox.mode=static; after this fix, a
+      # bare `enter` restores MODE_OVERRIDE=static. Per the unchanged
+      # EFFECTIVE_MODE computation (src/index.sh:142-159), this guarantees
+      # EFFECTIVE_MODE=static, which makes the src/index.sh:156-159 preflight
+      # gate (`... && EFFECTIVE_MODE = mirror`) evaluate false and skip
+      # check_host_plugin_conflicts -- the first symptom in the bug report.
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      CLEAN_SLATE=false
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.profiles"* ]]; then
+            echo "base,docker"
+          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
+            echo "static"
+          elif [[ "$*" == *"ai.sandbox.clean-slate"* ]]; then
+            echo "true"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable "PROFILES[*]" should eq 'base docker'
+      The variable MODE_OVERRIDE should eq static
+      The variable CLEAN_SLATE should eq true
+    End
+
+    It 'does not restore anything when CONFIG_FLAGS_PROVIDED=true'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=true
+      PROFILES=(sentinel)
+      MODE_OVERRIDE="sentinel-mode"
+      CLEAN_SLATE=sentinel-clean
+      called=false
+      docker() { called=true; }
+      When call restore_saved_config
+      The variable "PROFILES[*]" should eq 'sentinel'
+      The variable MODE_OVERRIDE should eq sentinel-mode
+      The variable CLEAN_SLATE should eq sentinel-clean
+      The variable called should eq false
+    End
+
+    It 'does not restore anything when no container exists'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=(sentinel)
+      MODE_OVERRIDE="sentinel-mode"
+      CLEAN_SLATE=sentinel-clean
+      docker() {
+        if [ "$1" = "inspect" ]; then return 1; fi
+      }
+      When call restore_saved_config
+      The variable "PROFILES[*]" should eq 'sentinel'
+      The variable MODE_OVERRIDE should eq sentinel-mode
+      The variable CLEAN_SLATE should eq sentinel-clean
+    End
+
+    It 'leaves MODE_OVERRIDE and CLEAN_SLATE unchanged when their labels are empty/absent (legacy container), while still restoring PROFILES'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE="sentinel-mode"
+      CLEAN_SLATE=sentinel-clean
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.profiles"* ]]; then
+            echo "base"
+          fi
+          # mode / clean-slate labels don't exist on this legacy container --
+          # docker inspect prints an empty line for them.
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable "PROFILES[*]" should eq 'base'
+      The variable MODE_OVERRIDE should eq sentinel-mode
+      The variable CLEAN_SLATE should eq sentinel-clean
+    End
+  End
+
+  Describe 'running_config_matches()'
+    It 'returns 2 when no container is running'
+      SANDBOX_NAME="test"
+      docker() {
+        if [ "$1" = "inspect" ]; then return 1; fi
+      }
+      When call running_config_matches
+      The status should eq 2
+    End
+
+    It 'returns success when every compared field matches (regression: false-positive recreate prompt fixed)'
+      # Second symptom's regression case: the sandbox was created with
+      # `--clean --mode static`, recording ai.sandbox.mode=static and
+      # ai.sandbox.clean-slate=true. EFFECTIVE_MODE=static and
+      # AI_SANDBOX_CLEAN_SLATE=true are what restore_saved_config() + the
+      # unchanged EFFECTIVE_MODE computation now produce after the fix, so no
+      # recreate-confirmation prompt should fire.
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=static
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=true
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          elif [[ "$*" == *".Config.Image"* ]]; then
+            echo "ai-sandbox:profile-abc"
+          elif [[ "$*" == *"profile-hash"* ]]; then
+            echo "abc"
+          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
+            echo "static"
+          elif [[ "$*" == *"no-isolate-config"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"docker-proxy"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"clean-slate"* ]]; then
+            echo "true"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 0
+    End
+
+    It 'returns failure when the mode label disagrees with EFFECTIVE_MODE (the pre-fix bug symptom)'
+      # Characterizes exactly why the restore fix in this task matters: before
+      # the fix, a bare `enter` recomputed EFFECTIVE_MODE=mirror (because
+      # MODE_OVERRIDE was never restored) while the container's recorded label
+      # was ai.sandbox.mode=static, producing this mismatch and the
+      # false-positive recreate-confirmation prompt. running_config_matches()
+      # itself is unchanged by this task -- only its inputs are fixed upstream.
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          elif [[ "$*" == *".Config.Image"* ]]; then
+            echo "ai-sandbox:profile-abc"
+          elif [[ "$*" == *"profile-hash"* ]]; then
+            echo "abc"
+          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
+            echo "static"
+          elif [[ "$*" == *"no-isolate-config"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"docker-proxy"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"clean-slate"* ]]; then
+            echo "false"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 1
+    End
+  End
+
   Describe 'parse_options()'
     It 'defaults CMD to list on bare invocation'
       When call parse_options
