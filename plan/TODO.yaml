@@ -30,7 +30,7 @@ phases:
             branch: phase-01-task-02-reconcile-running-config-match
             commit:
                 - beb233a
-            merge: null
+            merge: 17005b6fa45ec0fb40cfe79c703f0a59fe01534c
         - number: 3
           slug: add-detail-alias-and-config-display
           title: Add Detail Alias And Config Display
