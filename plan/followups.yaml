@@ -5,11 +5,6 @@ items:
       date: "2026-07-06"
       tag: fix-name-flags-parsing
       text: 'parse_options() mis-routes when a config flag precedes the per-instance command word, e.g. `ai-sandbox myname --profile x start`. Reproduced via scratch probe: result is SANDBOX_NAME=myname, CMD=enter (not start), PROFILES=(x), ARGS=(start) — "start" is silently absorbed into the passthrough ARGS array instead of being recognized as the per-instance command. Structurally similar to the just-fixed bug (name-followed-directly-by-flags defaulting CMD to enter), but here Phase 3''s flag parser has no mechanism to promote a later bare word back into CMD. Needs its own scoped fix.'
-    - title: Marketplace/plugin config not persisted
-      id: AL7i
-      date: "2026-07-06"
-      tag: config-restore
-      text: --add-marketplace, --enable-plugin, and --enable-all are not recorded as docker labels at create time (only ai.sandbox.profiles is), so this config is silently dropped on a later bare `enter`/`start` invocation with no flags. Doesn't currently trigger the false-positive recreate prompt (running_config_matches doesn't check these fields), but the resulting container silently loses the requested marketplace/plugin setup. Discovered while diagnosing the mode/clean-slate restore bug (see plan for that fix) — src/index.sh:73-87 restore block and docker-compose.yaml labels would need extending to cover these fields too.
     - title: 'Task agent hit a mid-response API disconnect '
       id: S6Up
       date: "2026-07-06"
