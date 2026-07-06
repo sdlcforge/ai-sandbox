@@ -27,7 +27,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-02-reconcile-running-config-match
-            commit: []
+            commit:
+                - beb233a
             merge: null
         - number: 3
           slug: add-detail-alias-and-config-display
