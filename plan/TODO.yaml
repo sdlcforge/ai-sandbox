@@ -15,7 +15,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-01-persist-and-restore-full-confi
-            commit: []
+            commit:
+                - e7db5ed
             merge: null
         - number: 2
           slug: reconcile-running-config-match
