@@ -5,4 +5,14 @@ phases:
     - number: 1
       slug: restore-fix
       title: Restore Fix
-      tasks: []
+      tasks:
+        - number: 1
+          slug: restore-mode-and-clean-slate-on-bare-enter
+          title: Restore Mode And Clean-Slate On Bare Enter
+          path: phase-01-restore-fix/001-restore-mode-and-clean-slate-on-bare-enter.md
+          done: false
+          tier: sonnet-med
+          git:
+            branch: null
+            commit: []
+            merge: null
