@@ -1,0 +1,8 @@
+slug: full-config-restore
+version: 1
+title: TODO
+phases:
+    - number: 1
+      slug: full-config-restore
+      title: Full Config Restore
+      tasks: []
