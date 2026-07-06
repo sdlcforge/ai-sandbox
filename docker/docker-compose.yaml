@@ -47,6 +47,15 @@ services:
       ai.sandbox.no-isolate-config: "${NO_ISOLATE_CONFIG:-false}"
       ai.sandbox.docker-proxy: "${EFFECTIVE_PROXY:-false}"
       ai.sandbox.clean-slate: "${AI_SANDBOX_CLEAN_SLATE:-false}"
+      # Derived (post profile+CLI merge) marketplace/plugin/enable-all state --
+      # the same effective values the container's 10-plugin-setup init consumes
+      # (see AI_SANDBOX_MARKETPLACES/AI_SANDBOX_PLUGINS/AI_SANDBOX_ENABLE_ALL_PLUGINS
+      # below). Read by running_config_matches() so an explicit invocation that
+      # changes marketplaces/plugins/enable-all (e.g. `enter --add-marketplace
+      # NEW`) is detected as a config change and prompts a recreate.
+      ai.sandbox.marketplaces: "${AI_SANDBOX_MARKETPLACES:-}"
+      ai.sandbox.plugins: "${AI_SANDBOX_PLUGINS:-}"
+      ai.sandbox.enable-all-plugins: "${AI_SANDBOX_ENABLE_ALL_PLUGINS:-false}"
       # Multi-instance management labels. ai.sandbox.managed marks containers
       # created by this tool (for `list`). ai.sandbox.instance records the
       # instance name for filtering. ai.sandbox.profiles records the comma-

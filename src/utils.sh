@@ -156,10 +156,21 @@ function restore_saved_config() {
 # Return 0 if the running container's image + config-relevant labels match the
 # current invocation's composition, 1 if they differ, 2 if no container is
 # running. Reads AI_SANDBOX_IMAGE_TAG / PROFILE_COMPOSITION_HASH / EFFECTIVE_MODE
-# / NO_ISOLATE_CONFIG / EFFECTIVE_PROXY from caller scope.
+# / NO_ISOLATE_CONFIG / EFFECTIVE_PROXY / AI_SANDBOX_CLEAN_SLATE /
+# AI_SANDBOX_MARKETPLACES / AI_SANDBOX_PLUGINS / AI_SANDBOX_ENABLE_ALL_PLUGINS
+# from caller scope. The last three complete the derived-value comparison to
+# the full effective-config dimension set (design note
+# plan/notes/config-persistence-design.md Sec 2.3/2.6): an explicit invocation
+# that changes marketplaces/plugins/enable-all (e.g. `enter --add-marketplace
+# NEW` on a container created without it) must be detected as a config change
+# so it prompts a recreate rather than silently never applying. `:-` defaults
+# on both sides of each comparison mean a container missing these labels
+# (created before this label existed) compares equal to an empty/default
+# current invocation rather than false-positiving.
 function running_config_matches() {
     is_container_running || return 2
-    local cur_image cur_hash cur_mode cur_no_isolate cur_proxy ctr_name
+    local cur_image cur_hash cur_mode cur_no_isolate cur_proxy cur_clean ctr_name
+    local cur_marketplaces cur_plugins cur_enable_all
     ctr_name="$(sandbox_container_name)"
     cur_image=$(docker inspect -f '{{.Config.Image}}' "${ctr_name}" 2>/dev/null || true)
     cur_hash=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.profile-hash"}}' "${ctr_name}" 2>/dev/null || true)
@@ -167,12 +178,18 @@ function running_config_matches() {
     cur_no_isolate=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.no-isolate-config"}}' "${ctr_name}" 2>/dev/null || true)
     cur_proxy=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.docker-proxy"}}' "${ctr_name}" 2>/dev/null || true)
     cur_clean=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.clean-slate"}}' "${ctr_name}" 2>/dev/null || true)
+    cur_marketplaces=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.marketplaces"}}' "${ctr_name}" 2>/dev/null || true)
+    cur_plugins=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.plugins"}}' "${ctr_name}" 2>/dev/null || true)
+    cur_enable_all=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.enable-all-plugins"}}' "${ctr_name}" 2>/dev/null || true)
     [ "${cur_image}" = "${AI_SANDBOX_IMAGE_TAG:-}" ] || return 1
     [ "${cur_hash}" = "${PROFILE_COMPOSITION_HASH:-}" ] || return 1
     [ "${cur_mode:-mirror}" = "${EFFECTIVE_MODE:-mirror}" ] || return 1
     [ "${cur_no_isolate:-false}" = "${NO_ISOLATE_CONFIG:-false}" ] || return 1
     [ "${cur_proxy:-false}" = "${EFFECTIVE_PROXY:-false}" ] || return 1
     [ "${cur_clean:-false}" = "${AI_SANDBOX_CLEAN_SLATE:-false}" ] || return 1
+    [ "${cur_marketplaces:-}" = "${AI_SANDBOX_MARKETPLACES:-}" ] || return 1
+    [ "${cur_plugins:-}" = "${AI_SANDBOX_PLUGINS:-}" ] || return 1
+    [ "${cur_enable_all:-false}" = "${AI_SANDBOX_ENABLE_ALL_PLUGINS:-false}" ] || return 1
     return 0
 }
 
