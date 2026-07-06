@@ -23,7 +23,7 @@ phases:
           slug: reconcile-running-config-match
           title: Reconcile Running-Config Match To Full Dimension Set
           path: phase-01-full-config-restore/002-reconcile-running-config-match.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: Extended running_config_matches in src/utils.sh to compare three new derived labels (ai.sandbox.marketplaces, ai.sandbox.plugins, ai.sandbox.enable-all-plugins) against effective AI_SANDBOX_MARKETPLACES/AI_SANDBOX_PLUGINS/AI_SANDBOX_ENABLE_ALL_PLUGINS env vars, added the labels to docker-compose.yaml, used :- defaults so legacy containers don't false-positive. Existing five comparisons and the restore path (task 001) untouched. Added 5 regression tests. make build/lint/test.unit all pass (136 examples, 0 failures). Design note §2.3/§2.6 followed exactly, no deviations.
           git:
