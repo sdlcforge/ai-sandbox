@@ -42,7 +42,7 @@ phases:
             branch: phase-01-task-03-add-detail-alias-and-config-di
             commit:
                 - 50f8541
-            merge: null
+            merge: 55cc455c3bf8fb50aca238a3fb9a0a5b144db90d
         - number: 4
           slug: add-managed-image-label
           title: Add Managed Image Label
