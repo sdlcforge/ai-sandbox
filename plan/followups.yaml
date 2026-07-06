@@ -35,3 +35,38 @@ items:
       date: "2026-07-06"
       tag: full-config-restore
       text: 'Phase-review (security lens, suggestion/low-confidence, non-blocking): restore_saved_config and status.sh''s config decode impose no size bound on the decoded ai.sandbox.config label before base64-decoding/jq-parsing it. Label is only writable at container-create time by the host process, so practical risk is low; optional defense-in-depth would bound the decoded payload size before piping into jq.'
+    - title: Task document Status section could not be upd
+      id: AGul
+      date: "2026-07-06"
+      tag: full-config-restore
+      text: '[phase-01-full-config-restore/001-persist-and-restore-full-config-inputs.md] Task document Status section could not be updated by the task agent (worktree boundary — task doc lives only in the plan worktree). Digest captured here via outcome_digest instead; no action needed.'
+    - title: Confirmed running_config_matches extension (m
+      id: L9e6
+      date: "2026-07-06"
+      tag: full-config-restore
+      text: '[phase-01-full-config-restore/001-persist-and-restore-full-config-inputs.md] Confirmed running_config_matches extension (marketplaces/plugins/enable-all) is intentionally out of this task''s scope, covered by task 002.'
+    - title: Task document Status section could not be upd
+      id: LruS
+      date: "2026-07-06"
+      tag: full-config-restore
+      text: '[phase-01-full-config-restore/002-reconcile-running-config-match.md] Task document Status section could not be updated by the task agent (same worktree-boundary limitation as task 001). Status: succeeded, 2026-07-06, 136 examples 0 failures, files: docker/docker-compose.yaml, src/utils.sh, test/unit/ai_sandbox_spec.sh. No action needed beyond noting for the record.'
+    - title: Task document Status section could not be upd
+      id: 792W
+      date: "2026-07-06"
+      tag: full-config-restore
+      text: '[phase-01-full-config-restore/003-add-detail-alias-and-config-display.md] Task document Status section could not be updated (same worktree-boundary limitation as tasks 001/002). Status: succeeded, 2026-07-06, 145 examples 0 failures, files: src/options.sh, src/status.sh, README.md, test/unit/ai_sandbox_spec.sh.'
+    - title: 'Pre-existing, out-of-scope observation: RESER'
+      id: HTL6
+      date: "2026-07-06"
+      tag: full-config-restore
+      text: '[phase-01-full-config-restore/003-add-detail-alias-and-config-display.md] Pre-existing, out-of-scope observation: RESERVED_NAMES in src/options.sh is unreachable for any word also in PER_INSTANCE_COMMANDS (e.g. `ai-sandbox create detail` succeeds with SANDBOX_NAME=detail instead of being rejected — same pre-existing gap already affects `create status`). Not introduced by this task; fixing would touch the create-branch logic affecting multiple existing commands. Recommend a followup rather than expanding this task''s scope.'
+    - title: Task document Status section could not be upd
+      id: Lnj3
+      date: "2026-07-06"
+      tag: doc-updates
+      text: '[phase-02-doc-updates/001-update-architecture-docs.md] Task document Status section could not be updated (same worktree-boundary limitation as prior tasks in this plan). No action needed.'
+    - title: 'Manager note (not from task agent): the task '
+      id: 2e9z
+      date: "2026-07-06"
+      tag: doc-updates
+      text: '[phase-02-doc-updates/001-update-architecture-docs.md] Manager note (not from task agent): the task agent''s changes were initially left uncommitted in the worktree; manager reviewed the diff against the reported work and committed it directly (d6b8412) before applying this report.'
