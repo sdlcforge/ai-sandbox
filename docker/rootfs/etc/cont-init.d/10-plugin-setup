@@ -23,8 +23,6 @@ fi
 # directory and files are written with the correct ownership.
 _run() { /command/s6-setuidgid "${HOST_USER}" env HOME="${HOST_HOME}" "$@"; }
 
-_last_marketplace=""
-
 # Register marketplaces (pipe-separated).
 if [ -n "${AI_SANDBOX_MARKETPLACES:-}" ]; then
     _copy="${AI_SANDBOX_MARKETPLACES}"
@@ -37,15 +35,21 @@ if [ -n "${AI_SANDBOX_MARKETPLACES:-}" ]; then
         fi
         [ -z "${_mp}" ] && continue
 
-        if _run "${CLAUDE_BIN}" plugins marketplace list 2>/dev/null | grep -qF "${_mp}"; then
+        # claude plugins marketplace add accepts bare absolute paths and https://
+        # URLs, but not file:// URIs — strip the scheme when present.
+        case "${_mp}" in
+            file://*) _mp_add="${_mp#file://}" ;;
+            *)        _mp_add="${_mp}" ;;
+        esac
+
+        if _run "${CLAUDE_BIN}" plugins marketplace list 2>/dev/null | grep -qF "${_mp_add}"; then
             printf '[10-plugin-setup] marketplace already registered: %s\n' "${_mp}"
         else
             printf '[10-plugin-setup] registering marketplace: %s\n' "${_mp}"
-            _run "${CLAUDE_BIN}" plugins marketplace add "${_mp}" 2>&1 \
+            _run "${CLAUDE_BIN}" plugins marketplace add "${_mp_add}" 2>&1 \
                 || printf '[10-plugin-setup] warn: failed to register marketplace: %s\n' \
                     "${_mp}" >&2
         fi
-        _last_marketplace="${_mp}"
     done
 fi
 
@@ -72,14 +76,51 @@ if [ -n "${AI_SANDBOX_PLUGINS:-}" ]; then
     done
 fi
 
-# Enable all plugins from all registered marketplaces if requested.
+# Install all plugins from registered file:// marketplaces if requested.
+# claude has no --all flag for enable or install; read each manifest and
+# install plugins individually.
 if [ "${AI_SANDBOX_ENABLE_ALL_PLUGINS:-false}" = "true" ]; then
-    if [ -n "${_last_marketplace}" ]; then
-        printf '[10-plugin-setup] enabling all plugins\n'
-        _run "${CLAUDE_BIN}" plugins enable --all 2>&1 \
-            || printf '[10-plugin-setup] warn: failed to enable all plugins\n' >&2
-    else
+    if [ -z "${AI_SANDBOX_MARKETPLACES:-}" ]; then
         printf '[10-plugin-setup] warn: enable-all set but no marketplace was configured\n' >&2
+    else
+        _copy="${AI_SANDBOX_MARKETPLACES}"
+        while [ -n "${_copy}" ]; do
+            _mp="${_copy%%|*}"
+            if [ "${_mp}" = "${_copy}" ]; then _copy=""; else _copy="${_copy#*|}"; fi
+            [ -z "${_mp}" ] && continue
+
+            case "${_mp}" in
+                file://*) _manifest="${_mp#file://}" ;;
+                *)
+                    printf '[10-plugin-setup] warn: enable-all not supported for non-file marketplace: %s\n' \
+                        "${_mp}" >&2
+                    continue
+                    ;;
+            esac
+
+            if [ ! -f "${_manifest}" ]; then
+                printf '[10-plugin-setup] warn: marketplace manifest not found: %s\n' \
+                    "${_manifest}" >&2
+                continue
+            fi
+
+            _mp_name=$(jq -r '.name // ""' "${_manifest}" 2>/dev/null)
+            printf '[10-plugin-setup] installing all plugins from: %s\n' "${_mp}"
+
+            jq -r '.plugins[].name' "${_manifest}" 2>/dev/null \
+            | while IFS= read -r _plugin_name; do
+                [ -z "${_plugin_name}" ] && continue
+                _plugin_ref="${_plugin_name}@${_mp_name}"
+                if _run "${CLAUDE_BIN}" plugins list 2>/dev/null | grep -qF "${_plugin_name}"; then
+                    printf '[10-plugin-setup] plugin already installed: %s\n' "${_plugin_ref}"
+                else
+                    printf '[10-plugin-setup] installing plugin: %s\n' "${_plugin_ref}"
+                    _run "${CLAUDE_BIN}" plugins install "${_plugin_ref}" 2>&1 \
+                        || printf '[10-plugin-setup] warn: failed to install plugin: %s\n' \
+                            "${_plugin_ref}" >&2
+                fi
+            done
+        done
     fi
 fi
 

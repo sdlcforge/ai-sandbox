@@ -449,6 +449,33 @@ Describe 'ai-sandbox.sh'
       The contents of file "${OUT}" should not include 'remote.example.com'
       The status should be success
     End
+
+    It 'mounts the parent directory when marketplace path is a .json file at the project root'
+      mkdir -p "${HOME}/project"
+      touch "${HOME}/project/marketplace.json"
+      export AI_SANDBOX_MARKETPLACES="file://${HOME}/project/marketplace.json"
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should include "${HOME}/project:${HOME}/project:ro"
+      The contents of file "${OUT}" should not include 'marketplace.json'
+      The status should be success
+    End
+
+    It 'mounts the project root when marketplace.json is inside .claude-plugin/'
+      mkdir -p "${HOME}/project/.claude-plugin"
+      touch "${HOME}/project/.claude-plugin/marketplace.json"
+      export AI_SANDBOX_MARKETPLACES="file://${HOME}/project/.claude-plugin/marketplace.json"
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should include "${HOME}/project:${HOME}/project:ro"
+      The contents of file "${OUT}" should not include '.claude-plugin'
+      The status should be success
+    End
+
+    It 'mounts the directory as-is when marketplace path is not a file'
+      export AI_SANDBOX_MARKETPLACES="file:///srv/my-dir-marketplace"
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should include '/srv/my-dir-marketplace:/srv/my-dir-marketplace:ro'
+      The status should be success
+    End
   End
 
   Describe 'is_build_stale()'
@@ -767,6 +794,128 @@ Describe 'ai-sandbox.sh'
       When call list_instances
       The output should eq ''
       The status should be success
+    End
+  End
+
+  Describe 'ensure_clean_slate_credentials()'
+    # Silence informational output — qecho is defined in the rollup but we
+    # override it here to keep test output clean.
+    qecho() { :; }
+
+    KEYCHAIN_CREDS='{"claudeAiOauth":{"accessToken":"keychain-tok","refreshToken":"keychain-ref","expiresAt":9999999999000}}'
+    FILE_CREDS='{"claudeAiOauth":{"accessToken":"file-tok","refreshToken":"file-ref","expiresAt":9999999999000}}'
+
+    setup() {
+      CREDS_HOME="$(mktemp -d)"
+      mkdir -p "${CREDS_HOME}/.claude"
+      ORIG_HOME="${HOME}"
+      HOME="${CREDS_HOME}"
+      unset AI_SANDBOX_CREDENTIALS_JSON_B64
+    }
+    cleanup() {
+      rm -rf "${CREDS_HOME}"
+      HOME="${ORIG_HOME}"
+      unset AI_SANDBOX_CREDENTIALS_JSON_B64
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    # Helper: call ensure_clean_slate_credentials and decode the access token from
+    # the exported env var to prove which credential source was used.
+    decode_access_token() {
+      ensure_clean_slate_credentials
+      printf '%s' "${AI_SANDBOX_CREDENTIALS_JSON_B64}" | base64 -d \
+        | jq -r '.claudeAiOauth.accessToken'
+    }
+
+    Describe 'on macOS'
+      uname() { printf 'Darwin\n'; }
+
+      Describe 'when Keychain has valid credentials'
+        setup_keychain() {
+          _hex_creds=$(printf '%s' "${KEYCHAIN_CREDS}" | xxd -p | tr -d '\n')
+          # shellcheck disable=SC2317 # called indirectly by ensure_clean_slate_credentials
+          security() { printf '%s' "${_hex_creds}"; return 0; }
+        }
+        Before 'setup_keychain'
+
+        It 'exports AI_SANDBOX_CREDENTIALS_JSON_B64'
+          When call ensure_clean_slate_credentials
+          The status should be success
+          The variable AI_SANDBOX_CREDENTIALS_JSON_B64 should be present
+        End
+
+        It 'uses Keychain credentials even when a credentials file also exists'
+          printf '%s' "${FILE_CREDS}" > "${HOME}/.claude/.credentials.json"
+          When call decode_access_token
+          The output should eq 'keychain-tok'
+          The status should be success
+        End
+      End
+
+      Describe 'when Keychain is unavailable but credentials file exists (fallback)'
+        setup_file_fallback() {
+          # shellcheck disable=SC2317
+          security() { return 1; }
+          printf '%s' "${FILE_CREDS}" > "${HOME}/.claude/.credentials.json"
+        }
+        Before 'setup_file_fallback'
+
+        It 'exports AI_SANDBOX_CREDENTIALS_JSON_B64 from the file'
+          When call ensure_clean_slate_credentials
+          The status should be success
+          The variable AI_SANDBOX_CREDENTIALS_JSON_B64 should be present
+        End
+
+        It 'uses the file credentials'
+          When call decode_access_token
+          The output should eq 'file-tok'
+          The status should be success
+        End
+      End
+
+      Describe 'when neither Keychain nor credentials file is available'
+        setup_none() {
+          # shellcheck disable=SC2317
+          security() { return 1; }
+        }
+        Before 'setup_none'
+
+        It 'returns success with a warning on stderr'
+          When call ensure_clean_slate_credentials
+          The status should be success
+          The stderr should include 'warn:'
+        End
+
+        It 'does not export AI_SANDBOX_CREDENTIALS_JSON_B64'
+          When call ensure_clean_slate_credentials
+          The stderr should include 'warn:'
+          The variable AI_SANDBOX_CREDENTIALS_JSON_B64 should be undefined
+        End
+      End
+    End
+
+    Describe 'on Linux'
+      uname() { printf 'Linux\n'; }
+
+      It 'exports AI_SANDBOX_CREDENTIALS_JSON_B64 from the credentials file'
+        printf '%s' "${FILE_CREDS}" > "${HOME}/.claude/.credentials.json"
+        When call ensure_clean_slate_credentials
+        The status should be success
+        The variable AI_SANDBOX_CREDENTIALS_JSON_B64 should be present
+      End
+
+      It 'emits a warning when the credentials file is missing'
+        When call ensure_clean_slate_credentials
+        The status should be success
+        The stderr should include 'warn:'
+      End
+
+      It 'does not export AI_SANDBOX_CREDENTIALS_JSON_B64 when file is missing'
+        When call ensure_clean_slate_credentials
+        The stderr should include 'warn:'
+        The variable AI_SANDBOX_CREDENTIALS_JSON_B64 should be undefined
+      End
     End
   End
 End

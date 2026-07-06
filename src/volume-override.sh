@@ -61,7 +61,23 @@ function generate_volume_override() {
             case "${_mp}" in
                 file://*)
                     _host_path="${_mp#file://}"
-                    mounts+=("${_host_path}:${_host_path}:ro")
+                    # When the path points to a file (e.g. marketplace.json),
+                    # mount a directory that covers its relative plugin sources.
+                    # If the file lives inside .claude-plugin/, source paths in
+                    # the manifest are relative to the project root (parent of
+                    # .claude-plugin/), so mount that grandparent instead.
+                    local _mount_path _parent
+                    if [ -f "${_host_path}" ]; then
+                        _parent="$(dirname "${_host_path}")"
+                        if [ "$(basename "${_parent}")" = ".claude-plugin" ]; then
+                            _mount_path="$(dirname "${_parent}")"
+                        else
+                            _mount_path="${_parent}"
+                        fi
+                    else
+                        _mount_path="${_host_path}"
+                    fi
+                    mounts+=("${_mount_path}:${_mount_path}:ro")
                     ;;
             esac
         done
