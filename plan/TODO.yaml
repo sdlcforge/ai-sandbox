@@ -39,7 +39,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-03-add-detail-alias-and-config-di
-            commit: []
+            commit:
+                - 50f8541
             merge: null
         - number: 4
           slug: add-managed-image-label
