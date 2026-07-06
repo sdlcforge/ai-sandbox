@@ -39,3 +39,20 @@ From `plan/followups.yaml`:
 
 - **S6Up: Task agent mid-response API disconnect** (tag: `restore-fix`, date: 2026-07-06)
   - The task agent hit a connection closure mid-response after committing its work but before returning its structured report. The manager verified the commit directly (`git show`, `make lint`, `make test.unit`) and confirmed it fully satisfies the task document's Requirements and Validation sections. No re-dispatch was necessary.
+
+- **4DzF: Combine sequential docker inspect calls** (tag: `restore-fix`, date: 2026-07-06)
+  - Phase-review efficiency finding (non-blocking suggestion): `restore_saved_config()` issues three sequential `docker inspect -f ...` calls where a single multi-field format string would do. Noted as consistent with the existing convention in `running_config_matches()` (six sequential calls, unchanged) — a pre-existing pattern being extended, not a new regression. Deferred rather than fixed immediately since a consistent fix would touch both functions.
+
+## Final Task State
+
+# TODO
+
+## Purpose and scope
+
+Tracking document for the active plan.
+
+## Tasks
+
+### Phase 01 — Restore Fix
+
+- [x] [001-restore-mode-and-clean-slate-on-bare-enter.md](./phase-01-restore-fix/001-restore-mode-and-clean-slate-on-bare-enter.md) — tier `sonnet-med` · branch `phase-01-task-01-restore-mode-and-clean-slate-o` · commit `4fbee0523d8d3d9ca512d445698a635b12f4c6f2` · merge `cfa8de31ed33ff70bfadca1c3838a0277e6024b3`
