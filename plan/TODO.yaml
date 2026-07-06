@@ -5,4 +5,14 @@ phases:
     - number: 1
       slug: full-config-restore
       title: Full Config Restore
-      tasks: []
+      tasks:
+        - number: 1
+          slug: persist-and-restore-full-config-inputs
+          title: Persist And Restore Full Config Inputs
+          path: phase-01-full-config-restore/001-persist-and-restore-full-config-inputs.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
