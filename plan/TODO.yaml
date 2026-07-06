@@ -44,7 +44,7 @@ phases:
           done: false
           tier: haiku-med
           git:
-            branch: null
+            branch: phase-01-task-04-add-managed-image-label
             commit: []
             merge: null
     - number: 2
