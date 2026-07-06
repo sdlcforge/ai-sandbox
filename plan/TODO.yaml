@@ -18,4 +18,4 @@ phases:
             branch: phase-01-task-01-restore-mode-and-clean-slate-o
             commit:
                 - 4fbee0523d8d3d9ca512d445698a635b12f4c6f2
-            merge: null
+            merge: cfa8de31ed33ff70bfadca1c3838a0277e6024b3
