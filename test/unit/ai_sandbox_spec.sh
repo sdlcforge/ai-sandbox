@@ -334,6 +334,36 @@ Describe 'ai-sandbox.sh'
       The variable MODE_OVERRIDE should eq sentinel-mode
       The variable CLEAN_SLATE should eq sentinel-clean
     End
+
+    It 'drops a restored marketplace ref with an invalid scheme, keeping well-formed entries (mirrors --add-marketplace scheme validation)'
+      # src/options.sh's --add-marketplace parser rejects any ref that
+      # doesn't start with https:// or file:// (see "rejects --add-marketplace
+      # with invalid scheme" above). A restored value arrives via a persisted
+      # docker label rather than this run's CLI args, so it must be
+      # independently re-validated rather than trusted verbatim.
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      config_b64="$(encode_config '{"version":1,"marketplaces":["ftp://bad.example.com","https://good.example.com/plugins"]}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable "CLI_MARKETPLACES[*]" should eq 'https://good.example.com/plugins'
+      The stderr should include 'invalid scheme'
+      The stderr should include 'ftp://bad.example.com'
+    End
   End
 
   Describe 'running_config_matches()'
@@ -879,6 +909,17 @@ Describe 'ai-sandbox.sh'
     Before 'setup'
 
     It 'renders a Configuration: section as decoded YAML when the label is present (human output)'
+      # Shadow `yq` with a deterministic stand-in for the kislyuk/yq `-y .`
+      # invocation so this test doesn't depend on whichever `yq` (if any --
+      # kislyuk vs. mikefarah are incompatible) happens to be on the
+      # test-runner's PATH; it exercises the YAML-rendering branch of
+      # _render_config_section() rather than the real binary.
+      yq() {
+        echo "version: 1"
+        echo "mode: static"
+        echo 'profiles:'
+        echo '- base'
+      }
       config_b64="$(encode_config '{"version":1,"mode":"static","profiles":["base"]}')"
       docker() {
         if [ "$1" = "inspect" ]; then
@@ -912,6 +953,13 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'still renders Configuration: for a stopped container with a persisted label (docker inspect works on stopped containers)'
+      # Shadow `yq` deterministically (see the analogous comment above) so
+      # this test doesn't depend on the test-runner's PATH having a
+      # kislyuk/yq-compatible `yq` installed.
+      yq() {
+        echo "version: 1"
+        echo "mode: mirror"
+      }
       config_b64="$(encode_config '{"version":1,"mode":"mirror"}')"
       docker() {
         if [ "$1" = "inspect" ]; then

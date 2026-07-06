@@ -141,6 +141,15 @@ This is framed in `README.md` as a mitigation, not a security boundary — with
 `CONTAINERS=1` + `POST=1` a hostile workload inside can still escape via e.g.
 `docker run -v /:/host`. Enable only when the workload is trusted.
 
+Since the full-config-restore work, this escape has a durability consequence
+worth calling out: Docker labels are fixed at container-create time, so a
+workload that escapes this way has enough host Docker access to recreate the
+container with a poisoned `ai.sandbox.config` label — and that label is now
+durable, auto-reapplied on every subsequent bare `enter`/`start`. What was
+previously a one-shot compromise becomes self-perpetuating across future,
+otherwise-clean sessions. This is particularly relevant in the default
+`mirror` mode, where `~/.claude` is bind-mounted read-write from the host.
+
 ### `~/.config` is copy-on-write by default
 
 Writes under `~/.config` from inside the container are kept **container-local
