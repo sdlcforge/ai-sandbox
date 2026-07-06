@@ -45,7 +45,8 @@ phases:
           tier: haiku-med
           git:
             branch: phase-01-task-04-add-managed-image-label
-            commit: []
+            commit:
+                - c29b7db
             merge: null
     - number: 2
       slug: doc-updates
