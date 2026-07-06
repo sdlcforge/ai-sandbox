@@ -13,6 +13,7 @@ phases:
           path: phase-01-restore-fix/001-restore-mode-and-clean-slate-on-bare-enter.md
           done: false
           tier: sonnet-med
+          digest: Extracted src/index.sh:73-87 restore block into restore_saved_config() in src/utils.sh; now also restores MODE_OVERRIDE (ai.sandbox.mode) and CLEAN_SLATE (ai.sandbox.clean-slate) labels, fixing both the false process-check-skip and the false-positive recreate prompt on bare enter/start. Added regression tests for restore_saved_config() and running_config_matches() (129/129 unit tests pass, lint clean).
           git:
             branch: phase-01-task-01-restore-mode-and-clean-slate-o
             commit:
