@@ -41,7 +41,7 @@ phases:
           slug: add-managed-image-label
           title: Add Managed Image Label
           path: phase-01-full-config-restore/004-add-managed-image-label.md
-          done: false
+          done: true
           tier: haiku-med
           digest: Successfully added the ai.sandbox.managed="true" image label to both static (docker/Dockerfile) and assembled (via docker/scripts/assemble-dockerfile.sh) image build paths. This enables label-based filtering of ai-sandbox images at the image level, mirroring the existing container-level managed labels. The label is unconditional and applied regardless of build profile or capabilities. All validation checks passed; no existing tests were broken.
           git:
