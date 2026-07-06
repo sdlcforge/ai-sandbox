@@ -4,7 +4,10 @@
 # Parse CLI flags and the command word. Sets globals consumed by index.sh:
 #   SANDBOX_NAME  — empty for global commands; instance name for per-instance commands
 #   SANDBOX_PROFILES — comma-joined list of --profile values from a `create` invocation
-#   CMD           — subcommand (e.g. "create", "list", "enter", "stop")
+#   CMD           — subcommand (e.g. "create", "list", "enter", "stop").
+#                   "detail" is accepted as a per-instance command word (bare
+#                   or after a sandbox name) and normalized to CMD="status"
+#                   during parsing — it is a pure alias, not a distinct value.
 #   ARGS          — array of remaining args forwarded to the subcommand
 #   PROFILES      — array of --profile names, in invocation order (current run's profile resolution)
 #   MODE_OVERRIDE — "mirror" / "static" from --mode, or "" if not given
@@ -56,7 +59,7 @@ function parse_options() {
     # Global command words — first non-flag arg matching one of these is a global command.
     local -r GLOBAL_COMMANDS="create list help kill-local-ai new-profile"
     # Reserved names — may not be used as sandbox instance names.
-    local -r RESERVED_NAMES="create list help kill-local-ai new-profile status"
+    local -r RESERVED_NAMES="create list help kill-local-ai new-profile status detail"
 
     # --- Phase 1: consume leading flags that apply before the command word ---
     # We collect remaining positional args here, then process them below.
@@ -134,7 +137,7 @@ function parse_options() {
         # name.  Without this, `ai-sandbox clean` parses as SANDBOX_NAME=clean /
         # CMD=enter, which triggers the plugin-conflict check and enters the wrong
         # sandbox.
-        local -r PER_INSTANCE_COMMANDS="start enter attach connect fix-ssh build user-exec root-exec status stop delete clean up"
+        local -r PER_INSTANCE_COMMANDS="start enter attach connect fix-ssh build user-exec root-exec status detail stop delete clean up"
         local is_per_instance_cmd=false
         local pic
         for pic in ${PER_INSTANCE_COMMANDS}; do
@@ -186,6 +189,16 @@ function parse_options() {
                 CMD="enter"
             fi
         fi
+    fi
+
+    # "detail" is a pure alias for "status" -- normalize immediately after
+    # Phase 2's CMD assignment (covers both the bare `detail` form and the
+    # `<name> detail` form, since both branches above funnel through this one
+    # point before Phase 3) so every downstream `[ "${CMD}" = "status" ]`
+    # check, including the QUIET default below and src/index.sh's dispatch
+    # branch, keeps working unmodified.
+    if [ "${CMD}" = "detail" ]; then
+        CMD="status"
     fi
 
     # --- Phase 3: parse remaining args as command-specific flags ---

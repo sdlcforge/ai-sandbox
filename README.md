@@ -13,6 +13,7 @@
 Optional:
 - [XQuartz](https://www.xquartz.org/) for GUI app support (Chromium)
 - [claude-mem](https://github.com/anthropics/claude-code/tree/main/packages/claude-mem) plugin for persistent memory
+- [`yq`](https://github.com/kislyuk/yq) (the Python `kislyuk/yq` wrapper — **not** `mikefarah/yq`, an incompatible tool that shares the same binary name) for readable YAML rendering of the `status`/`detail` command's `Configuration:` section. Without it, the section degrades gracefully to pretty-printed JSON.
 
 ## Install
 
@@ -41,6 +42,7 @@ ai-sandbox logs -f
 | `attach` / `connect` | Connect to an already-running container |
 | `new-profile` | Scaffold a new profile YAML file by auto-discovering skills, hooks, and agents |
 | `fix-ssh` | Recreate the container with the host's current `SSH_AUTH_SOCK` bind-mounted. Run this after a host logout / ssh-agent restart if `git push` inside the container fails — see [SSH agent forwarding](#ssh-agent-forwarding). |
+| `status` / `detail` | Show container/image state, blocking-process conflicts, and (when present) the persisted configuration. `detail` is a pure alias for `status`. |
 | `<any>` | Passed through to `docker compose` |
 
 The image is rebuilt automatically when any file under `docker/` (Dockerfile, compose configs, entrypoint scripts, etc.) or any active profile YAML is newer than the image's build timestamp — you do not need to run `ai-sandbox build` or delete the image manually after pulling changes.

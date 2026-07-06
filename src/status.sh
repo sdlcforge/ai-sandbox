@@ -29,6 +29,31 @@ function _image_is_stale() {
     [ -n "${newer}" ]
 }
 
+# Decode the ai.sandbox.config label (base64 -> JSON) for the current
+# sandbox's container, matching the read pattern restore_saved_config() (see
+# src/utils.sh) uses for the same label. `docker inspect` works on stopped
+# containers too, so this works regardless of container state, not just
+# running. Prints the decoded JSON on stdout; prints nothing (and returns 0)
+# when the label is absent, empty, or not valid JSON -- no container, a
+# label-less/pre-existing container, and a corrupt label are all treated the
+# same: the Configuration section is simply omitted, not an error.
+function _status_gather_config() {
+    local ctr_name label_b64 config_json
+    ctr_name="$(sandbox_container_name)"
+    label_b64="$(docker inspect --format='{{index .Config.Labels "ai.sandbox.config"}}' "${ctr_name}" 2>/dev/null || true)"
+    [ -n "${label_b64}" ] || return 0
+
+    config_json="$(printf '%s' "${label_b64}" | base64 -d 2>/dev/null || true)"
+    [ -n "${config_json}" ] || return 0
+
+    # Validate it decodes to actual JSON before treating it as present, so a
+    # corrupt/malformed label degrades to "no config section" rather than
+    # propagating garbage to the caller.
+    printf '%s' "${config_json}" | jq -e . >/dev/null 2>&1 || return 0
+
+    printf '%s' "${config_json}"
+}
+
 # Emit tab-separated rows describing each built ai-sandbox image:
 #   tag<TAB>created<TAB>chromium<TAB>docker<TAB>stale
 # Empty output means no built images.
@@ -47,8 +72,34 @@ function _status_gather_images() {
     done < <(docker images ai-sandbox --format '{{.Repository}}:{{.Tag}}	{{.ID}}	{{.CreatedAt}}' 2>/dev/null)
 }
 
+# Render the decoded ai.sandbox.config JSON as a "Configuration:" section,
+# preferring YAML (via the Python kislyuk/yq wrapper's `yq -y .` -- NOT
+# mikefarah/yq's `yq eval` syntax, an incompatible tool sharing the same
+# binary name) for readability, and falling back to pretty-printed JSON via
+# `jq .` with no error when yq is absent or the wrong variant. Mirrors
+# src/xquartz.sh's pattern of degrading gracefully when an optional host tool
+# is unavailable. $1 -- decoded config JSON; caller only invokes this when
+# non-empty, so no section is emitted (not even a placeholder) when the label
+# is absent.
+function _render_config_section() {
+    local config_json="$1" rendered
+
+    echo
+    echo "Configuration:"
+    if command -v yq >/dev/null 2>&1 \
+        && rendered="$(printf '%s' "${config_json}" | yq -y . 2>/dev/null)" \
+        && [ -n "${rendered}" ]; then
+        : # rendered as YAML above
+    else
+        rendered="$(printf '%s' "${config_json}" | jq .)"
+    fi
+    while IFS= read -r line; do
+        echo "  ${line}"
+    done <<< "${rendered}"
+}
+
 function _render_status_human() {
-    local state="$1" images="$2" conflicts_claude="$3" conflicts_workers="$4"
+    local state="$1" images="$2" conflicts_claude="$3" conflicts_workers="$4" config_json="$5"
 
     echo "Container: ${state}"
     echo
@@ -88,10 +139,20 @@ function _render_status_human() {
             }
         fi
     fi
+
+    # Omit the Configuration section entirely (not an error, no placeholder)
+    # when the label is absent -- expected for any container with no
+    # ai.sandbox.config label. Uses an if/fi (not `[ ... ] && ...`) so the
+    # function's own exit status stays 0 when the label is absent, rather
+    # than leaking the false test result as this function's (and do_status's)
+    # return code.
+    if [ -n "${config_json}" ]; then
+        _render_config_section "${config_json}"
+    fi
 }
 
 function _render_status_json() {
-    local state="$1" images="$2" conflicts_claude="$3" conflicts_workers="$4"
+    local state="$1" images="$2" conflicts_claude="$3" conflicts_workers="$4" config_json="$5"
 
     local images_json='[]'
     if [ -n "${images}" ]; then
@@ -123,19 +184,26 @@ function _render_status_json() {
         [ -z "${combined}" ] && runnable=true || runnable=false
     fi
 
+    # config_json is already-decoded JSON (no yq needed since the target
+    # format is JSON); null when the ai.sandbox.config label is absent.
+    local config_arg='null'
+    [ -n "${config_json}" ] && config_arg="${config_json}"
+
     jq -n \
         --arg state "${state}" \
         --argjson images "${images_json}" \
         --argjson runnable "${runnable}" \
         --argjson blockers "${blockers_json}" \
-        '{container:{state:$state}, images:$images, runnable:$runnable, blockers:$blockers}'
+        --argjson config "${config_arg}" \
+        '{container:{state:$state}, images:$images, runnable:$runnable, blockers:$blockers, config:$config}'
 }
 
-# Main entry point for `ai-sandbox status`.
+# Main entry point for `ai-sandbox status` (and its `detail` alias).
 function do_status() {
-    local state images
+    local state images config_json
     state="$(_status_container_state)"
     images="$(_status_gather_images)"
+    config_json="$(_status_gather_config)"
 
     # Populate _PLUGIN_CONFLICTS_* unless explicitly skipped.
     if [ "${AI_SANDBOX_SKIP_PLUGIN_CHECK:-0}" = "1" ]; then
@@ -152,9 +220,9 @@ function do_status() {
     fi
 
     if [ "${STATUS_JSON}" = "true" ]; then
-        _render_status_json "${state}" "${images}" "${c_claude}" "${c_workers}"
+        _render_status_json "${state}" "${images}" "${c_claude}" "${c_workers}" "${config_json}"
     else
         echo "Sandbox: ${SANDBOX_NAME}"
-        _render_status_human "${state}" "${images}" "${c_claude}" "${c_workers}"
+        _render_status_human "${state}" "${images}" "${c_claude}" "${c_workers}" "${config_json}"
     fi
 }
