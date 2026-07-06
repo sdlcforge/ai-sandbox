@@ -226,6 +226,7 @@ ARG INSTALL_CHROMIUM=false
 ARG INSTALL_DOCKER_CLI=true
 LABEL ai.sandbox.chromium-enabled="${INSTALL_CHROMIUM}"
 LABEL ai.sandbox.docker-enabled="${INSTALL_DOCKER_CLI}"
+LABEL ai.sandbox.managed="true"
 
 ENTRYPOINT ["/init"]
 # With S6-overlay, it is important to use 'docker compose exec -u ${HOST_USER} zsh'; if we add 'USER ${HOST_USER}'

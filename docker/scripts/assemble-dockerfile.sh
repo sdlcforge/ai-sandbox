@@ -118,6 +118,12 @@ if [[ -n "${PROFILE_HASH}" ]]; then
   printf 'LABEL ai.sandbox.profile-hash="%s"\n' "${PROFILE_HASH}" >> "${OUTPUT_PATH}"
 fi
 
+# Append the managed image label unconditionally.
+{
+  printf '\n# === Managed image label ===\n'
+  printf 'LABEL ai.sandbox.managed="true"\n'
+} >> "${OUTPUT_PATH}"
+
 # Append the ENTRYPOINT as the final line.
 printf '\nENTRYPOINT ["/init"]\n' >> "${OUTPUT_PATH}"
 # With S6-overlay, use 'docker compose exec -u ${HOST_USER} zsh' to get a user shell;
