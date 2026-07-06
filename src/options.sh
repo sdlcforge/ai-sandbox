@@ -20,6 +20,21 @@
 #   CLI_ENABLE_ALL — "true" if --enable-all was passed
 #   CLEAN_SLATE   — "true" if --clean was passed (no host ~/.claude or plugin mounts)
 # Also exports AI_SANDBOX_SKIP_PLUGIN_CHECK when --force is passed.
+
+# Validate a sandbox name against Docker Compose's project-name constraint.
+# Compose derives the container/network/volume namespace from -p <name>,
+# which only accepts lowercase letters, digits, hyphens, and underscores,
+# starting with a letter or digit. Reject invalid names here so the error
+# is clear, instead of surfacing later as a confusing failure deep inside
+# `docker compose -p ai-sandbox-<name>`.
+function validate_sandbox_name() {
+    local name="$1"
+    if [[ ! "${name}" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+        echo "Error: sandbox name '${name}' is invalid — must start with a lowercase letter or digit and contain only lowercase letters, digits, hyphens, and underscores" 1>&2
+        exit 1
+    fi
+}
+
 function parse_options() {
     SANDBOX_NAME=""
     SANDBOX_PROFILES=""
@@ -136,6 +151,7 @@ function parse_options() {
             # For `create`, the next positional is the sandbox name
             if [ "${CMD}" = "create" ] && [ "${#remaining[@]}" -gt 0 ]; then
                 SANDBOX_NAME="${remaining[0]}"
+                validate_sandbox_name "${SANDBOX_NAME}"
                 remaining=("${remaining[@]:1}")
             fi
         elif [ "${is_per_instance_cmd}" = "true" ]; then
@@ -147,6 +163,7 @@ function parse_options() {
         else
             # Per-instance: first arg is sandbox name
             SANDBOX_NAME="${first_arg}"
+            validate_sandbox_name "${SANDBOX_NAME}"
 
             # Validate: reserved name check
             local rn
