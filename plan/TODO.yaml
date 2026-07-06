@@ -11,7 +11,7 @@ phases:
           slug: persist-and-restore-full-config-inputs
           title: Persist And Restore Full Config Inputs
           path: phase-01-full-config-restore/001-persist-and-restore-full-config-inputs.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: Implemented write side (src/index.sh assembles seven config-input dimensions into JSON, base64-encodes single-line, exports AI_SANDBOX_CONFIG_B64) and read side (docker-compose.yaml's new ai.sandbox.config label; restore_saved_config in src/utils.sh decodes and rehydrates PROFILES/MODE_OVERRIDE/NO_ISOLATE_CONFIG/CLEAN_SLATE/CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL under the unchanged CONFIG_FLAGS_PROVIDED gate, no legacy fallback). Closes AL7i and the no-isolate-config restore gap. make build/lint/test.unit all pass (131 examples, 0 failures). running_config_matches and profile-installer.js intentionally untouched per Requirement 4 — covered by task 002.
           git:
