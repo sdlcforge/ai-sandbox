@@ -421,6 +421,208 @@ Describe 'ai-sandbox.sh'
       When call running_config_matches
       The status should eq 1
     End
+
+    It 'returns success when marketplaces/plugins/enable-all-plugins labels match the current effective values'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES="https://example.com/registry"
+      AI_SANDBOX_PLUGINS="claude-mem"
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=true
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          elif [[ "$*" == *".Config.Image"* ]]; then
+            echo "ai-sandbox:profile-abc"
+          elif [[ "$*" == *"profile-hash"* ]]; then
+            echo "abc"
+          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
+            echo "mirror"
+          elif [[ "$*" == *"no-isolate-config"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"docker-proxy"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"clean-slate"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"ai.sandbox.marketplaces"* ]]; then
+            echo "https://example.com/registry"
+          elif [[ "$*" == *"ai.sandbox.plugins"* ]]; then
+            echo "claude-mem"
+          elif [[ "$*" == *"enable-all-plugins"* ]]; then
+            echo "true"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 0
+    End
+
+    It 'returns failure when the marketplaces label disagrees with AI_SANDBOX_MARKETPLACES'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES="https://example.com/new-registry"
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          elif [[ "$*" == *".Config.Image"* ]]; then
+            echo "ai-sandbox:profile-abc"
+          elif [[ "$*" == *"profile-hash"* ]]; then
+            echo "abc"
+          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
+            echo "mirror"
+          elif [[ "$*" == *"no-isolate-config"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"docker-proxy"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"clean-slate"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"ai.sandbox.marketplaces"* ]]; then
+            echo ""
+          elif [[ "$*" == *"ai.sandbox.plugins"* ]]; then
+            echo ""
+          elif [[ "$*" == *"enable-all-plugins"* ]]; then
+            echo "false"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 1
+    End
+
+    It 'returns failure when the plugins label disagrees with AI_SANDBOX_PLUGINS'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS="claude-mem"
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          elif [[ "$*" == *".Config.Image"* ]]; then
+            echo "ai-sandbox:profile-abc"
+          elif [[ "$*" == *"profile-hash"* ]]; then
+            echo "abc"
+          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
+            echo "mirror"
+          elif [[ "$*" == *"no-isolate-config"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"docker-proxy"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"clean-slate"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"ai.sandbox.marketplaces"* ]]; then
+            echo ""
+          elif [[ "$*" == *"ai.sandbox.plugins"* ]]; then
+            echo ""
+          elif [[ "$*" == *"enable-all-plugins"* ]]; then
+            echo "false"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 1
+    End
+
+    It 'returns failure when the enable-all-plugins label disagrees with AI_SANDBOX_ENABLE_ALL_PLUGINS'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=true
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          elif [[ "$*" == *".Config.Image"* ]]; then
+            echo "ai-sandbox:profile-abc"
+          elif [[ "$*" == *"profile-hash"* ]]; then
+            echo "abc"
+          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
+            echo "mirror"
+          elif [[ "$*" == *"no-isolate-config"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"docker-proxy"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"clean-slate"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"ai.sandbox.marketplaces"* ]]; then
+            echo ""
+          elif [[ "$*" == *"ai.sandbox.plugins"* ]]; then
+            echo ""
+          elif [[ "$*" == *"enable-all-plugins"* ]]; then
+            echo "false"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 1
+    End
+
+    It 'returns success for a legacy container missing the marketplaces/plugins/enable-all-plugins labels when the current invocation is also empty/default (no false-positive recreate)'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          elif [[ "$*" == *".Config.Image"* ]]; then
+            echo "ai-sandbox:profile-abc"
+          elif [[ "$*" == *"profile-hash"* ]]; then
+            echo "abc"
+          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
+            echo "mirror"
+          elif [[ "$*" == *"no-isolate-config"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"docker-proxy"* ]]; then
+            echo "false"
+          elif [[ "$*" == *"clean-slate"* ]]; then
+            echo "false"
+          fi
+          # No branches for marketplaces/plugins/enable-all-plugins labels:
+          # simulates a container created before these labels existed, where
+          # `docker inspect` prints an empty string for the missing key.
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 0
+    End
   End
 
   Describe 'parse_options()'
