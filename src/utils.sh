@@ -78,6 +78,39 @@ function profile_has_capability() {
     return 1
 }
 
+# Restore PROFILES / MODE_OVERRIDE / CLEAN_SLATE from the labels saved on the
+# container at `create` time, when the current invocation didn't pass any
+# config-changing flags itself. Called for `start`/`enter`; when
+# CONFIG_FLAGS_PROVIDED is "true" (i.e. --profile/--mode/--clean/etc. was
+# explicitly passed this run) or no container exists yet, returns immediately
+# without touching PROFILES / MODE_OVERRIDE / CLEAN_SLATE, so the explicit
+# flags on the current invocation always win.
+# shellcheck disable=SC2034 # PROFILES/MODE_OVERRIDE/CLEAN_SLATE are globals consumed downstream by src/index.sh (profile-resolution and EFFECTIVE_MODE phases), not local to this function
+function restore_saved_config() {
+    if [ "${CONFIG_FLAGS_PROVIDED}" != "true" ] && is_container_running_or_stopped; then
+        local ctr_name saved_profiles saved_mode saved_clean
+        ctr_name="$(sandbox_container_name)"
+        saved_profiles="$(docker inspect -f \
+            '{{index .Config.Labels "ai.sandbox.profiles"}}' \
+            "${ctr_name}" 2>/dev/null || true)"
+        if [ -n "${saved_profiles}" ]; then
+            IFS=',' read -ra PROFILES <<< "${saved_profiles}"
+        fi
+        saved_mode="$(docker inspect -f \
+            '{{index .Config.Labels "ai.sandbox.mode"}}' \
+            "${ctr_name}" 2>/dev/null || true)"
+        if [ -n "${saved_mode}" ]; then
+            MODE_OVERRIDE="${saved_mode}"
+        fi
+        saved_clean="$(docker inspect -f \
+            '{{index .Config.Labels "ai.sandbox.clean-slate"}}' \
+            "${ctr_name}" 2>/dev/null || true)"
+        if [ -n "${saved_clean}" ]; then
+            CLEAN_SLATE="${saved_clean}"
+        fi
+    fi
+}
+
 # Return 0 if the running container's image + config-relevant labels match the
 # current invocation's composition, 1 if they differ, 2 if no container is
 # running. Reads AI_SANDBOX_IMAGE_TAG / PROFILE_COMPOSITION_HASH / EFFECTIVE_MODE

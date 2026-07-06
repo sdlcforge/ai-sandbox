@@ -70,20 +70,13 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 PROJECT_ROOT="$(cd -P "${SCRIPT_DIR}/.." && pwd)"
 
-# --- Phase: restore saved profiles for start/enter (no config flags) ---
+# --- Phase: restore saved config for start/enter (no config flags) ---
 # When start/enter is called without any config-changing flags, read the
-# profile list that was saved at `create` time so the container restarts with
-# its original profile composition without requiring the user to re-specify
-# --profile flags each time.
+# profiles/mode/clean-slate settings that were saved at `create` time so the
+# container restarts with its original composition without requiring the user
+# to re-specify --profile/--mode/--clean flags each time.
 if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
-    if [ "${CONFIG_FLAGS_PROVIDED}" != "true" ] && is_container_running_or_stopped; then
-        saved_profiles="$(docker inspect -f \
-            '{{index .Config.Labels "ai.sandbox.profiles"}}' \
-            "ai-sandbox-${SANDBOX_NAME}" 2>/dev/null || true)"
-        if [ -n "${saved_profiles}" ]; then
-            IFS=',' read -ra PROFILES <<< "${saved_profiles}"
-        fi
-    fi
+    restore_saved_config
 fi
 
 # --- Phase: resolve profiles ---
