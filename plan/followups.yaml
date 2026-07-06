@@ -10,3 +10,8 @@ items:
       date: "2026-07-06"
       tag: config-restore
       text: --add-marketplace, --enable-plugin, and --enable-all are not recorded as docker labels at create time (only ai.sandbox.profiles is), so this config is silently dropped on a later bare `enter`/`start` invocation with no flags. Doesn't currently trigger the false-positive recreate prompt (running_config_matches doesn't check these fields), but the resulting container silently loses the requested marketplace/plugin setup. Discovered while diagnosing the mode/clean-slate restore bug (see plan for that fix) — src/index.sh:73-87 restore block and docker-compose.yaml labels would need extending to cover these fields too.
+    - title: 'Task agent hit a mid-response API disconnect '
+      id: S6Up
+      date: "2026-07-06"
+      tag: restore-fix
+      text: '[phase-01-restore-fix/001-restore-mode-and-clean-slate-on-bare-enter.md] Task agent hit a mid-response API disconnect (Connection closed mid-response) after committing its work but before returning its structured report. The manager verified the commit directly (git show, make lint, make test.unit) and confirms it fully satisfies the task doc''s Requirements and Validation sections. No re-dispatch was necessary.'
