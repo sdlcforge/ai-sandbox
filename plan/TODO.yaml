@@ -26,6 +26,16 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 3
+          slug: add-detail-alias-and-config-display
+          title: Add Detail Alias And Config Display
+          path: phase-01-full-config-restore/003-add-detail-alias-and-config-display.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
     - number: 2
       slug: doc-updates
       title: Documentation Updates
