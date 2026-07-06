@@ -18,7 +18,7 @@ phases:
             branch: phase-01-task-01-persist-and-restore-full-confi
             commit:
                 - e7db5ed
-            merge: null
+            merge: e4bade38cb2c7ad29105f125f9bed669fc8ded09
         - number: 2
           slug: reconcile-running-config-match
           title: Reconcile Running-Config Match To Full Dimension Set
