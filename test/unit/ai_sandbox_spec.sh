@@ -178,6 +178,49 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'start_shell()'
+    It 'scopes the exec to the current compose project (regression: missing -p flag)'
+      # Without -p "${COMPOSE_PROJECT}", exec resolves against the wrong
+      # default compose project scope for named instances and fails with
+      # `service "ai-sandbox" is not running`.
+      COMPOSE_FILES="-f docker-compose.yaml"
+      COMPOSE_PROJECT="ai-sandbox-flow-rook"
+      HOST_USER="testuser"
+      START_DIR="/nonexistent"
+      docker() { printf '%s\n' "$*"; }
+      When call start_shell
+      The output should include 'compose -p ai-sandbox-flow-rook -f docker-compose.yaml exec -u testuser ai-sandbox'
+    End
+  End
+
+  Describe 'run_enter_shell_if_requested()'
+    It 'propagates a start_shell failure when CMD is enter (regression: enter always exited 0)'
+      CMD=enter
+      # shellcheck disable=SC2317 # invoked indirectly by run_enter_shell_if_requested
+      start_shell() { return 3; }
+      When call run_enter_shell_if_requested
+      The status should eq 3
+    End
+
+    It 'succeeds when start_shell succeeds and CMD is enter'
+      CMD=enter
+      # shellcheck disable=SC2317 # invoked indirectly by run_enter_shell_if_requested
+      start_shell() { return 0; }
+      When call run_enter_shell_if_requested
+      The status should be success
+    End
+
+    It 'is a no-op success when CMD is start (start_shell not invoked)'
+      CMD=start
+      called=false
+      # shellcheck disable=SC2317 # invoked indirectly by run_enter_shell_if_requested
+      start_shell() { called=true; return 3; }
+      When call run_enter_shell_if_requested
+      The status should be success
+      The variable called should eq false
+    End
+  End
+
   Describe 'restore_saved_config()'
     # Helper: base64-encode a config-input JSON payload exactly as
     # src/index.sh's assembly block does, for use as the mocked
@@ -1303,6 +1346,61 @@ Describe 'ai-sandbox.sh'
       }
       When call is_build_stale
       The status should be success
+    End
+  End
+
+  Describe 'assemble-dockerfile.sh (docker/scripts)'
+    # Regression for the false-positive rebuild bug: assemble-dockerfile.sh
+    # used to unconditionally overwrite OUTPUT_PATH on every run (`cat ... >
+    # "${OUTPUT_PATH}"`), bumping its mtime even when the assembled content
+    # was byte-identical to what was already on disk. is_build_stale()
+    # treats an assembled Dockerfile newer than the image as a rebuild
+    # trigger, so every command after the first falsely reported "Build
+    # inputs changed" and rebuilt. Assert the script now leaves the output
+    # file's inode untouched (i.e. skips the replace) on a second run with
+    # unchanged inputs, and does replace it when inputs actually change.
+    ASSEMBLE_SCRIPT="$PWD/docker/scripts/assemble-dockerfile.sh"
+
+    # Prints the inode number of a single, already-known file path (not a
+    # glob), so SC2012's "use find instead of ls" concern about
+    # non-alphanumeric filename handling in a listing doesn't apply here.
+    # shellcheck disable=SC2012 # single known path, not a directory listing
+    file_inode() {
+      ls -i "$1" | awk '{print $1}'
+    }
+
+    setup() {
+      export OUT_DIR="$(mktemp -d)"
+      export OUT_FILE="${OUT_DIR}/Dockerfile.test"
+    }
+    cleanup() {
+      rm -rf "${OUT_DIR}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'leaves the output file inode unchanged on a second run with identical inputs'
+      # First run happens outside `When` (only one Evaluation is allowed per
+      # Example); the assertion below exercises the second, idempotent run.
+      "${ASSEMBLE_SCRIPT}" "" "${OUT_FILE}" > /dev/null
+      first_inode="$(file_inode "${OUT_FILE}")"
+      export first_inode
+
+      When run script "${ASSEMBLE_SCRIPT}" "" "${OUT_FILE}"
+      The status should be success
+      The output should include 'Assembled Dockerfile written to:'
+      second_inode="$(file_inode "${OUT_FILE}")"
+      The variable first_inode should eq "${second_inode}"
+    End
+
+    It 'still replaces the output file when inputs change (e.g. a different --hash)'
+      "${ASSEMBLE_SCRIPT}" --hash aaaa1111 "" "${OUT_FILE}" > /dev/null
+
+      When run script "${ASSEMBLE_SCRIPT}" --hash bbbb2222 "" "${OUT_FILE}"
+      The status should be success
+      The output should include 'Assembled Dockerfile written to:'
+      The contents of file "${OUT_FILE}" should include 'bbbb2222'
+      The contents of file "${OUT_FILE}" should not include 'aaaa1111'
     End
   End
 
