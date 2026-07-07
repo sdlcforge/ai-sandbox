@@ -51,8 +51,24 @@ function start_shell() {
     # shellcheck disable=SC2016 # ${DOCKER_HOST} must be expanded by the in-container shell, not the host
     local banner='if [ -n "${DOCKER_HOST:-}" ]; then printf "\033[1;33m%s\033[0m\n" "WARNING: This container is running with docker support activated. This gives the container access to docker on the host and it may be possible for the AI or another program to breakout of the container via this access." >&2; fi; '
     # 'ai-sandbox' here is the compose service name, not the container name.
-    docker compose ${COMPOSE_FILES} exec -u ${HOST_USER} ai-sandbox bash -c \
+    # -p "${COMPOSE_PROJECT}" scopes the exec to this instance's compose
+    # project, matching every other compose invocation in the codebase
+    # (e.g. src/create.sh, src/index.sh) -- without it, exec resolves against
+    # the wrong default project scope for named instances and fails with
+    # "service \"ai-sandbox\" is not running".
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u ${HOST_USER} ai-sandbox bash -c \
         "${banner}if [ -d \"${START_DIR}\" ]; then cd \"${START_DIR}\" && exec zsh; else exec zsh; fi"
+}
+
+# Enter the just-started/updated container's shell when CMD is "enter" (a
+# bare `start` leaves the container running without attaching). Extracted
+# from the start/enter dispatch branch in src/index.sh so start_shell's exit
+# code can be exercised directly by unit tests: a start_shell failure must
+# propagate through this function rather than being swallowed.
+function run_enter_shell_if_requested() {
+    if [ "${CMD}" == "enter" ]; then
+        start_shell
+    fi
 }
 
 # Return 0 if the ai-sandbox container exists (running or stopped), 1 otherwise.

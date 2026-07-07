@@ -348,9 +348,7 @@ if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
     docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} up -d
     warn_if_ssh_mount_stale
 
-    if [ "${CMD}" == "enter" ]; then
-        start_shell
-    fi || true
+    run_enter_shell_if_requested
 elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
     warn_if_ssh_mount_stale
     start_shell

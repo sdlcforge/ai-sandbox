@@ -99,14 +99,23 @@ for cap in "${capabilities[@]}"; do
 done
 
 # --- Assemble ---
+# Write to a temp file first and only replace OUTPUT_PATH when the content
+# actually changed. is_build_stale() (src/utils.sh) treats OUTPUT_PATH's
+# mtime as a build-input signal; unconditionally overwriting it on every
+# invocation (even when the assembled content is byte-identical to what's
+# already there) bumps the mtime on every run and causes a false "stale"
+# result — and therefore a spurious rebuild — on the very next command.
+TMP_OUTPUT="$(mktemp "${OUTPUT_DIR}/.Dockerfile.XXXXXX")"
+trap 'rm -f "${TMP_OUTPUT}"' EXIT
+
 # Write base body (everything up to but not including ENTRYPOINT).
-cat "${BASE_FILE}" > "${OUTPUT_PATH}"
+cat "${BASE_FILE}" > "${TMP_OUTPUT}"
 
 # Append each capability fragment in sorted order.
 for cap in "${capabilities[@]}"; do
   fragment="${CAPABILITIES_DIR}/${cap}.dockerfile"
-  printf '\n' >> "${OUTPUT_PATH}"
-  cat "${fragment}" >> "${OUTPUT_PATH}"
+  printf '\n' >> "${TMP_OUTPUT}"
+  cat "${fragment}" >> "${TMP_OUTPUT}"
 done
 
 # Append the profile composition hash label when --hash was provided.
@@ -114,19 +123,29 @@ done
 # without re-running profile-installer.js. The hash is owned by
 # profile-installer.js and passed through here verbatim.
 if [[ -n "${PROFILE_HASH}" ]]; then
-  printf '\n# === Profile composition label ===\n' >> "${OUTPUT_PATH}"
-  printf 'LABEL ai.sandbox.profile-hash="%s"\n' "${PROFILE_HASH}" >> "${OUTPUT_PATH}"
+  printf '\n# === Profile composition label ===\n' >> "${TMP_OUTPUT}"
+  printf 'LABEL ai.sandbox.profile-hash="%s"\n' "${PROFILE_HASH}" >> "${TMP_OUTPUT}"
 fi
 
 # Append the managed image label unconditionally.
 {
   printf '\n# === Managed image label ===\n'
   printf 'LABEL ai.sandbox.managed="true"\n'
-} >> "${OUTPUT_PATH}"
+} >> "${TMP_OUTPUT}"
 
 # Append the ENTRYPOINT as the final line.
-printf '\nENTRYPOINT ["/init"]\n' >> "${OUTPUT_PATH}"
+printf '\nENTRYPOINT ["/init"]\n' >> "${TMP_OUTPUT}"
 # With S6-overlay, use 'docker compose exec -u ${HOST_USER} zsh' to get a user shell;
 # do not add 'USER ${HOST_USER}' before ENTRYPOINT or /init will run as that user.
+
+# Only move the freshly-assembled file into place when its content differs
+# from what's already on disk (or nothing is on disk yet). This preserves
+# OUTPUT_PATH's mtime across cosmetically-identical re-assembles.
+if [[ -f "${OUTPUT_PATH}" ]] && cmp -s "${TMP_OUTPUT}" "${OUTPUT_PATH}"; then
+  rm -f "${TMP_OUTPUT}"
+else
+  mv "${TMP_OUTPUT}" "${OUTPUT_PATH}"
+fi
+trap - EXIT
 
 printf 'Assembled Dockerfile written to: %s\n' "${OUTPUT_PATH}"
