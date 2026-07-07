@@ -109,19 +109,25 @@ PROFILE_JSON="$(printf '%s\n' "${PROFILE_INSTALLER_OUTPUT}" \
 
 # Merge CLI-supplied marketplace/plugin values into the JSON blob.
 # CLI values union with profile-declared values; enable_all_plugins ORs.
+# _cli_marketplaces_json/_cli_plugins_json/_cli_enable_all_json are computed
+# unconditionally (not just under the guard below) because the later
+# config-persistence block (assembling AI_SANDBOX_CONFIG_JSON) reuses these
+# same array->JSON conversions for the same CLI_MARKETPLACES/CLI_PLUGINS
+# arrays -- see followup 85Na. Only the merge-into-PROFILE_JSON step itself
+# needs the guard, since an empty/false CLI delta is a no-op merge.
+if [ "${#CLI_MARKETPLACES[@]}" -gt 0 ]; then
+  _cli_marketplaces_json="$(printf '%s\n' "${CLI_MARKETPLACES[@]}" | jq -R . | jq -s .)"
+else
+  _cli_marketplaces_json='[]'
+fi
+if [ "${#CLI_PLUGINS[@]}" -gt 0 ]; then
+  _cli_plugins_json="$(printf '%s\n' "${CLI_PLUGINS[@]}" | jq -R . | jq -s .)"
+else
+  _cli_plugins_json='[]'
+fi
+_cli_enable_all_json=false
+[ "${CLI_ENABLE_ALL}" = "true" ] && _cli_enable_all_json=true
 if [ "${#CLI_MARKETPLACES[@]}" -gt 0 ] || [ "${#CLI_PLUGINS[@]}" -gt 0 ] || [ "${CLI_ENABLE_ALL}" = "true" ]; then
-  if [ "${#CLI_MARKETPLACES[@]}" -gt 0 ]; then
-    _cli_marketplaces_json="$(printf '%s\n' "${CLI_MARKETPLACES[@]}" | jq -R . | jq -s .)"
-  else
-    _cli_marketplaces_json='[]'
-  fi
-  if [ "${#CLI_PLUGINS[@]}" -gt 0 ]; then
-    _cli_plugins_json="$(printf '%s\n' "${CLI_PLUGINS[@]}" | jq -R . | jq -s .)"
-  else
-    _cli_plugins_json='[]'
-  fi
-  _cli_enable_all_json=false
-  [ "${CLI_ENABLE_ALL}" = "true" ] && _cli_enable_all_json=true
   PROFILE_JSON="$(printf '%s\n' "${PROFILE_JSON}" | jq \
       --argjson cm "${_cli_marketplaces_json}" \
       --argjson cp "${_cli_plugins_json}" \
@@ -143,23 +149,15 @@ export PROFILE_JSON
 # CLI deltas), not the profile-merged PROFILE_JSON set: profile-contributed
 # entries are reproduced for free by re-running profile-installer.js on
 # restore, so only the CLI additions need to round-trip through the label.
+# Reuses _cli_marketplaces_json/_cli_plugins_json/_cli_enable_all_json
+# computed by the CLI-merge block above (same CLI_MARKETPLACES/CLI_PLUGINS
+# arrays) instead of recomputing the same jq -R . | jq -s . conversion a
+# second time -- see followup 85Na.
 if [ "${#PROFILES[@]}" -gt 0 ]; then
   _config_profiles_json="$(printf '%s\n' "${PROFILES[@]}" | jq -R . | jq -s .)"
 else
   _config_profiles_json='[]'
 fi
-if [ "${#CLI_MARKETPLACES[@]}" -gt 0 ]; then
-  _config_marketplaces_json="$(printf '%s\n' "${CLI_MARKETPLACES[@]}" | jq -R . | jq -s .)"
-else
-  _config_marketplaces_json='[]'
-fi
-if [ "${#CLI_PLUGINS[@]}" -gt 0 ]; then
-  _config_plugins_json="$(printf '%s\n' "${CLI_PLUGINS[@]}" | jq -R . | jq -s .)"
-else
-  _config_plugins_json='[]'
-fi
-_config_enable_all_json=false
-[ "${CLI_ENABLE_ALL}" = "true" ] && _config_enable_all_json=true
 _config_no_isolate_json=false
 [ "${NO_ISOLATE_CONFIG}" = "true" ] && _config_no_isolate_json=true
 _config_clean_slate_json=false
@@ -170,9 +168,9 @@ AI_SANDBOX_CONFIG_JSON="$(jq -n \
     --arg mode "${MODE_OVERRIDE}" \
     --argjson no_isolate_config "${_config_no_isolate_json}" \
     --argjson clean_slate "${_config_clean_slate_json}" \
-    --argjson marketplaces "${_config_marketplaces_json}" \
-    --argjson plugins "${_config_plugins_json}" \
-    --argjson enable_all_plugins "${_config_enable_all_json}" \
+    --argjson marketplaces "${_cli_marketplaces_json}" \
+    --argjson plugins "${_cli_plugins_json}" \
+    --argjson enable_all_plugins "${_cli_enable_all_json}" \
     '{version: 1, profiles: $profiles, mode: $mode,
       no_isolate_config: $no_isolate_config, clean_slate: $clean_slate,
       marketplaces: $marketplaces, plugins: $plugins,

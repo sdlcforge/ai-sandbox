@@ -38,10 +38,18 @@ function _image_is_stale() {
 # label-less/pre-existing container, and a corrupt label are all treated the
 # same: the Configuration section is simply omitted, not an error.
 function _status_gather_config() {
-    local ctr_name label_b64 config_json
+    local ctr_name label_b64 config_json max_config_b64_len
     ctr_name="$(sandbox_container_name)"
     label_b64="$(docker inspect --format='{{index .Config.Labels "ai.sandbox.config"}}' "${ctr_name}" 2>/dev/null || true)"
     [ -n "${label_b64}" ] || return 0
+
+    # Defense-in-depth size bound (followup qVbA), mirroring
+    # restore_saved_config() in src/utils.sh: 16KB is generously larger than
+    # any real seven-field config record could ever be. An oversized value is
+    # treated the same as an absent label (nothing to display) rather than
+    # erroring.
+    max_config_b64_len=16384
+    [ "${#label_b64}" -le "${max_config_b64_len}" ] || return 0
 
     config_json="$(printf '%s' "${label_b64}" | base64 -d 2>/dev/null || true)"
     [ -n "${config_json}" ] || return 0

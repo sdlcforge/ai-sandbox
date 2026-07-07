@@ -364,9 +364,49 @@ Describe 'ai-sandbox.sh'
       The stderr should include 'invalid scheme'
       The stderr should include 'ftp://bad.example.com'
     End
+
+    It 'treats an oversized ai.sandbox.config label as absent rather than decoding it (followup qVbA)'
+      # Defense-in-depth size bound: an (implausible, since the label is only
+      # writable by the host process at create time) oversized label must
+      # degrade to the same "nothing to restore" behavior as an absent label,
+      # not error or hang attempting to base64-decode/jq-parse it.
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=(sentinel)
+      MODE_OVERRIDE="sentinel-mode"
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      oversized_b64="$(head -c 20000 /dev/zero | tr '\0' 'A')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${oversized_b64}"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The status should be success
+      The variable "PROFILES[*]" should eq 'sentinel'
+      The variable MODE_OVERRIDE should eq sentinel-mode
+    End
   End
 
   Describe 'running_config_matches()'
+    # Builds the single sep-joined line the consolidated `docker inspect`
+    # call in running_config_matches() now expects (followup 4DzF: 9
+    # separate single-field calls collapsed into 1 multi-field call). Field
+    # order matches the function's own `read`: image hash mode no_isolate
+    # proxy clean marketplaces plugins enable_all. Uses the same ASCII Unit
+    # Separator (0x1F) as the implementation, not tab/pipe -- see the
+    # implementation comment for why.
+    mock_inspect_line() {
+      printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$@"
+    }
+
     It 'returns 2 when no container is running'
       SANDBOX_NAME="test"
       docker() {
@@ -394,18 +434,8 @@ Describe 'ai-sandbox.sh'
         if [ "$1" = "inspect" ]; then
           if [[ "$*" == *".State.Status"* ]]; then
             echo "running"
-          elif [[ "$*" == *".Config.Image"* ]]; then
-            echo "ai-sandbox:profile-abc"
-          elif [[ "$*" == *"profile-hash"* ]]; then
-            echo "abc"
-          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
-            echo "static"
-          elif [[ "$*" == *"no-isolate-config"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"docker-proxy"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"clean-slate"* ]]; then
-            echo "true"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "static" "false" "false" "true" "" "" ""
           fi
           return 0
         fi
@@ -432,18 +462,8 @@ Describe 'ai-sandbox.sh'
         if [ "$1" = "inspect" ]; then
           if [[ "$*" == *".State.Status"* ]]; then
             echo "running"
-          elif [[ "$*" == *".Config.Image"* ]]; then
-            echo "ai-sandbox:profile-abc"
-          elif [[ "$*" == *"profile-hash"* ]]; then
-            echo "abc"
-          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
-            echo "static"
-          elif [[ "$*" == *"no-isolate-config"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"docker-proxy"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"clean-slate"* ]]; then
-            echo "false"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "static" "false" "false" "false" "" "" ""
           fi
           return 0
         fi
@@ -467,24 +487,9 @@ Describe 'ai-sandbox.sh'
         if [ "$1" = "inspect" ]; then
           if [[ "$*" == *".State.Status"* ]]; then
             echo "running"
-          elif [[ "$*" == *".Config.Image"* ]]; then
-            echo "ai-sandbox:profile-abc"
-          elif [[ "$*" == *"profile-hash"* ]]; then
-            echo "abc"
-          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
-            echo "mirror"
-          elif [[ "$*" == *"no-isolate-config"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"docker-proxy"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"clean-slate"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"ai.sandbox.marketplaces"* ]]; then
-            echo "https://example.com/registry"
-          elif [[ "$*" == *"ai.sandbox.plugins"* ]]; then
-            echo "claude-mem"
-          elif [[ "$*" == *"enable-all-plugins"* ]]; then
-            echo "true"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" \
+              "https://example.com/registry" "claude-mem" "true"
           fi
           return 0
         fi
@@ -508,24 +513,8 @@ Describe 'ai-sandbox.sh'
         if [ "$1" = "inspect" ]; then
           if [[ "$*" == *".State.Status"* ]]; then
             echo "running"
-          elif [[ "$*" == *".Config.Image"* ]]; then
-            echo "ai-sandbox:profile-abc"
-          elif [[ "$*" == *"profile-hash"* ]]; then
-            echo "abc"
-          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
-            echo "mirror"
-          elif [[ "$*" == *"no-isolate-config"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"docker-proxy"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"clean-slate"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"ai.sandbox.marketplaces"* ]]; then
-            echo ""
-          elif [[ "$*" == *"ai.sandbox.plugins"* ]]; then
-            echo ""
-          elif [[ "$*" == *"enable-all-plugins"* ]]; then
-            echo "false"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" "" "" "false"
           fi
           return 0
         fi
@@ -549,24 +538,8 @@ Describe 'ai-sandbox.sh'
         if [ "$1" = "inspect" ]; then
           if [[ "$*" == *".State.Status"* ]]; then
             echo "running"
-          elif [[ "$*" == *".Config.Image"* ]]; then
-            echo "ai-sandbox:profile-abc"
-          elif [[ "$*" == *"profile-hash"* ]]; then
-            echo "abc"
-          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
-            echo "mirror"
-          elif [[ "$*" == *"no-isolate-config"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"docker-proxy"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"clean-slate"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"ai.sandbox.marketplaces"* ]]; then
-            echo ""
-          elif [[ "$*" == *"ai.sandbox.plugins"* ]]; then
-            echo ""
-          elif [[ "$*" == *"enable-all-plugins"* ]]; then
-            echo "false"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" "" "" "false"
           fi
           return 0
         fi
@@ -590,24 +563,8 @@ Describe 'ai-sandbox.sh'
         if [ "$1" = "inspect" ]; then
           if [[ "$*" == *".State.Status"* ]]; then
             echo "running"
-          elif [[ "$*" == *".Config.Image"* ]]; then
-            echo "ai-sandbox:profile-abc"
-          elif [[ "$*" == *"profile-hash"* ]]; then
-            echo "abc"
-          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
-            echo "mirror"
-          elif [[ "$*" == *"no-isolate-config"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"docker-proxy"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"clean-slate"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"ai.sandbox.marketplaces"* ]]; then
-            echo ""
-          elif [[ "$*" == *"ai.sandbox.plugins"* ]]; then
-            echo ""
-          elif [[ "$*" == *"enable-all-plugins"* ]]; then
-            echo "false"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" "" "" "false"
           fi
           return 0
         fi
@@ -631,22 +588,12 @@ Describe 'ai-sandbox.sh'
         if [ "$1" = "inspect" ]; then
           if [[ "$*" == *".State.Status"* ]]; then
             echo "running"
-          elif [[ "$*" == *".Config.Image"* ]]; then
-            echo "ai-sandbox:profile-abc"
-          elif [[ "$*" == *"profile-hash"* ]]; then
-            echo "abc"
-          elif [[ "$*" == *"ai.sandbox.mode"* ]]; then
-            echo "mirror"
-          elif [[ "$*" == *"no-isolate-config"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"docker-proxy"* ]]; then
-            echo "false"
-          elif [[ "$*" == *"clean-slate"* ]]; then
-            echo "false"
+          else
+            # marketplaces/plugins/enable-all-plugins fields are empty:
+            # simulates a container created before these labels existed,
+            # where `docker inspect` prints an empty string for missing keys.
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" "" "" ""
           fi
-          # No branches for marketplaces/plugins/enable-all-plugins labels:
-          # simulates a container created before these labels existed, where
-          # `docker inspect` prints an empty string for the missing key.
           return 0
         fi
       }
@@ -1034,6 +981,24 @@ Describe 'ai-sandbox.sh'
       When call do_status
       The output should include 'Configuration:'
       The output should include '"mode": "static"'
+    End
+
+    It 'omits the Configuration: section for an oversized ai.sandbox.config label rather than erroring (followup qVbA)'
+      oversized_b64="$(head -c 20000 /dev/zero | tr '\0' 'A')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${oversized_b64}"
+          elif [[ "$*" == *"State.Status"* ]]; then
+            echo "running"
+          fi
+          return 0
+        fi
+        return 0
+      }
+      When call do_status
+      The status should be success
+      The output should not include 'Configuration:'
     End
   End
 

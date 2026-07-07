@@ -107,6 +107,17 @@ function restore_saved_config() {
             "${ctr_name}" 2>/dev/null || true)"
         [ -n "${saved_config_b64}" ] || return 0
 
+        # Defense-in-depth size bound (followup qVbA): the label is only
+        # writable at container-create time by the host process itself, so
+        # the practical risk here is low, but bound it anyway before
+        # base64-decoding/jq-parsing. 16KB is generously larger than any real
+        # seven-field config record (profiles/mode/marketplaces/plugins are
+        # short strings/lists) could ever produce. An oversized value is
+        # treated the same as an absent label -- nothing to restore -- rather
+        # than erroring.
+        local max_config_b64_len=16384
+        [ "${#saved_config_b64}" -le "${max_config_b64_len}" ] || return 0
+
         saved_config_json="$(printf '%s' "${saved_config_b64}" | base64 -d 2>/dev/null || true)"
         [ -n "${saved_config_json}" ] || return 0
 
@@ -191,17 +202,25 @@ function restore_saved_config() {
 function running_config_matches() {
     is_container_running || return 2
     local cur_image cur_hash cur_mode cur_no_isolate cur_proxy cur_clean ctr_name
-    local cur_marketplaces cur_plugins cur_enable_all
+    local cur_marketplaces cur_plugins cur_enable_all sep fmt line
     ctr_name="$(sandbox_container_name)"
-    cur_image=$(docker inspect -f '{{.Config.Image}}' "${ctr_name}" 2>/dev/null || true)
-    cur_hash=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.profile-hash"}}' "${ctr_name}" 2>/dev/null || true)
-    cur_mode=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.mode"}}' "${ctr_name}" 2>/dev/null || true)
-    cur_no_isolate=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.no-isolate-config"}}' "${ctr_name}" 2>/dev/null || true)
-    cur_proxy=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.docker-proxy"}}' "${ctr_name}" 2>/dev/null || true)
-    cur_clean=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.clean-slate"}}' "${ctr_name}" 2>/dev/null || true)
-    cur_marketplaces=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.marketplaces"}}' "${ctr_name}" 2>/dev/null || true)
-    cur_plugins=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.plugins"}}' "${ctr_name}" 2>/dev/null || true)
-    cur_enable_all=$(docker inspect -f '{{index .Config.Labels "ai.sandbox.enable-all-plugins"}}' "${ctr_name}" 2>/dev/null || true)
+
+    # Single multi-field `docker inspect` call replaces what used to be 9
+    # separate single-field calls (one subprocess spawn + Docker API round
+    # trip each) -- see followup 4DzF. Fields are joined with the ASCII Unit
+    # Separator (0x1F), not a tab: bash `read` classifies tab as
+    # IFS-whitespace and collapses/strips consecutive or leading/trailing
+    # empty fields (several of these labels, e.g. marketplaces/plugins, are
+    # legitimately empty) -- the same footgun restore_saved_config()'s
+    # comment above already calls out for this very label set. A pipe is out
+    # too: marketplace/plugin label values already use '|' as their own
+    # internal join delimiter (see AI_SANDBOX_MARKETPLACES in src/index.sh).
+    sep=$'\x1f'
+    fmt="{{.Config.Image}}${sep}{{index .Config.Labels \"ai.sandbox.profile-hash\"}}${sep}{{index .Config.Labels \"ai.sandbox.mode\"}}${sep}{{index .Config.Labels \"ai.sandbox.no-isolate-config\"}}${sep}{{index .Config.Labels \"ai.sandbox.docker-proxy\"}}${sep}{{index .Config.Labels \"ai.sandbox.clean-slate\"}}${sep}{{index .Config.Labels \"ai.sandbox.marketplaces\"}}${sep}{{index .Config.Labels \"ai.sandbox.plugins\"}}${sep}{{index .Config.Labels \"ai.sandbox.enable-all-plugins\"}}"
+    line="$(docker inspect -f "${fmt}" "${ctr_name}" 2>/dev/null || true)"
+    IFS="${sep}" read -r cur_image cur_hash cur_mode cur_no_isolate cur_proxy \
+        cur_clean cur_marketplaces cur_plugins cur_enable_all <<< "${line}"
+
     [ "${cur_image}" = "${AI_SANDBOX_IMAGE_TAG:-}" ] || return 1
     [ "${cur_hash}" = "${PROFILE_COMPOSITION_HASH:-}" ] || return 1
     [ "${cur_mode:-mirror}" = "${EFFECTIVE_MODE:-mirror}" ] || return 1
