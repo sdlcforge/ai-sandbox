@@ -5,11 +5,6 @@ items:
       date: "2026-07-06"
       tag: restore-fix
       text: 'running_config_matches() in src/utils.sh issues 9 sequential single-field `docker inspect -f ...` calls (one per label: image, profile-hash, mode, no-isolate-config, docker-proxy, clean-slate, marketplaces, plugins, enable-all-plugins) where a single multi-field format string would do, saving 8 subprocess spawns + Docker API round-trips per bare start/enter invocation. Purely a cold/warm-path nicety, not correctness-affecting. Note: restore_saved_config() in this same file no longer has this problem — it was incidentally consolidated to a single `docker inspect` call (reading only the `ai.sandbox.config` label) as a side effect of the full-config-restore plan''s label redesign, not a deliberate fix of this followup. Only running_config_matches() remains to be addressed.'
-    - title: Duplicate jq array conversion in index.sh
-      id: 85Na
-      date: "2026-07-06"
-      tag: full-config-restore
-      text: 'Phase-review (efficiency lens, minor/high-confidence, non-blocking): src/index.sh''s new config-persistence block (~lines 146-160) recomputes the same jq -R . | jq -s . array-JSON conversion for CLI_MARKETPLACES/CLI_PLUGINS that the pre-existing CLI-merge block (~lines 112-132) already computed into _cli_marketplaces_json/_cli_plugins_json. Hoist/reuse instead of recomputing. Invocation-scoped (not looped), so low materiality — bundle with other src/index.sh cleanup rather than fixing standalone.'
     - title: No size bound on config label decode
       id: qVbA
       date: "2026-07-06"
