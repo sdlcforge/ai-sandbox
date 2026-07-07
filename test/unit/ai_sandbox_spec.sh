@@ -1244,6 +1244,14 @@ Describe 'ai-sandbox.sh'
       The contents of file "${OUT}" should include '/srv/my-dir-marketplace:/srv/my-dir-marketplace:ro'
       The status should be success
     End
+
+    It 'does not add a redundant read-only mount for a path already under HOME/playground'
+      mkdir -p "${HOME}/playground/my-repo"
+      export AI_SANDBOX_MARKETPLACES="file://${HOME}/playground/my-repo"
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should not include "${HOME}/playground/my-repo:${HOME}/playground/my-repo:ro"
+      The status should be success
+    End
   End
 
   Describe 'is_build_stale()'

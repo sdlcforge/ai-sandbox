@@ -77,7 +77,19 @@ function generate_volume_override() {
                     else
                         _mount_path="${_host_path}"
                     fi
-                    mounts+=("${_mount_path}:${_mount_path}:ro")
+                    # Skip the mount entirely when it falls inside ${HOME}/playground:
+                    # docker-compose.yaml already bind-mounts that whole tree read-write
+                    # unconditionally, and Docker applies nested bind mounts
+                    # parent-before-child regardless of override ordering, so a redundant
+                    # :ro mount here would silently downgrade an already-writable
+                    # subdirectory to read-only inside the container.
+                    case "${_mount_path}" in
+                        "${HOME}/playground"/*|"${HOME}/playground")
+                            ;;
+                        *)
+                            mounts+=("${_mount_path}:${_mount_path}:ro")
+                            ;;
+                    esac
                     ;;
             esac
         done
