@@ -1741,4 +1741,83 @@ Describe 'ai-sandbox.sh'
       End
     End
   End
+
+  Describe 'command dispatch: exec/passthrough branches with empty ARGS (regression: unbound variable under set -u)'
+    # The user-exec/root-exec/generic-passthrough branches live in src/index.sh's
+    # top-level command-dispatch chain, which only runs when the script is
+    # executed as a process -- `Include`-based sourcing (used by every other
+    # example in this file) short-circuits at `${__SOURCED__:+return}` before
+    # reaching it. So these run the real built bin/ai-sandbox.sh via `When run
+    # script`, invoked by path (not `bash bin/ai-sandbox.sh`) so its own
+    # `#!/bin/bash` shebang resolves to the system bash -- 3.2 on macOS, the
+    # version whose `set -u` throws "unbound variable" on `"${ARGS[@]}"` when
+    # ARGS has zero elements. `docker` is stubbed on PATH; every other tool
+    # invoked along the way (node profile-installer.js, jq, assemble-dockerfile.sh,
+    # git) is real and side-effect-free (no network, no containers).
+    setup() {
+      DISPATCH_WORK_DIR="$(mktemp -d)"
+      export XDG_CACHE_HOME="${DISPATCH_WORK_DIR}/cache"
+      DISPATCH_MOCK_BIN="${DISPATCH_WORK_DIR}/mockbin"
+      mkdir -p "${DISPATCH_MOCK_BIN}"
+      DISPATCH_DOCKER_LOG="${DISPATCH_WORK_DIR}/docker_calls.log"
+      : > "${DISPATCH_DOCKER_LOG}"
+      export DISPATCH_DOCKER_LOG
+      cat > "${DISPATCH_MOCK_BIN}/docker" <<'MOCK_DOCKER'
+#!/bin/bash
+printf '%s\n' "$*" >> "${DISPATCH_DOCKER_LOG}"
+case "$1" in
+  info) exit 0 ;;
+  inspect) exit 1 ;;
+  *) exit 0 ;;
+esac
+MOCK_DOCKER
+      chmod +x "${DISPATCH_MOCK_BIN}/docker"
+      export PATH="${DISPATCH_MOCK_BIN}:${PATH}"
+      export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
+    }
+    cleanup() {
+      rm -rf "${DISPATCH_WORK_DIR}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'dispatches the generic passthrough branch without an unbound-variable error when no extra ARGS are given (regression: bare "<name> down")'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest down
+      The status should be success
+      The output should include 'confirmed.'
+      The stderr should not include 'unbound variable'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+    End
+
+    It 'dispatches user-exec without an unbound-variable error when no trailing command args are given'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest user-exec
+      The status should be success
+      The output should include 'confirmed.'
+      The stderr should not include 'unbound variable'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'exec -u'
+    End
+
+    It 'dispatches root-exec without an unbound-variable error when no trailing command args are given'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest root-exec
+      The status should be success
+      The output should include 'confirmed.'
+      The stderr should not include 'unbound variable'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'exec -u root ai-sandbox'
+    End
+
+    It 'still forwards trailing ARGS to user-exec unchanged (regression: the empty-array guard must not break the non-empty case)'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest user-exec echo hi
+      The status should be success
+      The output should include 'confirmed.'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'exec -u'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'ai-sandbox echo hi'
+    End
+
+    It 'still forwards trailing ARGS to root-exec unchanged (regression: the empty-array guard must not break the non-empty case)'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest root-exec echo hi
+      The status should be success
+      The output should include 'confirmed.'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'exec -u root ai-sandbox echo hi'
+    End
+  End
 End
