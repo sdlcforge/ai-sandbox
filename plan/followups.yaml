@@ -1,10 +1,5 @@
 version: 1
 items:
-    - title: Flags-before-command-word mis-parse
-      id: sSU2
-      date: "2026-07-06"
-      tag: fix-name-flags-parsing
-      text: 'parse_options() mis-routes when a config flag precedes the per-instance command word, e.g. `ai-sandbox myname --profile x start`. Reproduced via scratch probe: result is SANDBOX_NAME=myname, CMD=enter (not start), PROFILES=(x), ARGS=(start) — "start" is silently absorbed into the passthrough ARGS array instead of being recognized as the per-instance command. Structurally similar to the just-fixed bug (name-followed-directly-by-flags defaulting CMD to enter), but here Phase 3''s flag parser has no mechanism to promote a later bare word back into CMD. Needs its own scoped fix.'
     - title: Combine sequential docker inspect calls
       id: 4DzF
       date: "2026-07-06"
