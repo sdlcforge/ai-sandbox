@@ -877,6 +877,33 @@ Describe 'ai-sandbox.sh'
       The variable CMD should eq enter
     End
 
+    It 'rejects "create status" because status is a reserved name'
+      When run parse_options create status
+      The status should be failure
+      The stderr should include 'reserved name'
+      The stderr should include 'status'
+    End
+
+    It 'rejects "create list" because list is a reserved name'
+      When run parse_options create list
+      The status should be failure
+      The stderr should include 'reserved name'
+      The stderr should include 'list'
+    End
+
+    It 'rejects "create detail" because detail is a reserved name'
+      When run parse_options create detail
+      The status should be failure
+      The stderr should include 'reserved name'
+      The stderr should include 'detail'
+    End
+
+    It 'still accepts a legitimate non-reserved name via create'
+      When call parse_options create mybox
+      The variable SANDBOX_NAME should eq mybox
+      The variable CMD should eq create
+    End
+
     It 'normalizes the bare "detail" alias to CMD=status'
       When call parse_options detail
       The variable CMD should eq status

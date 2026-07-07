@@ -38,6 +38,22 @@ function validate_sandbox_name() {
     fi
 }
 
+# Reject a sandbox name that collides with a reserved command word (a member
+# of RESERVED_NAMES). Shared by both the `create <name>` path and the
+# implicit `<name> [<cmd>]` per-instance path, so the same words are rejected
+# consistently regardless of how the sandbox name was supplied.
+function check_reserved_name() {
+    local name="$1"
+    local reserved_names="$2"
+    local rn
+    for rn in ${reserved_names}; do
+        if [ "${name}" = "${rn}" ]; then
+            echo "Error: '${name}' is a reserved name and cannot be used as a sandbox name" 1>&2
+            exit 1
+        fi
+    done
+}
+
 function parse_options() {
     SANDBOX_NAME=""
     SANDBOX_PROFILES=""
@@ -164,6 +180,7 @@ function parse_options() {
             if [ "${CMD}" = "create" ] && [ "${#remaining[@]}" -gt 0 ]; then
                 SANDBOX_NAME="${remaining[0]}"
                 validate_sandbox_name "${SANDBOX_NAME}"
+                check_reserved_name "${SANDBOX_NAME}" "${RESERVED_NAMES}"
                 remaining=("${remaining[@]:1}")
             fi
         elif [ "${is_per_instance_cmd}" = "true" ]; then
@@ -176,15 +193,7 @@ function parse_options() {
             # Per-instance: first arg is sandbox name
             SANDBOX_NAME="${first_arg}"
             validate_sandbox_name "${SANDBOX_NAME}"
-
-            # Validate: reserved name check
-            local rn
-            for rn in ${RESERVED_NAMES}; do
-                if [ "${SANDBOX_NAME}" = "${rn}" ]; then
-                    echo "Error: '${SANDBOX_NAME}' is a reserved name and cannot be used as a sandbox name" 1>&2
-                    exit 1
-                fi
-            done
+            check_reserved_name "${SANDBOX_NAME}" "${RESERVED_NAMES}"
 
             remaining=("${remaining[@]:1}")
             # Second positional arg is the per-instance command; default to "enter".
