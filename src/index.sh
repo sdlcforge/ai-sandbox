@@ -358,9 +358,9 @@ elif [ "${CMD}" == "build" ]; then
     do_build
 elif [ "${CMD}" == "user-exec" ]; then
     # Compose exec targets the service name (ai-sandbox), not the container name.
-    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u "${HOST_USER}" ai-sandbox "${ARGS[@]}"
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u "${HOST_USER}" ai-sandbox "${ARGS[@]+"${ARGS[@]}"}"
 elif [ "${CMD}" == "root-exec" ]; then
-    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u root ai-sandbox "${ARGS[@]}"
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u root ai-sandbox "${ARGS[@]+"${ARGS[@]}"}"
 elif [ "${CMD}" == "status" ]; then
     do_status || exit $?
 elif [ "${CMD}" == "stop" ]; then
@@ -386,5 +386,5 @@ elif [ "${CMD}" == "clean" ]; then
     docker rm -f "$(sandbox_container_name)" 2>/dev/null || true
     do_clean_images
 else
-    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} "${ARGS[@]}"
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} "${ARGS[@]+"${ARGS[@]}"}"
 fi
