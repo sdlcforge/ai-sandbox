@@ -115,6 +115,15 @@ function parse_options() {
     # --- Phase 2: determine whether first positional arg is a global command or sandbox name ---
     local remaining=("${positional[@]+"${positional[@]}"}")
     local n_remaining="${#remaining[@]}"
+    # Set true only when CMD is assigned its Phase-2 fallback value ("enter")
+    # because no bare command word was found immediately after the sandbox
+    # name (either a flag came next, or nothing did). Phase 3 uses this to
+    # recognize that a later bare word may be the per-instance command word
+    # that got pushed past leading flags (e.g. `mybox --profile x start`),
+    # rather than a passthrough arg. Left false whenever CMD is assigned
+    # explicitly (global command, bare per-instance command, or an explicit
+    # `<name> <cmd>` word), so promotion never fires in those cases.
+    local cmd_defaulted=false
 
     if [ "${n_remaining}" -eq 0 ]; then
         # Bare invocation → list
@@ -187,6 +196,7 @@ function parse_options() {
                 remaining=("${remaining[@]:1}")
             else
                 CMD="enter"
+                cmd_defaulted=true
             fi
         fi
     fi
@@ -292,7 +302,38 @@ function parse_options() {
                 STATUS_TEST_CHECK=true
                 ;;
             *)
-                ARGS+=("${rarg}")
+                # If a flag (or flag+value pair) preceded the per-instance
+                # command word, Phase 2 couldn't see the command word and
+                # fell back to CMD="enter" (cmd_defaulted=true). The first
+                # bare, non-flag token here that matches PER_INSTANCE_COMMANDS
+                # is that command word — promote it to CMD instead of the
+                # passthrough ARGS array. Once promoted, cmd_defaulted is
+                # cleared so any further bare words (a second command-like
+                # word, or genuine docker-compose passthrough args) fall
+                # through to ARGS as before.
+                local promoted_cmd=false
+                if [ "${cmd_defaulted}" = "true" ] && [[ "${rarg}" != -* ]]; then
+                    local pic2
+                    for pic2 in ${PER_INSTANCE_COMMANDS}; do
+                        if [ "${rarg}" = "${pic2}" ]; then
+                            promoted_cmd=true
+                            break
+                        fi
+                    done
+                fi
+                if [ "${promoted_cmd}" = "true" ]; then
+                    # Mirror the detail->status normalization applied right
+                    # after Phase 2, since a promoted "detail" word bypasses
+                    # that earlier normalization point.
+                    if [ "${rarg}" = "detail" ]; then
+                        CMD="status"
+                    else
+                        CMD="${rarg}"
+                    fi
+                    cmd_defaulted=false
+                else
+                    ARGS+=("${rarg}")
+                fi
                 ;;
         esac
         i=$(( i + 1 ))

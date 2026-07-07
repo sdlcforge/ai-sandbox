@@ -737,6 +737,64 @@ Describe 'ai-sandbox.sh'
       The variable CLEAN_SLATE should eq true
     End
 
+    It 'promotes a command word found after a leading flag+value pair to CMD'
+      When call parse_options myname --profile x start
+      The variable SANDBOX_NAME should eq myname
+      The variable CMD should eq start
+      The variable "PROFILES[*]" should eq x
+      The variable "ARGS[*]" should not include start
+    End
+
+    It 'promotes a command word found after a leading --mode flag+value pair to CMD'
+      When call parse_options myname --mode static stop
+      The variable SANDBOX_NAME should eq myname
+      The variable CMD should eq stop
+      The variable MODE_OVERRIDE should eq static
+      The variable "ARGS[*]" should not include stop
+    End
+
+    It 'promotes a command word found after a leading bare --clean flag to CMD'
+      When call parse_options myname --clean stop
+      The variable SANDBOX_NAME should eq myname
+      The variable CMD should eq stop
+      The variable CLEAN_SLATE should eq true
+      The variable "ARGS[*]" should not include stop
+    End
+
+    It 'does not promote a second command-like bare word after the first promotion'
+      When call parse_options myname --profile x start stop
+      The variable SANDBOX_NAME should eq myname
+      The variable CMD should eq start
+      The variable "ARGS[*]" should eq stop
+    End
+
+    It 'still defaults CMD to enter for a bare sandbox name with no command word (regression)'
+      When call parse_options mybox
+      The variable SANDBOX_NAME should eq mybox
+      The variable CMD should eq enter
+    End
+
+    It 'still routes <name> <cmd> with no interleaving flags correctly (regression)'
+      When call parse_options mybox stop
+      The variable SANDBOX_NAME should eq mybox
+      The variable CMD should eq stop
+    End
+
+    It 'still routes <name> <cmd> --flag value with flags after the command word (regression)'
+      When call parse_options mybox stop --profile x
+      The variable SANDBOX_NAME should eq mybox
+      The variable CMD should eq stop
+      The variable "PROFILES[*]" should eq x
+    End
+
+    It 'still defaults CMD to enter when sandbox name is followed by flags with no command word (regression)'
+      When call parse_options mybox --add-marketplace file:///two --enable-plugin flow --clean
+      The variable SANDBOX_NAME should eq mybox
+      The variable CMD should eq enter
+      The variable "CLI_MARKETPLACES[*]" should eq 'file:///two'
+      The variable "CLI_PLUGINS[*]" should eq flow
+      The variable CLEAN_SLATE should eq true
+    End
 
     It 'errors and points to --profile docker when --docker is passed'
       When run parse_options create mybox --docker
