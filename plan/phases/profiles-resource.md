@@ -1,10 +1,12 @@
 ## Goals
 
 Give profiles a real CRUD surface and complete the name-kind resolution / verb-gating
-mechanism the `dispatch-foundation` phase stubbed out. This phase is blocked on the
-[profiles-delete-ambiguity](../notes/profiles-delete-ambiguity.md) open question — the
-exact command-parsing surface for profile deletion (and, symmetrically, whether any other
-noun-level verbs beyond `ls`/`create` exist) cannot be finalized until it resolves.
+mechanism the `dispatch-foundation` phase stubbed out. The
+[profiles-delete-ambiguity](../notes/profiles-delete-ambiguity.md) open question that
+previously blocked this phase's task breakdown is now resolved (Option B — deletion is
+exclusively `ai-sandbox <name> delete` via the shared per-name dispatch mechanism; no
+noun-level `profiles delete <name>` verb exists). Full task breakdown is recorded in
+`plan/phase-02-profiles-resource/`.
 
 - Split/rename `src/new-profile.sh` into a `src/profiles.sh` module (or similar) covering:
   - `profiles create <name> [options]` — adapts the existing `new_profile()` auto-discovery

@@ -5,6 +5,12 @@ landed by `dispatch-foundation` and `profiles-resource`. This phase depends on b
 first — its task breakdown needs the final, resolved profile-deletion syntax to write
 accurate examples.
 
+- **Scope note (added at task-breakdown time):** `docs/ai-sandbox-profiles-spec.md`'s "The
+  `new-profile` command" section is also in scope — `profiles-resource` renames that
+  command to `profiles create <name>`, which the original phase draft below omitted. This
+  closes the gap folding the architectural-implications doc-updates check into this phase
+  (see `plan/overview.md`'s "Current status" for the rationale); it is now
+  `phase-03-docs-and-help/001-update-readme-and-profiles-spec.md`'s task.
 - `README.md`: rewrite the CLI reference table for the new noun-based grammar
   (`instances ls`/`instances create`/`profiles ls`/`profiles create`/profile-delete-syntax/
   flat name-then-verb dispatch); rewrite the Quick Start section (bare invocation now

@@ -68,3 +68,41 @@ underlying `profile_exists`/verb-gating mechanism (see
 difference is whether `src/options.sh` additionally recognizes a `profiles delete <name>`
 parse path as a second, redundant entry point. Once resolved, task breakdown for the
 `profiles-resource` phase can proceed without further research.
+
+## Resolution
+
+Escalated to the user via `escalate-ambiguity`; answered directly. **Resolution: Option B —
+the explanatory paragraph wins.**
+
+`profiles`/`instances` noun words support ONLY `ls` and `create`, full stop. Deleting a
+profile is exclusively `ai-sandbox <name> delete`, resolved through the shared flat-namespace
+per-name dispatch mechanism (gated to profile-appropriate verbs), exactly symmetric with how
+instances are deleted today. No `ai-sandbox profiles delete <name>` three-token form is
+implemented — the bullet-list line in requirement 3 was an imprecise summary that the
+explanatory paragraph corrects.
+
+Concrete implications for task breakdown (see [current-dispatch-audit.md](./current-dispatch-audit.md)'s
+"Name-resolution / verb-gating design sketch" for the mechanism this completes):
+
+- `src/options.sh`'s noun-word parsing recognizes `instances`/`profiles` as supporting `ls`
+  and `create <name> [options]` only — no third verb branch under either noun.
+- Profile deletion is implemented entirely inside the per-name flat-dispatch path: once
+  `<name>` resolves to a profile (via `profile_exists`), `delete` is one of the
+  profile-appropriate verbs (alongside `detail`) that the verb-gating table allows. No
+  parallel `profiles delete <name>` parse branch is added to the `profiles` noun handling.
+  `instances` gets no noun-level `delete` either — this is symmetric across both resource
+  kinds, matching how instance deletion already works exclusively via `<name> delete` today.
+  `delete` therefore never needs special-casing when it follows a noun word (requirement 5's
+  open question above is resolved: `delete` is *only* ever a per-name verb, never a
+  noun-adjacent token).
+- Help text / README / architecture.md document profile deletion as `ai-sandbox <name>
+  delete` — the same spelling and mechanism as instance deletion, differentiated only by the
+  runtime "X is a profile, not an instance"-style verb-gating error when a verb from the
+  wrong kind's allowed-list is attempted.
+- Test coverage asserts `ai-sandbox <profile-name> delete` deletes the profile file (and
+  that a bundled/read-only profile refuses deletion with a clear error), and does NOT assert
+  any `profiles delete <name>` parse path — that shape is now explicitly out of scope, not
+  merely undocumented.
+
+Task breakdown for `profiles-resource` (and the phases depending on it) proceeds on this
+basis; see `plan/TODO.yaml` and the phase's task documents.
