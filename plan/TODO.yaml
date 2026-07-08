@@ -29,7 +29,17 @@ phases:
     - number: 2
       slug: profiles-resource
       title: Profiles Resource
-      tasks: []
+      tasks:
+        - number: 1
+          slug: build-profiles-module
+          title: Build Profiles Module
+          path: phase-02-profiles-resource/001-build-profiles-module.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
     - number: 3
       slug: docs-and-help
       title: Docs And Help
