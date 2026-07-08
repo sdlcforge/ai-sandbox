@@ -5,7 +5,17 @@ phases:
     - number: 1
       slug: dispatch-foundation
       title: Dispatch Foundation
-      tasks: []
+      tasks:
+        - number: 1
+          slug: rewrite-dispatch-grammar
+          title: Rewrite Dispatch Grammar
+          path: phase-01-dispatch-foundation/001-rewrite-dispatch-grammar.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
     - number: 2
       slug: profiles-resource
       title: Profiles Resource
