@@ -40,6 +40,16 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 2
+          slug: complete-name-resolution-and-verb-gating
+          title: Complete Name Resolution And Verb Gating
+          path: phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
     - number: 3
       slug: docs-and-help
       title: Docs And Help
