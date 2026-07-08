@@ -1,0 +1,8 @@
+slug: cli-restructure
+version: 1
+title: CLI Restructure
+phases:
+    - number: 1
+      slug: dispatch-foundation
+      title: Dispatch Foundation
+      tasks: []
