@@ -1,13 +1,18 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # globals are consumed by index.sh after sourcing
 
-# Parse CLI flags and the command word. Sets globals consumed by index.sh:
-#   SANDBOX_NAME  — empty for global commands; instance name for per-instance commands
+# Parse CLI flags and the command word, per the noun-based dispatch grammar:
+#   ai-sandbox                          -> enter the default/unnamed instance
+#   ai-sandbox ls | instances ls        -> list instances
+#   ai-sandbox instances create <name>  -> create instance <name>
+#   ai-sandbox <name> [<verb>]          -> per-instance dispatch, default verb "enter"
+#   ai-sandbox help | kill-local-ai | new-profile
+# Sets globals consumed by index.sh:
+#   SANDBOX_NAME  — empty for global/noun commands; instance name for per-instance commands
 #   SANDBOX_PROFILES — comma-joined list of --profile values from a `create` invocation
-#   CMD           — subcommand (e.g. "create", "list", "enter", "stop").
-#                   "detail" is accepted as a per-instance command word (bare
-#                   or after a sandbox name) and normalized to CMD="status"
-#                   during parsing — it is a pure alias, not a distinct value.
+#   CMD           — subcommand (e.g. "create", "ls", "enter", "detail", "stop").
+#                   "detail" is the sole spelling for the status-report verb —
+#                   there is no remaining alias or normalization step.
 #   ARGS          — array of remaining args forwarded to the subcommand
 #   PROFILES      — array of --profile names, in invocation order (current run's profile resolution)
 #   MODE_OVERRIDE — "mirror" / "static" from --mode, or "" if not given
@@ -17,7 +22,7 @@
 #   ENTER_AFTER_CREATE — "true" if --enter was passed to `create`
 #   STATUS_JSON   — "true" if --json was passed (per-instance commands only)
 #   STATUS_TEST_CHECK — "true" if --test-check was passed (per-instance commands only)
-#   QUIET         — 0 (verbose) or 1 (quiet); defaults to 0 for `status`, 1 otherwise
+#   QUIET         — 0 (verbose) or 1 (quiet); defaults to 0 for `detail`, 1 otherwise
 #   CLI_MARKETPLACES — array of --add-marketplace refs (https:// or file://)
 #   CLI_PLUGINS   — array of --enable-plugin names
 #   CLI_ENABLE_ALL — "true" if --enable-all was passed
@@ -54,6 +59,28 @@ function check_reserved_name() {
     done
 }
 
+# Derive the reserved-name set from the live command tables instead of a
+# hand-maintained literal, so a future addition to any table is automatically
+# reserved without a second edit.
+#   $1 - global command words (space-separated)
+#   $2 - per-instance command words (space-separated)
+#   $3 - noun words (space-separated)
+#   $4 - extra words that are recognized during parsing but aren't part of any
+#        of the tables above (e.g. "create"/"ls", which are only reachable as
+#        a noun sub-verb / standalone bare word — see Phase 2)
+function compute_reserved_names() {
+    echo "$1 $2 $3 $4"
+}
+
+# resolve_name_kind <name>
+# Echoes one of: instance | profile | unknown
+# Stubbed in this phase to always echo "instance" (profile_exists doesn't exist yet).
+# profiles-resource completes this to consult profile_exists too and to drive
+# verb-gating (restricting which CMD values are valid for each kind).
+function resolve_name_kind() {
+    echo "instance"
+}
+
 function parse_options() {
     SANDBOX_NAME=""
     SANDBOX_PROFILES=""
@@ -73,9 +100,28 @@ function parse_options() {
     CLEAN_SLATE=false
 
     # Global command words — first non-flag arg matching one of these is a global command.
-    local -r GLOBAL_COMMANDS="create list help kill-local-ai new-profile"
-    # Reserved names — may not be used as sandbox instance names.
-    local -r RESERVED_NAMES="create list help kill-local-ai new-profile status detail"
+    # "create" and "list" are no longer free-standing global words: they are
+    # only reachable as sub-verbs of the "instances" noun (or, for "ls", also
+    # as a standalone bare word — see Phase 2).
+    local -r GLOBAL_COMMANDS="help kill-local-ai new-profile"
+    # Noun words — first non-flag arg matching one of these introduces a
+    # noun-scoped sub-verb (see the "instances" handling in Phase 2).
+    # "profiles" isn't parsed until phase-02-profiles-resource, but the word
+    # must already be unreachable as a sandbox name.
+    local -r NOUN_WORDS="instances profiles"
+    # Per-instance command words that may appear without a sandbox-name prefix
+    # (see Phase 2) or after one. Declared here (rather than only where first
+    # used) so RESERVED_NAMES below can derive from it.
+    local -r PER_INSTANCE_COMMANDS="start enter attach fix-ssh build user-exec root-exec detail stop delete clean up"
+    # Words recognized during parsing that aren't part of any table above:
+    # "create" only appears as "instances create", and "ls" is a standalone
+    # bare word (see Phase 2) — neither is a GLOBAL_COMMANDS/PER_INSTANCE_COMMANDS
+    # entry, but both must still be reserved.
+    local -r EXTRA_RESERVED_WORDS="create ls"
+    # Reserved names — may not be used as sandbox instance names. Derived from
+    # the tables above so a future addition to any of them is automatically
+    # reserved without a second, hand-maintained edit.
+    local -r RESERVED_NAMES="$(compute_reserved_names "${GLOBAL_COMMANDS}" "${PER_INSTANCE_COMMANDS}" "${NOUN_WORDS}" "${EXTRA_RESERVED_WORDS}")"
 
     # --- Phase 1: consume leading flags that apply before the command word ---
     # We collect remaining positional args here, then process them below.
@@ -142,82 +188,119 @@ function parse_options() {
     local cmd_defaulted=false
 
     if [ "${n_remaining}" -eq 0 ]; then
-        # Bare invocation → list
-        CMD="list"
+        # Bare invocation → enter the default/unnamed instance (matches the
+        # "name given, no verb → enter" default already established below for
+        # named instances). The old bare-invocation listing behavior now
+        # requires the explicit "ls" word.
+        CMD="enter"
     else
         local first_arg="${remaining[0]}"
-        # Check if first_arg is a global command word
-        local is_global=false
-        local gc
-        for gc in ${GLOBAL_COMMANDS}; do
-            if [ "${first_arg}" = "${gc}" ]; then
-                is_global=true
-                break
-            fi
-        done
 
-        # Per-instance command words that may appear without a sandbox-name prefix.
-        # When the first positional arg matches one of these, route to CMD with an
-        # empty (default) SANDBOX_NAME instead of treating the word as a sandbox
-        # name.  Without this, `ai-sandbox clean` parses as SANDBOX_NAME=clean /
-        # CMD=enter, which triggers the plugin-conflict check and enters the wrong
-        # sandbox.
-        local -r PER_INSTANCE_COMMANDS="start enter attach connect fix-ssh build user-exec root-exec status detail stop delete clean up"
-        local is_per_instance_cmd=false
-        local pic
-        for pic in ${PER_INSTANCE_COMMANDS}; do
-            if [ "${first_arg}" = "${pic}" ]; then
-                is_per_instance_cmd=true
-                break
-            fi
-        done
-
-        if [ "${is_global}" = "true" ]; then
-            CMD="${first_arg}"
-            # remaining args after the command word
-            remaining=("${remaining[@]:1}")
-            # For `create`, the next positional is the sandbox name
-            if [ "${CMD}" = "create" ] && [ "${#remaining[@]}" -gt 0 ]; then
-                SANDBOX_NAME="${remaining[0]}"
-                validate_sandbox_name "${SANDBOX_NAME}"
-                check_reserved_name "${SANDBOX_NAME}" "${RESERVED_NAMES}"
-                remaining=("${remaining[@]:1}")
-            fi
-        elif [ "${is_per_instance_cmd}" = "true" ]; then
-            # Command word used without a sandbox-name prefix; apply to the
-            # default (empty-name) sandbox.
+        if [ "${first_arg}" = "ls" ]; then
+            # Standalone bare word, not a per-instance verb — "ls" never takes
+            # a sandbox-name prefix (an instance's own `<name> ls` isn't a
+            # thing), so it's checked before the per-instance-command-word
+            # loop below rather than living in PER_INSTANCE_COMMANDS.
             SANDBOX_NAME=""
-            CMD="${first_arg}"
+            CMD="ls"
             remaining=("${remaining[@]:1}")
+        elif [ "${first_arg}" = "instances" ]; then
+            # Noun word supporting exactly two sub-verbs: ls and create.
+            remaining=("${remaining[@]:1}")
+            if [ "${#remaining[@]}" -eq 0 ]; then
+                echo "Error: 'instances' requires a sub-verb (ls or create)" 1>&2
+                exit 1
+            fi
+            local instances_verb="${remaining[0]}"
+            remaining=("${remaining[@]:1}")
+            case "${instances_verb}" in
+                ls)
+                    SANDBOX_NAME=""
+                    CMD="ls"
+                    ;;
+                create)
+                    CMD="create"
+                    if [ "${#remaining[@]}" -eq 0 ]; then
+                        echo "Error: 'instances create' requires a sandbox name" 1>&2
+                        exit 1
+                    fi
+                    SANDBOX_NAME="${remaining[0]}"
+                    validate_sandbox_name "${SANDBOX_NAME}"
+                    check_reserved_name "${SANDBOX_NAME}" "${RESERVED_NAMES}"
+                    remaining=("${remaining[@]:1}")
+                    ;;
+                *)
+                    echo "Error: 'instances ${instances_verb}' is not a recognized command (expected ls or create)" 1>&2
+                    exit 1
+                    ;;
+            esac
         else
-            # Per-instance: first arg is sandbox name
-            SANDBOX_NAME="${first_arg}"
-            validate_sandbox_name "${SANDBOX_NAME}"
-            check_reserved_name "${SANDBOX_NAME}" "${RESERVED_NAMES}"
+            # Check if first_arg is a global command word
+            local is_global=false
+            local gc
+            for gc in ${GLOBAL_COMMANDS}; do
+                if [ "${first_arg}" = "${gc}" ]; then
+                    is_global=true
+                    break
+                fi
+            done
 
-            remaining=("${remaining[@]:1}")
-            # Second positional arg is the per-instance command; default to "enter".
-            # If the next token looks like a flag (e.g. --add-marketplace, --clean) rather
-            # than a command word, leave it for Phase 3's flag parser instead of
-            # swallowing it as CMD.
-            if [ "${#remaining[@]}" -gt 0 ] && [[ "${remaining[0]}" != -* ]]; then
-                CMD="${remaining[0]}"
+            # Per-instance command words that may appear without a sandbox-name prefix.
+            # When the first positional arg matches one of these, route to CMD with an
+            # empty (default) SANDBOX_NAME instead of treating the word as a sandbox
+            # name.  Without this, `ai-sandbox clean` parses as SANDBOX_NAME=clean /
+            # CMD=enter, which triggers the plugin-conflict check and enters the wrong
+            # sandbox.
+            local is_per_instance_cmd=false
+            local pic
+            for pic in ${PER_INSTANCE_COMMANDS}; do
+                if [ "${first_arg}" = "${pic}" ]; then
+                    is_per_instance_cmd=true
+                    break
+                fi
+            done
+
+            if [ "${is_global}" = "true" ]; then
+                CMD="${first_arg}"
+                remaining=("${remaining[@]:1}")
+            elif [ "${is_per_instance_cmd}" = "true" ]; then
+                # Command word used without a sandbox-name prefix; apply to the
+                # default (empty-name) sandbox.
+                SANDBOX_NAME=""
+                CMD="${first_arg}"
                 remaining=("${remaining[@]:1}")
             else
-                CMD="enter"
-                cmd_defaulted=true
+                # Per-instance: first arg is sandbox name
+                SANDBOX_NAME="${first_arg}"
+                validate_sandbox_name "${SANDBOX_NAME}"
+                check_reserved_name "${SANDBOX_NAME}" "${RESERVED_NAMES}"
+
+                # resolve_name_kind <name>
+                # Echoes one of: instance | profile | unknown
+                # Stubbed in this phase to always echo "instance" (profile_exists
+                # doesn't exist yet). profiles-resource completes this to consult
+                # profile_exists too and to drive verb-gating (restricting which
+                # CMD values are valid for each kind). Not acted on yet — captured
+                # here so the extension point exists and this phase's diff is
+                # additive rather than needing to re-locate the call site.
+                # shellcheck disable=SC2034 # extension point for a later phase; unused until verb-gating lands
+                local name_kind
+                name_kind="$(resolve_name_kind "${SANDBOX_NAME}")"
+
+                remaining=("${remaining[@]:1}")
+                # Second positional arg is the per-instance command; default to "enter".
+                # If the next token looks like a flag (e.g. --add-marketplace, --clean) rather
+                # than a command word, leave it for Phase 3's flag parser instead of
+                # swallowing it as CMD.
+                if [ "${#remaining[@]}" -gt 0 ] && [[ "${remaining[0]}" != -* ]]; then
+                    CMD="${remaining[0]}"
+                    remaining=("${remaining[@]:1}")
+                else
+                    CMD="enter"
+                    cmd_defaulted=true
+                fi
             fi
         fi
-    fi
-
-    # "detail" is a pure alias for "status" -- normalize immediately after
-    # Phase 2's CMD assignment (covers both the bare `detail` form and the
-    # `<name> detail` form, since both branches above funnel through this one
-    # point before Phase 3) so every downstream `[ "${CMD}" = "status" ]`
-    # check, including the QUIET default below and src/index.sh's dispatch
-    # branch, keeps working unmodified.
-    if [ "${CMD}" = "detail" ]; then
-        CMD="status"
     fi
 
     # --- Phase 3: parse remaining args as command-specific flags ---
@@ -331,14 +414,7 @@ function parse_options() {
                     done
                 fi
                 if [ "${promoted_cmd}" = "true" ]; then
-                    # Mirror the detail->status normalization applied right
-                    # after Phase 2, since a promoted "detail" word bypasses
-                    # that earlier normalization point.
-                    if [ "${rarg}" = "detail" ]; then
-                        CMD="status"
-                    else
-                        CMD="${rarg}"
-                    fi
+                    CMD="${rarg}"
                     cmd_defaulted=false
                 else
                     ARGS+=("${rarg}")
@@ -356,7 +432,7 @@ function parse_options() {
 
     # --- Phase 5: QUIET default ---
     if [ -z "${QUIET}" ]; then
-        if [ "${CMD}" = "status" ] \
+        if [ "${CMD}" = "detail" ] \
             && [ "${STATUS_JSON}" != "true" ] \
             && [ "${STATUS_TEST_CHECK}" != "true" ]; then
             QUIET=0
