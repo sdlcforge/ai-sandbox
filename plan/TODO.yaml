@@ -64,6 +64,16 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 2
+          slug: update-architecture-and-help-text
+          title: Update Architecture And Help Text
+          path: phase-03-docs-and-help/002-update-architecture-and-help-text.md
+          done: false
+          tier: sonnet-med
+          git:
+            branch: null
+            commit: []
+            merge: null
     - number: 4
       slug: test-coverage
       title: Test Coverage
