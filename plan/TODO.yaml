@@ -18,7 +18,7 @@ phases:
             branch: phase-01-task-01-rewrite-dispatch-grammar
             commit:
                 - cdede92
-            merge: null
+            merge: ba8b015b22fb037c6f8b55652a0d50125d092345
         - number: 2
           slug: wire-index-and-call-sites
           title: Wire Index And Call Sites
