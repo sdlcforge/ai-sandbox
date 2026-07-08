@@ -11,7 +11,7 @@ phases:
           slug: rewrite-dispatch-grammar
           title: Rewrite Dispatch Grammar
           path: phase-01-dispatch-foundation/001-rewrite-dispatch-grammar.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: 'Rewrote src/options.sh''s parse_options() to the new noun-based grammar: RESERVED_NAMES now derived by compute_reserved_names() from live GLOBAL_COMMANDS/PER_INSTANCE_COMMANDS/NOUN_WORDS tables plus EXTRA_RESERVED_WORDS (create ls); added instances ls/instances create <name> noun parsing; removed status/connect from all tables and both detail<->status normalization sites; added standalone bare ls word; changed bare no-args from CMD=list to CMD=enter/SANDBOX_NAME=empty; wired resolve_name_kind() stub (always returns instance) as extension point for profiles-resource phase.'
           git:
