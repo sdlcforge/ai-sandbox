@@ -30,7 +30,7 @@ phases:
             branch: phase-01-task-02-wire-index-and-call-sites
             commit:
                 - 7d6a12e
-            merge: null
+            merge: e6922ece0ea2a9e9a91fae81e36cb655d3996f78
     - number: 2
       slug: profiles-resource
       title: Profiles Resource
