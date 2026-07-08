@@ -10,3 +10,7 @@ phases:
       slug: profiles-resource
       title: Profiles Resource
       tasks: []
+    - number: 3
+      slug: docs-and-help
+      title: Docs And Help
+      tasks: []
