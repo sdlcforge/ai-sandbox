@@ -27,10 +27,11 @@ export SANDBOX_NAME
 
 # --- Phase: global command short-circuits (no docker needed) ---
 
-# Bare invocation and explicit `list` both show the instance list.
-# Short-circuits before the Docker pre-flight so `list` works even when the
+# Explicit `ls` (or `instances ls`) shows the instance list. Bare invocation
+# now defaults to `enter` (see options.sh), not `ls`.
+# Short-circuits before the Docker pre-flight so `ls` works even when the
 # Docker daemon is down (do_list handles empty output gracefully).
-if [ "${CMD}" = "list" ]; then
+if [ "${CMD}" = "ls" ]; then
     do_list
     exit 0
 fi
@@ -51,9 +52,9 @@ if [ "${CMD}" = "new-profile" ]; then
 fi
 
 # --- Phase: docker pre-flight ---
-# `status` tolerates docker being down; it will just report the container as
+# `detail` tolerates docker being down; it will just report the container as
 # stopped and no images. Anything else requires a running daemon.
-if [ "${CMD}" != "status" ]; then
+if [ "${CMD}" != "detail" ]; then
     if ! check_docker "starting..."; then
         docker desktop start
         check_docker "bailing out." || exit 1
@@ -349,7 +350,7 @@ if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
     warn_if_ssh_mount_stale
 
     run_enter_shell_if_requested
-elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
+elif [ "${CMD}" == "attach" ]; then
     warn_if_ssh_mount_stale
     start_shell
 elif [ "${CMD}" == "fix-ssh" ]; then
@@ -361,7 +362,7 @@ elif [ "${CMD}" == "user-exec" ]; then
     docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u "${HOST_USER}" ai-sandbox "${ARGS[@]+"${ARGS[@]}"}"
 elif [ "${CMD}" == "root-exec" ]; then
     docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u root ai-sandbox "${ARGS[@]+"${ARGS[@]}"}"
-elif [ "${CMD}" == "status" ]; then
+elif [ "${CMD}" == "detail" ]; then
     do_status || exit $?
 elif [ "${CMD}" == "stop" ]; then
     if is_container_running; then
