@@ -6,3 +6,7 @@ phases:
       slug: dispatch-foundation
       title: Dispatch Foundation
       tasks: []
+    - number: 2
+      slug: profiles-resource
+      title: Profiles Resource
+      tasks: []
