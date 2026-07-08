@@ -151,3 +151,29 @@ architectural_impact: true
   the current `src/options.sh`.
 - `plan/phase-01-dispatch-foundation/002-wire-index-and-call-sites.md` — the dependent
   follow-on task that consumes this task's new `CMD` vocabulary.
+
+## Status
+
+- **Outcome:** succeeded
+- **Date:** 2026-07-08
+- **Summary:** `src/options.sh` rewritten to the noun-based grammar: `RESERVED_NAMES` is now
+  derived via a new `compute_reserved_names()` helper from `GLOBAL_COMMANDS`,
+  `PER_INSTANCE_COMMANDS`, `NOUN_WORDS`, and an `EXTRA_RESERVED_WORDS` set (`create ls`)
+  instead of a hand-maintained literal; `instances ls` / `instances create <name>` noun
+  parsing added; `status`/`connect` and both `detail`→`status` normalization blocks removed
+  (`detail` is now the sole spelling, including in the Phase 5 `QUIET` default check); the
+  bare `ls` word added as a standalone (non-per-instance) word; bare no-args now sets
+  `CMD=enter`/`SANDBOX_NAME=""` instead of `CMD=list`; a `resolve_name_kind()` stub (always
+  echoes `instance`) is wired into the per-name branch, captured but not yet acted on.
+- **Validation:** `shellcheck src/options.sh` — passed, no new warnings. `make build` —
+  passed. `make lint` (full project) — passed, no new warnings. All four required greps
+  (`RESERVED_NAMES=` shows a derivation; `"status"`, `connect`, `CMD="list"` all absent) —
+  confirmed. All manual smoke checks from `## Validation` — confirmed by sourcing
+  `src/options.sh` directly and calling `parse_options` with each listed invocation; outputs
+  matched exactly. `make test.unit` — run per repo convention (not part of this task's
+  `## Validation`); 34 pre-existing `test/unit/ai_sandbox_spec.sh` examples now fail, all of
+  them asserting old-grammar behavior this task deliberately replaces (bare `list`/`status`
+  words, bare `create <name>`, `detail`→`status` normalization) — matches this task doc's
+  `## Assumptions` and is left for the `test-coverage` phase per that assumption.
+- **Affected source files:** `src/options.sh`, `bin/ai-sandbox.sh` (rollup output, rebuilt
+  via `make build`).
