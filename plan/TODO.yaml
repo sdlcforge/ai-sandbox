@@ -27,7 +27,8 @@ phases:
           tier: sonnet-med
           git:
             branch: phase-01-task-02-wire-index-and-call-sites
-            commit: []
+            commit:
+                - 7d6a12e
             merge: null
     - number: 2
       slug: profiles-resource
