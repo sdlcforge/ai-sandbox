@@ -16,6 +16,16 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 2
+          slug: wire-index-and-call-sites
+          title: Wire Index And Call Sites
+          path: phase-01-dispatch-foundation/002-wire-index-and-call-sites.md
+          done: false
+          tier: sonnet-med
+          git:
+            branch: null
+            commit: []
+            merge: null
     - number: 2
       slug: profiles-resource
       title: Profiles Resource
