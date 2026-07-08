@@ -5,6 +5,7 @@ phases:
     - number: 1
       slug: dispatch-foundation
       title: Dispatch Foundation
+      diff_base: 5858301d93bab015960d976cdcc4d9cb05159989
       tasks:
         - number: 1
           slug: rewrite-dispatch-grammar
