@@ -88,3 +88,13 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 2
+          slug: add-new-grammar-and-gating-tests
+          title: Add New Grammar And Gating Tests
+          path: phase-04-test-coverage/002-add-new-grammar-and-gating-tests.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
