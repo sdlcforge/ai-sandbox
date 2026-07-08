@@ -15,7 +15,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-01-rewrite-dispatch-grammar
-            commit: []
+            commit:
+                - cdede92
             merge: null
         - number: 2
           slug: wire-index-and-call-sites
