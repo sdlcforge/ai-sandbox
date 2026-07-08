@@ -25,6 +25,7 @@ phases:
           path: phase-01-dispatch-foundation/002-wire-index-and-call-sites.md
           done: false
           tier: sonnet-med
+          digest: 'Wired src/index.sh''s command-dispatch phase to the new noun-based CMD vocabulary from task 001: the global ls short-circuit, Docker pre-flight detail exemption, and dispatch branch''s attach/detail conditions now use the new tokens, connect disjunct dropped. src/create.sh and src/list.sh needed no changes. Verified via live smoke tests. make lint clean; make test.unit shows identical 34 pre-existing failures before/after (owned by phase-04).'
           git:
             branch: phase-01-task-02-wire-index-and-call-sites
             commit:
