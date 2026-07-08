@@ -1,2 +1,7 @@
 version: 1
-items: []
+items:
+    - title: src/help.sh still documents old list/status/c
+      id: Bak3
+      date: "2026-07-08"
+      tag: dispatch-foundation
+      text: '[phase-01-dispatch-foundation/002-wire-index-and-call-sites.md] src/help.sh still documents old list/status/connect spellings (lines ~28, 39-40, 53) — already in scope for phase-03 docs-and-help task 002 (update-architecture-and-help-text), which explicitly covers help.sh; flagging for cross-reference, not a new work item.'
