@@ -44,11 +44,18 @@ a clearly commented block in `src/index.sh` and only runs when it applies:
 1. **Parse options** (`options.sh`) — populate `CMD`, `ARGS`, and flag globals
    (`NO_CHROMIUM`, `NO_DOCKER`, `ENABLE_DOCKER_PROXY`, `STATUS_JSON`,
    `STATUS_TEST_CHECK`, `QUIET`).
-2. **Short-circuits** — `help` and `kill-local-ai` run without touching Docker
-   or the rest of the pipeline.
+2. **Short-circuits** — a name that resolves to a profile short-circuits
+   immediately to `detail`/`delete` (the only profile-appropriate verbs, gated
+   by the per-name resolve-then-verb-gate mechanism described in step 11
+   below); `ls`, `instances ls`, `profiles ls`, `profiles create`, `help`, and
+   `kill-local-ai` also run without touching Docker or the rest of the
+   pipeline.
 3. **Docker preflight** — `check_docker` pokes `docker info`; on failure it
-   tries `docker desktop start` once before giving up. `status` is exempt so it
-   can describe a down daemon instead of fighting it.
+   tries `docker desktop start` once before giving up. `detail` is exempt so
+   it can describe a down daemon instead of fighting it. Profile-kind dispatch
+   (a name that resolves to an existing profile) is exempt entirely — it
+   short-circuits in step 2 above, before this phase ever runs, rather than
+   merely tolerating a down daemon like `detail` does.
 4. **Resolve PROJECT_ROOT** — follow symlinks out to the real script location.
 5. **Plugin-conflict preflight** (`plugin-conflicts.sh`) — only runs for
    `start` / `enter` / `up`. See *Concurrency invariant* below.
@@ -65,9 +72,16 @@ a clearly commented block in `src/index.sh` and only runs when it applies:
 10. **Tool downloads** (`tool-versions.sh`) — only for build-related commands;
     resolves language runtime versions and caches tarballs the Dockerfile
     `COPY`s in.
-11. **Dispatch** — `start`/`enter`/`attach`/`build`/`user-exec`/`root-exec`/
-    `status`/`stop`/`clean`; any other word is forwarded to
-    `docker compose <word>`.
+11. **Dispatch** — noun words are parsed first and short-circuit ahead of the
+    Docker pre-flight (step 3 above): `ls` for the bare grouped
+    `Instances:`/`Profiles:` listing, `instances ls`/`instances create
+    <name>`, and `profiles ls`/`profiles create <name>`. Otherwise a bare
+    `<name>` argument is resolved to `instance`/`profile`/`unknown`
+    (`resolve_name_kind()`); an unknown name errors immediately, and a
+    profile-kind name is gated to `detail`/`delete` only, while an
+    instance-kind name accepts the full per-name word list:
+    `start`/`enter`/`attach`/`build`/`user-exec`/`root-exec`/`detail`/`stop`/
+    `clean`; any other word is forwarded to `docker compose <word>`.
 
 Keeping each concern in its own phase is what makes the otherwise large script
 tractable: you can reason about each phase without tracing control flow across
@@ -326,16 +340,15 @@ URL — would be read as a Compose interpolation token, and `docker inspect`
 Go-template quoting is fragile around embedded quotes. Base64 sidesteps both:
 the label value is inert `[A-Za-z0-9+/=]`, safe from Compose and YAML alike.
 The cost — opacity via a raw `docker inspect` — is mitigated by the retained
-plain labels (`ai.sandbox.profiles`, `ai.sandbox.mode`, etc., used by `list`
-and by `matches`) and by `ai-sandbox status`/`detail`'s decoded
+plain labels (`ai.sandbox.profiles`, `ai.sandbox.mode`, etc., used by `ls`
+and by `matches`) and by `ai-sandbox detail`'s decoded
 `Configuration:` display (see
 [Status as both human and machine interface](#status-as-both-human-and-machine-interface)
 below).
 
 ### Status as both human and machine interface
 
-`ai-sandbox status` (and its pure alias `detail`, normalized to the same `CMD`
-value during option parsing) has three modes driven by flags, all fed by a
+`ai-sandbox detail` has three modes driven by flags, all fed by a
 single gather pass (`src/status.sh`):
 
 - default → human-readable text
@@ -381,7 +394,7 @@ ShellSpec with two tiers:
 
 - `test/unit/` — loads `bin/ai-sandbox.sh` with `__SOURCED__=1` and exercises
   individual functions. Fast, no Docker needed.
-- `test/integration/` — gated by `status --test-check`; drives real
+- `test/integration/` — gated by `detail --test-check`; drives real
   `docker compose` and pokes at the live container via `container_exec`
   (defined in `test/spec_helper.sh`).
 
