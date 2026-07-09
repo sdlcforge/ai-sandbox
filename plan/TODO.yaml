@@ -34,6 +34,7 @@ phases:
     - number: 2
       slug: profiles-resource
       title: Profiles Resource
+      diff_base: f02f6dff02f1429ff62741605e330f20e1c95083
       tasks:
         - number: 1
           slug: build-profiles-module
