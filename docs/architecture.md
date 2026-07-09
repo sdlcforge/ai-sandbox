@@ -47,9 +47,11 @@ a clearly commented block in `src/index.sh` and only runs when it applies:
 2. **Short-circuits** — a name that resolves to a profile short-circuits
    immediately to `detail`/`delete` (the only profile-appropriate verbs, gated
    by the per-name resolve-then-verb-gate mechanism described in step 11
-   below); `ls`, `instances ls`, `profiles ls`, `profiles create`, `help`, and
-   `kill-local-ai` also run without touching Docker or the rest of the
-   pipeline.
+   below); `profiles ls`, `profiles create`, `help`, and `kill-local-ai` never
+   touch Docker or the rest of the pipeline; `ls` and `instances ls` also
+   short-circuit here but call `docker ps -a` (with stderr suppressed so they
+   degrade gracefully rather than requiring the `check_docker` preflight in
+   step 3 below).
 3. **Docker preflight** — `check_docker` pokes `docker info`; on failure it
    tries `docker desktop start` once before giving up. `detail` is exempt so
    it can describe a down daemon instead of fighting it. Profile-kind dispatch
@@ -72,16 +74,20 @@ a clearly commented block in `src/index.sh` and only runs when it applies:
 10. **Tool downloads** (`tool-versions.sh`) — only for build-related commands;
     resolves language runtime versions and caches tarballs the Dockerfile
     `COPY`s in.
-11. **Dispatch** — noun words are parsed first and short-circuit ahead of the
-    Docker pre-flight (step 3 above): `ls` for the bare grouped
-    `Instances:`/`Profiles:` listing, `instances ls`/`instances create
-    <name>`, and `profiles ls`/`profiles create <name>`. Otherwise a bare
-    `<name>` argument is resolved to `instance`/`profile`/`unknown`
-    (`resolve_name_kind()`); an unknown name errors immediately, and a
-    profile-kind name is gated to `detail`/`delete` only, while an
-    instance-kind name accepts the full per-name word list:
-    `start`/`enter`/`attach`/`build`/`user-exec`/`root-exec`/`detail`/`stop`/
-    `clean`; any other word is forwarded to `docker compose <word>`.
+11. **Dispatch** — noun words are parsed first: `ls` for the bare grouped
+    `Instances:`/`Profiles:` listing, and `instances ls`/`profiles
+    ls`/`profiles create <name>` short-circuit ahead of the Docker pre-flight
+    (step 3 above), same as step 2 above. `instances create <name>` does
+    *not* short-circuit — it runs the full pipeline, including the Docker
+    preflight, profile-installer resolution, and tool downloads, before
+    reaching its dispatch arm. Otherwise a bare `<name>` argument is resolved
+    to `instance`/`profile`/`unknown` (`resolve_name_kind()`); an unknown
+    name errors immediately, and a profile-kind name is gated to
+    `detail`/`delete` only, while an instance-kind name accepts the per-name
+    word list (`PER_INSTANCE_COMMANDS` in `src/options.sh`):
+    `start`/`enter`/`attach`/`fix-ssh`/`build`/`user-exec`/`root-exec`/
+    `detail`/`stop`/`delete`/`clean`/`up`; any other word is forwarded to
+    `docker compose <word>`.
 
 Keeping each concern in its own phase is what makes the otherwise large script
 tractable: you can reason about each phase without tracing control flow across
