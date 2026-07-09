@@ -83,6 +83,7 @@ phases:
           path: phase-03-docs-and-help/002-update-architecture-and-help-text.md
           done: false
           tier: sonnet-med
+          digest: Rewrote docs/architecture.md's Command flow step 11 and adjacent Docker-preflight step 3 to describe the noun-word parsing phase, resolve_name_kind()'s resolve-then-verb-gate mechanism, detail replacing status, attach without connect, and the profile-kind short-circuit that skips Docker pre-flight entirely. Removed 'pure alias' framing, retired remaining stale status mentions. Fully rewrote src/help.sh's print_help() heredoc to match the noun-based grammar. All validation checks plus manual help-output cross-check pass.
           git:
             branch: phase-03-task-02-update-architecture-help-text
             commit:
