@@ -112,6 +112,7 @@ phases:
           path: phase-04-test-coverage/002-add-new-grammar-and-gating-tests.md
           done: false
           tier: sonnet-high
+          digest: 'Added new ShellSpec coverage in test/unit/ai_sandbox_spec.sh covering all five Requirements: instances create end-to-end parse behavior; profiles ls/create parsing plus a Describe profiles_create() block replacing the old new_profile() block (matching phase-02''s rename) and a Describe profiles_delete() block covering bundled-profile refusal and successful deletion; a structural test proving compute_reserved_names() is a genuine derivation (including an injection test); cross-kind and same-kind name-collision checks for both instances create and profiles create; and per-name verb-gating coverage asserting profile-appropriate verbs are allowed, instance-only verbs and default enter are rejected against a profile-resolved name with a distinct error, and any verb against an unresolvable name produces its own distinct unknown error. Confirmed no test references a profiles delete <name> noun-level parse path. Full suite green: 175/175, shellcheck clean. This was the final task in the cli-restructure plan.'
           git:
             branch: phase-04-task-02-add-new-grammar-gating-tests
             commit:
