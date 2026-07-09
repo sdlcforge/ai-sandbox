@@ -105,7 +105,7 @@ phases:
             branch: phase-04-task-01-update-existing-dispatch-tests
             commit:
                 - 8ea0cd2
-            merge: null
+            merge: 97735431064a91eb6e5ada255418952409c037ab
         - number: 2
           slug: add-new-grammar-and-gating-tests
           title: Add New Grammar And Gating Tests
