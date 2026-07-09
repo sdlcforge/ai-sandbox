@@ -56,7 +56,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-02-task-02-complete-name-resolution-verb
-            commit: []
+            commit:
+                - b5f183e
             merge: null
     - number: 3
       slug: docs-and-help
