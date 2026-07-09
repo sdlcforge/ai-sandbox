@@ -196,3 +196,33 @@ From `plan/followups.yaml`:
   remaining `new_profile()` test failures noted after phase-04 task 001 were already known
   to be covered by task 002's scope (renamed to `profiles_create()` in phase-02), and were
   in fact resolved by that task.
+
+## Final Task State
+
+# TODO
+
+## Purpose and scope
+
+Tracking document for the active plan.
+
+## Tasks
+
+### Phase 01 — Dispatch Foundation
+
+- [x] [001-rewrite-dispatch-grammar.md](./phase-01-dispatch-foundation/001-rewrite-dispatch-grammar.md) — tier `sonnet-high` · branch `phase-01-task-01-rewrite-dispatch-grammar` · commit `cdede92` · merge `ba8b015b22fb037c6f8b55652a0d50125d092345`
+- [x] [002-wire-index-and-call-sites.md](./phase-01-dispatch-foundation/002-wire-index-and-call-sites.md) — tier `sonnet-med` · branch `phase-01-task-02-wire-index-and-call-sites` · commit `7d6a12e` · merge `e6922ece0ea2a9e9a91fae81e36cb655d3996f78`
+
+### Phase 02 — Profiles Resource
+
+- [x] [001-build-profiles-module.md](./phase-02-profiles-resource/001-build-profiles-module.md) — tier `sonnet-high` · branch `phase-02-task-01-build-profiles-module` · commit `2703dcc` · merge `4973adfec110ace95311929ba5bb47f87a0a1593`
+- [x] [002-complete-name-resolution-and-verb-gating.md](./phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md) — tier `sonnet-high` · branch `phase-02-task-02-complete-name-resolution-verb` · commit `b5f183e` · merge `3d3fb0704e02fbf165c6c29014414e3e8645702d`
+
+### Phase 03 — Docs And Help
+
+- [x] [001-update-readme-and-profiles-spec.md](./phase-03-docs-and-help/001-update-readme-and-profiles-spec.md) — tier `sonnet-med` · branch `phase-03-task-01-update-readme-profiles-spec` · commit `cc71f90` · merge `bdb6aa7ac695a4ccdd191584f4c74869295d3e55`
+- [x] [002-update-architecture-and-help-text.md](./phase-03-docs-and-help/002-update-architecture-and-help-text.md) — tier `sonnet-med` · branch `phase-03-task-02-update-architecture-help-text` · commit `9f2685e` · merge `3d3c78f027ede902f663c9f1d5b69a8aca1c5025`
+
+### Phase 04 — Test Coverage
+
+- [x] [001-update-existing-dispatch-tests.md](./phase-04-test-coverage/001-update-existing-dispatch-tests.md) — tier `sonnet-med` · branch `phase-04-task-01-update-existing-dispatch-tests` · commit `8ea0cd2` · merge `97735431064a91eb6e5ada255418952409c037ab`
+- [x] [002-add-new-grammar-and-gating-tests.md](./phase-04-test-coverage/002-add-new-grammar-and-gating-tests.md) — tier `sonnet-high` · branch `phase-04-task-02-add-new-grammar-gating-tests` · commit `9a2c95e` · merge `24610a9a68b7962ab39b68864dd7f151db9df63f`
