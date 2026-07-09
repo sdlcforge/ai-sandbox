@@ -42,6 +42,7 @@ phases:
           path: phase-02-profiles-resource/001-build-profiles-module.md
           done: false
           tier: sonnet-high
+          digest: Renamed src/new-profile.sh to src/profiles.sh, converting new_profile() into profiles_create() with positional <name> arg; added profile_exists()/do_profiles_list() plus a factored-out instance_exists() helper in src/utils.sh. Wired profiles ls/profiles create <name> into src/options.sh's noun-based dispatch grammar parallel to instances, explicitly excluding a profiles-delete noun-level verb per the plan's resolved ambiguity. Added early short-circuits in src/index.sh; dropped new-profile as a global command with no alias. Collision checks reject a name colliding with any instance, profile, or reserved word regardless of which noun's create is used. All required validation passed; manual smoke checks covered every task-doc scenario.
           git:
             branch: phase-02-task-01-build-profiles-module
             commit:
