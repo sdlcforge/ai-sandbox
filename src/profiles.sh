@@ -45,12 +45,25 @@ function _profiles_project_root() {
 # discovery" section (project-local, user-global, bundled), 1 otherwise.
 # Does not distinguish which location matched -- callers needing that
 # (e.g. phase-02 task 002's deletion logic) re-derive it.
+#
+# Symlinks are deliberately rejected ([ -f ] alone follows them): the
+# highest-priority location, ./profiles/<name>.yaml, is relative to the
+# invoking user's CWD and can be planted inside a cloned/untrusted git repo
+# (symlinks survive `git clone`). Without this guard, a symlinked
+# "<name>.yaml" pointing at an arbitrary host file (e.g. ~/.ssh/id_rsa) would
+# resolve as a legitimate profile and its target contents would be
+# disclosed by `<name> detail` -- see Bug 3 in the phase-02-profiles-resource
+# follow-up review.
 function profile_exists() {
     local name="${1:-}"
     local xdg_config="${XDG_CONFIG_HOME:-${HOME}/.config}"
-    [ -f "./profiles/${name}.yaml" ] && return 0
-    [ -f "${xdg_config}/ai-sandbox/profiles/${name}.yaml" ] && return 0
-    [ -f "$(_profiles_project_root)/profiles/${name}.yaml" ] && return 0
+    local project_path="./profiles/${name}.yaml"
+    local user_path="${xdg_config}/ai-sandbox/profiles/${name}.yaml"
+    local bundled_path
+    bundled_path="$(_profiles_project_root)/profiles/${name}.yaml"
+    [ -f "${project_path}" ] && [ ! -L "${project_path}" ] && return 0
+    [ -f "${user_path}" ] && [ ! -L "${user_path}" ] && return 0
+    [ -f "${bundled_path}" ] && [ ! -L "${bundled_path}" ] && return 0
     return 1
 }
 
@@ -62,6 +75,11 @@ function profile_exists() {
 # Callers needing to know *which* location matched (do_profiles_detail(),
 # profiles_delete()) use this instead of profile_exists(), which only
 # reports existence.
+#
+# Symlinks are rejected at each location, same as profile_exists() and for
+# the same reason (see that function's comment) -- this is the resolution
+# point do_profiles_detail() (cat) and profiles_delete() (rm) actually read
+# from, so it must never hand back a symlinked path.
 function _profile_resolve_location() {
     local name="${1:-}"
     local xdg_config="${XDG_CONFIG_HOME:-${HOME}/.config}"
@@ -70,15 +88,15 @@ function _profile_resolve_location() {
     local bundled_path
     bundled_path="$(_profiles_project_root)/profiles/${name}.yaml"
 
-    if [ -f "${project_path}" ]; then
+    if [ -f "${project_path}" ] && [ ! -L "${project_path}" ]; then
         printf '%s\t%s\n' "${project_path}" "project-local"
         return 0
     fi
-    if [ -f "${user_path}" ]; then
+    if [ -f "${user_path}" ] && [ ! -L "${user_path}" ]; then
         printf '%s\t%s\n' "${user_path}" "user-global"
         return 0
     fi
-    if [ -f "${bundled_path}" ]; then
+    if [ -f "${bundled_path}" ] && [ ! -L "${bundled_path}" ]; then
         printf '%s\t%s\n' "${bundled_path}" "bundled"
         return 0
     fi
@@ -162,11 +180,17 @@ function do_profiles_list() {
 
     # Record <name> once, from the highest-priority location that provides it.
     # $1 - directory to scan  $2 - source label
+    # Symlinked entries are skipped outright (not just "not a regular file"):
+    # a symlink planted under ./profiles/ could otherwise have its target's
+    # `mode:` line skimmed into this listing, or be picked up as if it were a
+    # real profile -- same class of issue as profile_exists()/
+    # _profile_resolve_location() above (see Bug 3 in the
+    # phase-02-profiles-resource follow-up review).
     _profiles_collect_dir() {
         local dir="$1" source_label="$2" f base name existing
         [ -d "${dir}" ] || return 0
         for f in "${dir}"/*.yaml; do
-            [ -e "${f}" ] || continue
+            [ -f "${f}" ] && [ ! -L "${f}" ] || continue
             base="$(basename "${f}")"
             name="${base%.yaml}"
             local seen=false

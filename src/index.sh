@@ -31,14 +31,15 @@ export SANDBOX_NAME
 # two before returning). Dispatch here, before the Docker pre-flight and
 # before profile-installer.js resolution below -- a bare YAML file
 # lookup/deletion must not require Docker to be running or the
-# profile-composition machinery to execute. Calls resolve_name_kind() itself
-# (rather than trusting a value threaded from options.sh) since SANDBOX_NAME
-# is the first thing used after being exported above, and empty SANDBOX_NAME
-# (global/noun commands) never resolves to a profile, making this a no-op
-# for those. See
-# plan/phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md
-# Requirement 5.
-if [ -n "${SANDBOX_NAME}" ] && [ "$(resolve_name_kind "${SANDBOX_NAME}")" = "profile" ]; then
+# profile-composition machinery to execute. Consumes SANDBOX_NAME_KIND,
+# already computed once by parse_options() and exported above, rather than
+# calling resolve_name_kind() again here -- a second call would re-run
+# instance_exists()'s `docker ps -a` query on every per-name invocation for
+# no benefit (see Bug 2 in the phase-02-profiles-resource follow-up review).
+# SANDBOX_NAME_KIND is only ever set for the flat per-name dispatch path, so
+# it's empty (falsy against "profile") for every other shape (global/noun
+# commands, `create`), making this a no-op for those regardless.
+if [ -n "${SANDBOX_NAME}" ] && [ "${SANDBOX_NAME_KIND:-}" = "profile" ]; then
     case "${CMD}" in
         detail)
             do_profiles_detail "${SANDBOX_NAME}"

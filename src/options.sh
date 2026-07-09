@@ -19,6 +19,14 @@
 #   ai-sandbox help | kill-local-ai
 # Sets globals consumed by index.sh:
 #   SANDBOX_NAME  — empty for global/noun commands; instance name for per-instance commands
+#   SANDBOX_NAME_KIND — resolve_name_kind()'s result ("instance"/"profile"/"unknown")
+#                   for the flat per-name dispatch path; empty for every other
+#                   dispatch shape (ls / instances / profiles noun / global /
+#                   bare per-instance command word / create). Computed once
+#                   here and exported so src/index.sh's profile-kind
+#                   short-circuit can reuse it instead of re-resolving (which
+#                   would double the docker ps -a round trip on every
+#                   per-name invocation).
 #   SANDBOX_PROFILES — comma-joined list of --profile values from a `create` invocation
 #   CMD           — subcommand (e.g. "create", "ls", "enter", "detail", "stop").
 #                   "detail" is the sole spelling for the status-report verb —
@@ -95,9 +103,28 @@ function compute_reserved_names() {
 # 001) already prevent a name from being both, so this branch order is
 # defensive, not load-bearing, in case that invariant is ever violated by
 # pre-existing state.
+#
+# instance_exists() returns 2 (rather than the falsy 1) when the underlying
+# `docker ps` query itself failed -- i.e. Docker is unreachable, not "no such
+# container". When that happens we cannot tell instance from unknown, so we
+# do NOT fall through to profile_exists()/"unknown": doing so would let a
+# perfectly ordinary instance name get hard-rejected by parse_options()'s
+# Phase 3.5 verb-gating before the pre-existing Docker-preflight/auto-start
+# logic in src/index.sh (or `detail`'s documented tolerance of a down daemon)
+# ever gets a chance to run. Instead, treat the name as a plausible instance
+# -- matching this function's pre-verb-gating behavior, where any name was
+# simply assumed to be an instance and let downstream Docker calls sort it
+# out. See Bug 1 in the phase-02-profiles-resource follow-up review.
 function resolve_name_kind() {
     local name="${1:-}"
-    if instance_exists "${name}"; then
+    local instance_rc
+    instance_exists "${name}"
+    instance_rc=$?
+    if [ "${instance_rc}" -eq 0 ]; then
+        echo "instance"
+        return 0
+    fi
+    if [ "${instance_rc}" -eq 2 ]; then
         echo "instance"
         return 0
     fi
@@ -110,6 +137,7 @@ function resolve_name_kind() {
 
 function parse_options() {
     SANDBOX_NAME=""
+    SANDBOX_NAME_KIND=""
     SANDBOX_PROFILES=""
     CMD=""
     PROFILES=()
@@ -195,7 +223,7 @@ function parse_options() {
 
     # If --help/-h was already set via leading flag, nothing else to do for CMD
     if [ "${CMD}" = "help" ]; then
-        export SANDBOX_NAME SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
+        export SANDBOX_NAME SANDBOX_NAME_KIND SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
                NO_ISOLATE_CONFIG CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
                STATUS_JSON STATUS_TEST_CHECK QUIET \
                CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE
@@ -218,16 +246,18 @@ function parse_options() {
     # explicitly (global command, bare per-instance command, or an explicit
     # `<name> <cmd>` word), so promotion never fires in those cases.
     local cmd_defaulted=false
-    # Result of resolve_name_kind() for the flat per-name dispatch path
-    # (Phase 2's per-name else branch below) -- "instance" | "profile" |
-    # "unknown", or left empty when this invocation took any other dispatch
-    # shape (ls / instances / profiles noun / global / bare per-instance
-    # command word), none of which resolve a name at all. Declared here
-    # (rather than only where first assigned) so it's always defined under
-    # `set -u` for Phase 3.5's verb-gating check below, regardless of which
-    # branch actually ran.
-    local name_kind=""
-
+    # SANDBOX_NAME_KIND holds resolve_name_kind()'s result for the flat
+    # per-name dispatch path (Phase 2's per-name else branch below) --
+    # "instance" | "profile" | "unknown". It's initialized to "" at the top
+    # of this function (so it's always defined under `set -u` for Phase 3.5's
+    # verb-gating check below, and for the export list, regardless of which
+    # dispatch shape this invocation took) and stays "" for every shape that
+    # never resolves a name (ls / instances / profiles noun / global / bare
+    # per-instance command word / create). It's a function-global (not
+    # `local`) so it can be exported below for src/index.sh's profile-kind
+    # short-circuit to reuse, avoiding a second resolve_name_kind() call and
+    # its docker ps -a round trip (see Bug 2 in the phase-02-profiles-resource
+    # follow-up review).
     if [ "${n_remaining}" -eq 0 ]; then
         # Bare invocation → enter the default/unnamed instance (matches the
         # "name given, no verb → enter" default already established below for
@@ -365,7 +395,7 @@ function parse_options() {
                 # existing profile, or neither. Phase 3.5 below gates CMD
                 # against the resolved kind's allowed-verb set once CMD's
                 # final value (after any Phase 3 promotion) is known.
-                name_kind="$(resolve_name_kind "${SANDBOX_NAME}")"
+                SANDBOX_NAME_KIND="$(resolve_name_kind "${SANDBOX_NAME}")"
 
                 remaining=("${remaining[@]:1}")
                 # Second positional arg is the per-instance command; default to "enter".
@@ -505,16 +535,25 @@ function parse_options() {
     done
 
     # --- Phase 3.5: verb-gating for the flat per-name dispatch path ---
-    # name_kind is only ever non-empty when SANDBOX_NAME was resolved from a
-    # bare name in Phase 2's per-name else branch above, so this is a no-op
-    # for every other dispatch shape (ls / instances / profiles noun /
+    # SANDBOX_NAME_KIND is only ever non-empty when SANDBOX_NAME was resolved
+    # from a bare name in Phase 2's per-name else branch above, so this is a
+    # no-op for every other dispatch shape (ls / instances / profiles noun /
     # global / bare per-instance command word). Runs after Phase 3 so CMD
     # reflects any promotion of a command word pushed past a leading flag.
-    if [ -n "${name_kind}" ]; then
-        if [ "${name_kind}" = "unknown" ]; then
+    #
+    # Note: SANDBOX_NAME_KIND = "instance" here also covers the "Docker was
+    # unreachable" case (resolve_name_kind() falls back to "instance" rather
+    # than "unknown" when it can't ask docker -- see Bug 1 in the
+    # phase-02-profiles-resource follow-up review), so no special-casing is
+    # needed in this gate: an unreachable-docker name is simply allowed
+    # through unrestricted, same as a confirmed instance, and the downstream
+    # Docker-preflight/auto-start logic in src/index.sh decides what happens
+    # next.
+    if [ -n "${SANDBOX_NAME_KIND}" ]; then
+        if [ "${SANDBOX_NAME_KIND}" = "unknown" ]; then
             echo "Error: '${SANDBOX_NAME}' is not a known instance or profile" 1>&2
             exit 1
-        elif [ "${name_kind}" = "profile" ]; then
+        elif [ "${SANDBOX_NAME_KIND}" = "profile" ]; then
             local profile_verb_ok=false pc
             for pc in ${PROFILE_COMMANDS}; do
                 if [ "${CMD}" = "${pc}" ]; then
@@ -527,9 +566,10 @@ function parse_options() {
                 exit 1
             fi
         fi
-        # name_kind = "instance": every PER_INSTANCE_COMMANDS word, plus the
-        # passthrough fallback, is allowed unrestricted -- matches today's
-        # existing, unchanged per-instance dispatch (no allow-list needed).
+        # SANDBOX_NAME_KIND = "instance": every PER_INSTANCE_COMMANDS word,
+        # plus the passthrough fallback, is allowed unrestricted -- matches
+        # today's existing, unchanged per-instance dispatch (no allow-list
+        # needed).
     fi
 
     # --- Phase 4: build SANDBOX_PROFILES from PROFILES (for `create`) ---
@@ -553,7 +593,7 @@ function parse_options() {
     # arrays across process boundaries. They are consumed within the same shell
     # session by index.sh before any subprocess boundary is crossed — same
     # pattern as PROFILES.
-    export SANDBOX_NAME SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
+    export SANDBOX_NAME SANDBOX_NAME_KIND SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
            NO_ISOLATE_CONFIG CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
            STATUS_JSON STATUS_TEST_CHECK QUIET \
            CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE
