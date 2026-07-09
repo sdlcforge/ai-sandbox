@@ -100,6 +100,7 @@ phases:
           path: phase-04-test-coverage/001-update-existing-dispatch-tests.md
           done: false
           tier: sonnet-med
+          digest: 'Fixed all 54 baseline-failing test/unit/ai_sandbox_spec.sh examples in the parse_options() Describe block: 28 via Requirements 1-4 plus the rUS7 unknown-name-as-instance mocking carve-out, and 24 via mechanically rewriting retired bare create <name> invocations to instances create <name> (manager-authorized as same-category existing-test-update work). shellspec parse_options() block now 62/62 green. make test.unit: 183 examples, 2 failures remaining — both new_profile() (renamed to profiles_create() in phase-02), explicitly already covered by task 002''s scope per phase-02 task 001''s own report.'
           git:
             branch: phase-04-task-01-update-existing-dispatch-tests
             commit:
