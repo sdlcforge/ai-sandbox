@@ -43,7 +43,7 @@ phases:
           done: false
           tier: sonnet-high
           git:
-            branch: null
+            branch: phase-02-task-01-build-profiles-module
             commit: []
             merge: null
         - number: 2
