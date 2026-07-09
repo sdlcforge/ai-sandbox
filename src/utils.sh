@@ -14,6 +14,19 @@ function sandbox_container_name() {
     printf 'ai-sandbox-%s\n' "${SANDBOX_NAME}"
 }
 
+# Return 0 if a sandbox instance container (running or stopped) already exists
+# for name $1, 1 otherwise. Factored out of src/create.sh's do_create(), which
+# had this query inlined, so both the create-collision check and
+# resolve_name_kind() (phase-02-profiles-resource task 002) can reuse it.
+function instance_exists() {
+    local name="${1:-}"
+    local existing
+    existing="$(docker ps -a \
+        --filter "name=^ai-sandbox-${name}$" \
+        --format '{{.Names}}' 2>/dev/null || true)"
+    [ -n "${existing}" ]
+}
+
 function check_docker() {
     qecho -n "Checking docker is running... "
     if ! docker info > /dev/null 2>&1; then

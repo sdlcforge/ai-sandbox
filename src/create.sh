@@ -22,12 +22,19 @@ function do_create() {
     fi
 
     # --- 2. Check for name collision ---
-    local existing
-    existing="$(docker ps -a \
-        --filter "name=^ai-sandbox-${SANDBOX_NAME}$" \
-        --format '{{.Names}}' 2>/dev/null || true)"
-    if [ -n "${existing}" ]; then
+    # A create-collision check must reject a name colliding with any of: an
+    # existing instance, an existing profile, or a reserved word -- regardless
+    # of which noun (instances create / profiles create) is being used, since
+    # a name can't be both an instance and a profile (see
+    # plan/phase-02-profiles-resource/001-build-profiles-module.md
+    # Requirements item 5). Reserved-word collisions are already rejected
+    # upstream in src/options.sh's dispatch layer via check_reserved_name.
+    if instance_exists "${SANDBOX_NAME}"; then
         echo "Error: sandbox '${SANDBOX_NAME}' already exists. Use 'ai-sandbox ${SANDBOX_NAME} start' to start it." >&2
+        return 1
+    fi
+    if profile_exists "${SANDBOX_NAME}"; then
+        echo "Error: '${SANDBOX_NAME}' already exists as a profile. Choose a different sandbox name." >&2
         return 1
     fi
 

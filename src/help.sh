@@ -26,8 +26,6 @@ Global commands:
                                                 Implies static mode. Container gets a fresh
                                                 empty ~/.claude; Claude Code is still installed.
   list                     List all managed sandbox instances.
-  new-profile              Scaffold a profile YAML from local Claude assets.
-                             Requires --name. Options: --name, --mode, --output, --plugins.
   kill-local-ai            Kill host claude/plugin processes that conflict with sandboxes.
   help, -h, --help         Show this message.
 

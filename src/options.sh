@@ -5,8 +5,10 @@
 #   ai-sandbox                          -> enter the default/unnamed instance
 #   ai-sandbox ls | instances ls        -> list instances
 #   ai-sandbox instances create <name>  -> create instance <name>
+#   ai-sandbox profiles ls              -> list profiles
+#   ai-sandbox profiles create <name>   -> scaffold profile <name>
 #   ai-sandbox <name> [<verb>]          -> per-instance dispatch, default verb "enter"
-#   ai-sandbox help | kill-local-ai | new-profile
+#   ai-sandbox help | kill-local-ai
 # Sets globals consumed by index.sh:
 #   SANDBOX_NAME  — empty for global/noun commands; instance name for per-instance commands
 #   SANDBOX_PROFILES — comma-joined list of --profile values from a `create` invocation
@@ -74,9 +76,10 @@ function compute_reserved_names() {
 
 # resolve_name_kind <name>
 # Echoes one of: instance | profile | unknown
-# Stubbed in this phase to always echo "instance" (profile_exists doesn't exist yet).
-# profiles-resource completes this to consult profile_exists too and to drive
-# verb-gating (restricting which CMD values are valid for each kind).
+# Still stubbed to always echo "instance" as of phase-02-profiles-resource task
+# 001: profile_exists() now exists (src/profiles.sh), but this stub doesn't
+# consult it yet. task 002 completes this to consult profile_exists too and to
+# drive verb-gating (restricting which CMD values are valid for each kind).
 function resolve_name_kind() {
     echo "instance"
 }
@@ -102,12 +105,12 @@ function parse_options() {
     # Global command words — first non-flag arg matching one of these is a global command.
     # "create" and "list" are no longer free-standing global words: they are
     # only reachable as sub-verbs of the "instances" noun (or, for "ls", also
-    # as a standalone bare word — see Phase 2).
-    local -r GLOBAL_COMMANDS="help kill-local-ai new-profile"
+    # as a standalone bare word — see Phase 2). "new-profile" is dropped
+    # entirely (not aliased) as of phase-02-profiles-resource; scaffolding a
+    # profile is now "profiles create <name>" below.
+    local -r GLOBAL_COMMANDS="help kill-local-ai"
     # Noun words — first non-flag arg matching one of these introduces a
-    # noun-scoped sub-verb (see the "instances" handling in Phase 2).
-    # "profiles" isn't parsed until phase-02-profiles-resource, but the word
-    # must already be unreachable as a sandbox name.
+    # noun-scoped sub-verb (see the "instances"/"profiles" handling in Phase 2).
     local -r NOUN_WORDS="instances profiles"
     # Per-instance command words that may appear without a sandbox-name prefix
     # (see Phase 2) or after one. Declared here (rather than only where first
@@ -234,6 +237,45 @@ function parse_options() {
                     exit 1
                     ;;
             esac
+        elif [ "${first_arg}" = "profiles" ]; then
+            # Noun word supporting exactly two sub-verbs: ls and create.
+            # Profile deletion is deliberately NOT a third verb here — per the
+            # resolved plan/notes/profiles-delete-ambiguity.md, deletion is
+            # exclusively "ai-sandbox <name> delete" via the shared
+            # flat-namespace per-name dispatch (completed in
+            # phase-02-profiles-resource task 002), symmetric with how
+            # instances are deleted. CMD values are namespaced
+            # ("profiles-ls"/"profiles-create", not "ls"/"create") because
+            # those bare CMD values are already contractually tied to
+            # do_list()/do_create() in src/index.sh's dispatch.
+            remaining=("${remaining[@]:1}")
+            if [ "${#remaining[@]}" -eq 0 ]; then
+                echo "Error: 'profiles' requires a sub-verb (ls or create)" 1>&2
+                exit 1
+            fi
+            local profiles_verb="${remaining[0]}"
+            remaining=("${remaining[@]:1}")
+            case "${profiles_verb}" in
+                ls)
+                    SANDBOX_NAME=""
+                    CMD="profiles-ls"
+                    ;;
+                create)
+                    CMD="profiles-create"
+                    if [ "${#remaining[@]}" -eq 0 ]; then
+                        echo "Error: 'profiles create' requires a profile name" 1>&2
+                        exit 1
+                    fi
+                    SANDBOX_NAME="${remaining[0]}"
+                    validate_sandbox_name "${SANDBOX_NAME}"
+                    check_reserved_name "${SANDBOX_NAME}" "${RESERVED_NAMES}"
+                    remaining=("${remaining[@]:1}")
+                    ;;
+                *)
+                    echo "Error: 'profiles ${profiles_verb}' is not a recognized command (expected ls or create)" 1>&2
+                    exit 1
+                    ;;
+            esac
         else
             # Check if first_arg is a global command word
             local is_global=false
@@ -277,12 +319,14 @@ function parse_options() {
 
                 # resolve_name_kind <name>
                 # Echoes one of: instance | profile | unknown
-                # Stubbed in this phase to always echo "instance" (profile_exists
-                # doesn't exist yet). profiles-resource completes this to consult
-                # profile_exists too and to drive verb-gating (restricting which
-                # CMD values are valid for each kind). Not acted on yet — captured
-                # here so the extension point exists and this phase's diff is
-                # additive rather than needing to re-locate the call site.
+                # Still stubbed to always echo "instance" as of
+                # phase-02-profiles-resource task 001: profile_exists() now
+                # exists (src/profiles.sh), but this stub doesn't consult it
+                # yet. task 002 completes this to consult profile_exists too
+                # and to drive verb-gating (restricting which CMD values are
+                # valid for each kind). Not acted on yet — captured here so
+                # the extension point exists and that task's diff is additive
+                # rather than needing to re-locate the call site.
                 # shellcheck disable=SC2034 # extension point for a later phase; unused until verb-gating lands
                 local name_kind
                 name_kind="$(resolve_name_kind "${SANDBOX_NAME}")"

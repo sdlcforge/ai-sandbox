@@ -13,7 +13,7 @@ source ./options.sh
 source ./help.sh
 source ./kill-local.sh
 source ./status.sh
-source ./new-profile.sh
+source ./profiles.sh
 source ./create.sh
 source ./list.sh
 
@@ -46,8 +46,23 @@ if [ "${CMD}" = "kill-local-ai" ]; then
     exit 0
 fi
 
-if [ "${CMD}" = "new-profile" ]; then
-    new_profile "${ARGS[@]+"${ARGS[@]}"}" || exit 1
+if [ "${CMD}" = "profiles-ls" ]; then
+    do_profiles_list
+    exit 0
+fi
+
+if [ "${CMD}" = "profiles-create" ]; then
+    # MODE_OVERRIDE is Phase 3's parsed --mode value (src/options.sh's shared
+    # flag parser intercepts --mode before profiles_create() ever sees ARGS),
+    # so it's reconstructed as a --mode flag here for profiles_create()'s own
+    # (unchanged-in-substance) --mode/--output/--plugins parsing. --output and
+    # --plugins aren't intercepted by src/options.sh and pass through in ARGS
+    # unmodified.
+    PROFILES_CREATE_ARGS=("${SANDBOX_NAME}")
+    if [ -n "${MODE_OVERRIDE}" ]; then
+        PROFILES_CREATE_ARGS+=(--mode "${MODE_OVERRIDE}")
+    fi
+    profiles_create "${PROFILES_CREATE_ARGS[@]}" "${ARGS[@]+"${ARGS[@]}"}" || exit 1
     exit 0
 fi
 
