@@ -15,8 +15,3 @@ items:
       date: "2026-07-09"
       tag: docs-and-help
       text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] src/help.sh''s per-instance commands list and architecture.md''s step-11 dispatch-word enumeration both omit the ''up'' word (present in PER_INSTANCE_COMMANDS) — this gap predates the CLI restructure entirely (never documented before either) and was out of this task''s named scope.'
-    - title: 2 new_profile() test failures remain (lines 1
-      id: 3P8o
-      date: "2026-07-09"
-      tag: test-coverage
-      text: '[phase-04-test-coverage/001-update-existing-dispatch-tests.md] 2 new_profile() test failures remain (lines 1634, 1642) — confirmed out of scope for this task, already known to be covered by phase-04-test-coverage/002-add-new-grammar-and-gating-tests.md''s scope (renamed to profiles_create() in phase-02). No new followup needed, just confirming for the record.'
