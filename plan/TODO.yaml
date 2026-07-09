@@ -69,7 +69,7 @@ phases:
           slug: update-readme-and-profiles-spec
           title: Update Readme And Profiles Spec
           path: phase-03-docs-and-help/001-update-readme-and-profiles-spec.md
-          done: false
+          done: true
           tier: sonnet-med
           digest: Rewrote README.md's CLI reference table and Quick Start block, plus renamed/updated the new-profile-command section of docs/ai-sandbox-profiles-spec.md, to match the noun-based CLI grammar confirmed landed in src/options.sh and src/index.sh. All prose mentions of dropped spellings updated or confirmed unrelated. One same-diff self-fix corrected a stale 'profiles not yet implemented' claim. All validation greps pass; CLI reference table manually cross-checked against dispatch source (not src/help.sh, owned by parallel sibling task 002 which hadn't landed yet).
           git:
