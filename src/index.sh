@@ -25,13 +25,53 @@ parse_options "$@"
 # Export SANDBOX_NAME early so all sourced modules can consume it.
 export SANDBOX_NAME
 
+# --- Phase: profile-kind short-circuit (no docker needed) ---
+# A name that resolves to a profile only supports detail/delete
+# (src/options.sh's parse_options() already verb-gated CMD to one of those
+# two before returning). Dispatch here, before the Docker pre-flight and
+# before profile-installer.js resolution below -- a bare YAML file
+# lookup/deletion must not require Docker to be running or the
+# profile-composition machinery to execute. Calls resolve_name_kind() itself
+# (rather than trusting a value threaded from options.sh) since SANDBOX_NAME
+# is the first thing used after being exported above, and empty SANDBOX_NAME
+# (global/noun commands) never resolves to a profile, making this a no-op
+# for those. See
+# plan/phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md
+# Requirement 5.
+if [ -n "${SANDBOX_NAME}" ] && [ "$(resolve_name_kind "${SANDBOX_NAME}")" = "profile" ]; then
+    case "${CMD}" in
+        detail)
+            do_profiles_detail "${SANDBOX_NAME}"
+            exit $?
+            ;;
+        delete)
+            profiles_delete "${SANDBOX_NAME}"
+            exit $?
+            ;;
+        *)
+            # Unreachable in practice: parse_options()'s verb-gating already
+            # rejects any CMD other than detail/delete for a profile-kind
+            # name before parse_options() ever returns. Defensive fallback
+            # only.
+            echo "Error: '${SANDBOX_NAME}' is a profile, not an instance — 'ai-sandbox ${SANDBOX_NAME} ${CMD}' is not supported for profiles; only detail/delete are allowed" 1>&2
+            exit 1
+            ;;
+    esac
+fi
+
 # --- Phase: global command short-circuits (no docker needed) ---
 
-# Explicit `ls` (or `instances ls`) shows the instance list. Bare invocation
-# now defaults to `enter` (see options.sh), not `ls`.
-# Short-circuits before the Docker pre-flight so `ls` works even when the
-# Docker daemon is down (do_list handles empty output gracefully).
+# Bare `ls` shows the grouped Instances:/Profiles: listing; `instances ls`
+# shows instances only. Bare invocation (no words at all) now defaults to
+# `enter` (see options.sh), not `ls`. Both short-circuit before the Docker
+# pre-flight so `ls` works even when the Docker daemon is down (do_list /
+# do_profiles_list handle empty output gracefully).
 if [ "${CMD}" = "ls" ] && [ -z "${SANDBOX_NAME}" ]; then
+    do_list_all
+    exit 0
+fi
+
+if [ "${CMD}" = "instances-ls" ]; then
     do_list
     exit 0
 fi
