@@ -96,3 +96,42 @@ Within the `Describe 'parse_options()'` block (today starting around line 648):
   'parse_options()'` block, lines ~648-968, before editing).
 - `plan/notes/current-dispatch-audit.md` — investigation backing every behavior change
   asserted here.
+
+## Status
+
+**Outcome: succeeded.** Date: 2026-07-08.
+
+All four numbered `## Requirements` items were implemented, plus the manager-authorized
+`plan/followups.yaml` entry `rUS7` carve-out (mocking `docker` so `resolve_name_kind()`
+resolves synthetic placeholder names like `mybox`/`myname`/`dispatchtest` as
+`SANDBOX_NAME_KIND=instance` instead of hitting the new unknown-kind rejection, across both
+the `parse_options()` and `command dispatch: exec/passthrough branches` `Describe` blocks —
+18 examples, matching the count `rUS7` predicted).
+
+A prior run of this task halted on a further scope question: **24 additional pre-existing
+`parse_options()` failures**, all using the retired bare `create <name>` invocation shape
+(e.g. `parse_options create mybox --profile base`), failing because `create` is no longer a
+`GLOBAL_COMMANDS` word — it's only reachable as `instances create <name>` — so `create` was
+parsing as a literal (reserved) `SANDBOX_NAME` attempt and every one of those tests aborted
+on `Error: 'create' is a reserved name...` before reaching the assertions the test actually
+intended to exercise. The manager reviewed and authorized fixing these 24 in this same task
+(same category as the `rUS7` carve-out: updating existing tests' invocation shape to match
+grammar that already landed in phases 1-2, not writing net-new `instances`/`create` grammar
+coverage — that remains `002-add-new-grammar-and-gating-tests.md`'s job). All 24 were
+mechanically rewritten from `parse_options create <name> ...` to
+`parse_options instances create <name> ...` (CMD/SANDBOX_NAME assertions were already correct
+for this shape — `src/options.sh` keeps `CMD=create` for both the old and new invocation
+form — so no assertion values needed to change, only the invocation line itself). A stale
+comment above the reserved-name block (claiming "bare 'create <name>' is covered separately
+below," no longer true once all 24 were converted) was also corrected as a same-diff self-fix.
+
+**Validation: fully green.** `shellspec test/unit/ai_sandbox_spec.sh -E 'parse_options()'` —
+62 examples, 0 failures (the `-E` pattern must include the literal parens to match the
+`Describe 'parse_options()'` block name under the installed ShellSpec 0.28.1; the task doc's
+literal `-e` flag does not exist in this version — the long form is `-E`/`--example`, matching
+example-name text rather than filtering by `Describe` block directly). `make test.unit` — 183
+examples, 2 failures, both the pre-existing, out-of-scope `new_profile()` failures (that
+function no longer exists; it's `profiles_create()` per phase-02 — unrelated to dispatch
+grammar, left untouched per the manager's scope note). No other `Describe` block regressed,
+including the immediately-following `do_status()` block per the task doc's validation
+spot-check.

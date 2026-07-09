@@ -646,56 +646,88 @@ Describe 'ai-sandbox.sh'
   End
 
   Describe 'parse_options()'
-    It 'defaults CMD to list on bare invocation'
+    # Stub docker so resolve_name_kind() treats any queried name as an
+    # existing instance (SANDBOX_NAME_KIND=instance), which allows every
+    # PER_INSTANCE_COMMANDS word (plus the passthrough fallback) unrestricted
+    # per Phase 3.5's verb-gating. Used below by tests that exercise a
+    # per-name dispatch shape with a synthetic placeholder name and aren't
+    # concerned with instance-vs-profile-vs-unknown resolution specifics
+    # (that end-to-end coverage is phase-04 task 002's scope) -- see
+    # plan/followups.yaml entry rUS7.
+    stub_name_as_instance() {
+      docker() {
+        if [ "$1" = "ps" ]; then
+          echo "ai-sandbox-stub"
+        fi
+        return 0
+      }
+    }
+
+    It 'defaults CMD to enter on bare invocation'
       When call parse_options
-      The variable CMD should eq list
+      The variable CMD should eq enter
       The variable SANDBOX_NAME should eq ''
     End
 
-    It 'routes list to CMD with empty SANDBOX_NAME'
+    It 'defaults CMD to ls when bare "ls" is given'
+      When call parse_options ls
+      The variable CMD should eq ls
+      The variable SANDBOX_NAME should eq ''
+    End
+
+    It 'routes the retired "list" word through as a literal instance-name attempt'
+      stub_name_as_instance
       When call parse_options list
-      The variable CMD should eq list
+      The variable SANDBOX_NAME should eq list
+      The variable CMD should eq enter
+    End
+
+    It 'routes "instances ls" to CMD=instances-ls with empty SANDBOX_NAME'
+      When call parse_options instances ls
+      The variable CMD should eq instances-ls
       The variable SANDBOX_NAME should eq ''
     End
 
     It 'routes first arg to SANDBOX_NAME when not a global command'
+      stub_name_as_instance
       When call parse_options mybox stop
       The variable SANDBOX_NAME should eq mybox
       The variable CMD should eq stop
     End
 
     It 'sets CMD to enter when sandbox name given with no command'
+      stub_name_as_instance
       When call parse_options mybox
       The variable SANDBOX_NAME should eq mybox
       The variable CMD should eq enter
     End
 
     It 'routes create to CMD with sandbox name in SANDBOX_NAME'
-      When call parse_options create mybox --profile base
+      When call parse_options instances create mybox --profile base
       The variable CMD should eq create
       The variable SANDBOX_NAME should eq mybox
       The variable "PROFILES[*]" should eq base
     End
 
     It 'accumulates repeated --profile flags in order'
-      When call parse_options create mybox --profile base --profile docker
+      When call parse_options instances create mybox --profile base --profile docker
       The variable "PROFILES[*]" should eq 'base docker'
       The variable CONFIG_FLAGS_PROVIDED should eq true
     End
 
     It 'sets ENTER_AFTER_CREATE from --enter on create'
-      When call parse_options create mybox --enter
+      When call parse_options instances create mybox --enter
       The variable ENTER_AFTER_CREATE should eq true
     End
 
     It 'sets MODE_OVERRIDE from --mode'
-      When call parse_options create mybox --mode static
+      When call parse_options instances create mybox --mode static
       The variable MODE_OVERRIDE should eq static
       The variable CONFIG_FLAGS_PROVIDED should eq true
     End
 
     It 'rejects an invalid --mode value'
-      When run parse_options create mybox --mode bogus
+      When run parse_options instances create mybox --mode bogus
       The status should be failure
       The stderr should include "must be 'mirror' or 'static'"
     End
@@ -706,19 +738,28 @@ Describe 'ai-sandbox.sh'
       The variable SANDBOX_NAME should eq ''
     End
 
-    It 'routes status as a per-instance command on the default sandbox'
+    It 'no longer routes bare "status" as a recognized per-instance command word (literal instance-name fallthrough)'
+      # "status" was dropped from PER_INSTANCE_COMMANDS (replaced by "detail"
+      # as the sole status-report verb) and deliberately excluded from
+      # RESERVED_NAMES -- see
+      # phase-01-dispatch-foundation/001-rewrite-dispatch-grammar.md item 1.
+      # A bare "status" therefore falls through to the ordinary per-name
+      # dispatch path, same as any other literal, unreserved word.
+      stub_name_as_instance
       When call parse_options status
-      The variable CMD should eq status
-      The variable SANDBOX_NAME should eq ''
+      The variable SANDBOX_NAME should eq status
+      The variable CMD should eq enter
     End
 
     It 'still routes <name> <cmd> correctly for per-instance commands'
+      stub_name_as_instance
       When call parse_options mybox clean
       The variable SANDBOX_NAME should eq mybox
       The variable CMD should eq clean
     End
 
     It 'defaults CMD to enter when sandbox name is followed by flags with no command word'
+      stub_name_as_instance
       When call parse_options mybox --add-marketplace file:///two --enable-plugin flow --clean
       The variable SANDBOX_NAME should eq mybox
       The variable CMD should eq enter
@@ -728,6 +769,7 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'promotes a command word found after a leading flag+value pair to CMD'
+      stub_name_as_instance
       When call parse_options myname --profile x start
       The variable SANDBOX_NAME should eq myname
       The variable CMD should eq start
@@ -736,6 +778,7 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'promotes a command word found after a leading --mode flag+value pair to CMD'
+      stub_name_as_instance
       When call parse_options myname --mode static stop
       The variable SANDBOX_NAME should eq myname
       The variable CMD should eq stop
@@ -744,6 +787,7 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'promotes a command word found after a leading bare --clean flag to CMD'
+      stub_name_as_instance
       When call parse_options myname --clean stop
       The variable SANDBOX_NAME should eq myname
       The variable CMD should eq stop
@@ -752,6 +796,7 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'does not promote a second command-like bare word after the first promotion'
+      stub_name_as_instance
       When call parse_options myname --profile x start stop
       The variable SANDBOX_NAME should eq myname
       The variable CMD should eq start
@@ -759,18 +804,21 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'still defaults CMD to enter for a bare sandbox name with no command word (regression)'
+      stub_name_as_instance
       When call parse_options mybox
       The variable SANDBOX_NAME should eq mybox
       The variable CMD should eq enter
     End
 
     It 'still routes <name> <cmd> with no interleaving flags correctly (regression)'
+      stub_name_as_instance
       When call parse_options mybox stop
       The variable SANDBOX_NAME should eq mybox
       The variable CMD should eq stop
     End
 
     It 'still routes <name> <cmd> --flag value with flags after the command word (regression)'
+      stub_name_as_instance
       When call parse_options mybox stop --profile x
       The variable SANDBOX_NAME should eq mybox
       The variable CMD should eq stop
@@ -778,6 +826,7 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'still defaults CMD to enter when sandbox name is followed by flags with no command word (regression)'
+      stub_name_as_instance
       When call parse_options mybox --add-marketplace file:///two --enable-plugin flow --clean
       The variable SANDBOX_NAME should eq mybox
       The variable CMD should eq enter
@@ -787,19 +836,19 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'errors and points to --profile docker when --docker is passed'
-      When run parse_options create mybox --docker
+      When run parse_options instances create mybox --docker
       The status should be failure
       The stderr should include '--profile docker'
     End
 
     It 'errors and points to --profile docker when --no-docker is passed'
-      When run parse_options create mybox --no-docker
+      When run parse_options instances create mybox --no-docker
       The status should be failure
       The stderr should include '--profile docker'
     End
 
     It 'errors and points to --profile chromium when --no-chromium is passed'
-      When run parse_options create mybox --no-chromium
+      When run parse_options instances create mybox --no-chromium
       The status should be failure
       The stderr should include '--profile chromium'
     End
@@ -810,85 +859,85 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'sets NO_ISOLATE_CONFIG when --no-isolate-config is passed'
-      When call parse_options create mybox --no-isolate-config
+      When call parse_options instances create mybox --no-isolate-config
       The variable NO_ISOLATE_CONFIG should eq true
     End
 
     It 'accepts --add-marketplace with https:// ref'
-      When call parse_options create mybox --add-marketplace https://registry.example.com
+      When call parse_options instances create mybox --add-marketplace https://registry.example.com
       The variable "CLI_MARKETPLACES[*]" should eq 'https://registry.example.com'
       The variable CONFIG_FLAGS_PROVIDED should eq true
     End
 
     It 'accepts --add-marketplace with file:// ref'
-      When call parse_options create mybox --add-marketplace file:///home/user/plugin
+      When call parse_options instances create mybox --add-marketplace file:///home/user/plugin
       The variable "CLI_MARKETPLACES[*]" should eq 'file:///home/user/plugin'
     End
 
     It 'rejects --add-marketplace with invalid scheme'
-      When run parse_options create mybox --add-marketplace ftp://bad.example.com
+      When run parse_options instances create mybox --add-marketplace ftp://bad.example.com
       The status should be failure
       The stderr should include 'https:// or file://'
     End
 
     It 'errors when --add-marketplace is given no ref'
-      When run parse_options create mybox --add-marketplace
+      When run parse_options instances create mybox --add-marketplace
       The status should be failure
       The stderr should include '--add-marketplace requires'
     End
 
     It 'accumulates repeated --add-marketplace refs in order'
-      When call parse_options create mybox \
+      When call parse_options instances create mybox \
         --add-marketplace https://one.example.com \
         --add-marketplace file:///two
       The variable "CLI_MARKETPLACES[*]" should eq 'https://one.example.com file:///two'
     End
 
     It 'accepts --enable-plugin and sets CLI_PLUGINS'
-      When call parse_options create mybox --enable-plugin flow
+      When call parse_options instances create mybox --enable-plugin flow
       The variable "CLI_PLUGINS[*]" should eq flow
       The variable CONFIG_FLAGS_PROVIDED should eq true
     End
 
     It 'accumulates repeated --enable-plugin names'
-      When call parse_options create mybox --enable-plugin flow --enable-plugin claude-mem
+      When call parse_options instances create mybox --enable-plugin flow --enable-plugin claude-mem
       The variable "CLI_PLUGINS[*]" should eq 'flow claude-mem'
     End
 
     It 'sets CLI_ENABLE_ALL from --enable-all'
-      When call parse_options create mybox --enable-all
+      When call parse_options instances create mybox --enable-all
       The variable CLI_ENABLE_ALL should eq true
       The variable CONFIG_FLAGS_PROVIDED should eq true
     End
 
     It 'errors when --enable-plugin is given no name'
-      When run parse_options create mybox --enable-plugin
+      When run parse_options instances create mybox --enable-plugin
       The status should be failure
       The stderr should include '--enable-plugin requires'
     End
 
     It 'CLI_ENABLE_ALL defaults to false when --enable-all is absent'
-      When call parse_options create mybox
+      When call parse_options instances create mybox
       The variable CLI_ENABLE_ALL should eq false
     End
 
     It '--clean sets CLEAN_SLATE to true'
-      When call parse_options create mybox --clean
+      When call parse_options instances create mybox --clean
       The variable CLEAN_SLATE should eq true
     End
 
     It '--clean sets CONFIG_FLAGS_PROVIDED to true'
-      When call parse_options create mybox --clean
+      When call parse_options instances create mybox --clean
       The variable CONFIG_FLAGS_PROVIDED should eq true
     End
 
     It 'CLEAN_SLATE defaults to false when --clean is absent'
-      When call parse_options create mybox
+      When call parse_options instances create mybox
       The variable CLEAN_SLATE should eq false
     End
 
     It '--clean can be combined with --add-marketplace and --enable-all'
-      When call parse_options create mybox --clean \
+      When call parse_options instances create mybox --clean \
         --add-marketplace file:///path/to/mp --enable-all
       The variable CLEAN_SLATE should eq true
       The variable "CLI_MARKETPLACES[*]" should eq 'file:///path/to/mp'
@@ -903,7 +952,7 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'rejects an invalid sandbox name given via the create form'
-      When run parse_options create flow.rook
+      When run parse_options instances create flow.rook
       The status should be failure
       The stderr should include 'invalid'
     End
@@ -915,55 +964,140 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'accepts a valid sandbox name with hyphens, underscores, and digits'
+      stub_name_as_instance
       When call parse_options flow-rook_2
       The variable SANDBOX_NAME should eq 'flow-rook_2'
       The variable CMD should eq enter
     End
 
-    It 'rejects "create status" because status is a reserved name'
-      When run parse_options create status
+    # Regression coverage for the RESERVED_NAMES drift bug: RESERVED_NAMES is
+    # derived from the live GLOBAL_COMMANDS/PER_INSTANCE_COMMANDS/NOUN_WORDS/
+    # EXTRA_RESERVED_WORDS tables (compute_reserved_names()) rather than a
+    # hand-maintained literal, so every word actually reachable as a command
+    # is automatically reserved -- and, just as importantly, a word that was
+    # retired or never added isn't incorrectly reserved. The invocation shape
+    # is "instances create <name>" -- the sole surviving create path; bare
+    # "create <name>" was retired (see the flag-parsing tests above, all of
+    # which now invoke "instances create" as well).
+    It 'rejects "instances create enter" because enter is a reserved name'
+      When run parse_options instances create enter
       The status should be failure
       The stderr should include 'reserved name'
-      The stderr should include 'status'
+      The stderr should include 'enter'
     End
 
-    It 'rejects "create list" because list is a reserved name'
-      When run parse_options create list
+    It 'rejects "instances create start" because start is a reserved name'
+      When run parse_options instances create start
       The status should be failure
       The stderr should include 'reserved name'
-      The stderr should include 'list'
+      The stderr should include 'start'
     End
 
-    It 'rejects "create detail" because detail is a reserved name'
-      When run parse_options create detail
+    It 'rejects "instances create up" because up is a reserved name'
+      When run parse_options instances create up
+      The status should be failure
+      The stderr should include 'reserved name'
+      The stderr should include 'up'
+    End
+
+    It 'rejects "instances create ls" because ls is a reserved name'
+      When run parse_options instances create ls
+      The status should be failure
+      The stderr should include 'reserved name'
+      The stderr should include 'ls'
+    End
+
+    It 'rejects "instances create instances" because instances is a reserved name'
+      When run parse_options instances create instances
+      The status should be failure
+      The stderr should include 'reserved name'
+      The stderr should include 'instances'
+    End
+
+    It 'rejects "instances create profiles" because profiles is a reserved name'
+      When run parse_options instances create profiles
+      The status should be failure
+      The stderr should include 'reserved name'
+      The stderr should include 'profiles'
+    End
+
+    It 'rejects "instances create create" because create is a reserved name'
+      When run parse_options instances create create
+      The status should be failure
+      The stderr should include 'reserved name'
+      The stderr should include 'create'
+    End
+
+    It 'rejects "instances create detail" because detail is a reserved name'
+      When run parse_options instances create detail
       The status should be failure
       The stderr should include 'reserved name'
       The stderr should include 'detail'
     End
 
-    It 'still accepts a legitimate non-reserved name via create'
-      When call parse_options create mybox
+    It 'no longer rejects "instances create status" -- status was deliberately excluded from RESERVED_NAMES'
+      # Cross-checked against src/options.sh: GLOBAL_COMMANDS/
+      # PER_INSTANCE_COMMANDS/NOUN_WORDS/EXTRA_RESERVED_WORDS none contain
+      # "status" -- see phase-01-dispatch-foundation/001-rewrite-dispatch-
+      # grammar.md item 1 for why. This is the other half of the drift-bug
+      # regression: proving the derived set doesn't over-reserve either.
+      When call parse_options instances create status
+      The variable SANDBOX_NAME should eq status
+      The variable CMD should eq create
+    End
+
+    It 'no longer rejects "instances create list" -- list was retired as a command word but never re-added to RESERVED_NAMES (only "ls" is reserved)'
+      When call parse_options instances create list
+      The variable SANDBOX_NAME should eq list
+      The variable CMD should eq create
+    End
+
+    It 'still accepts a legitimate non-reserved name via instances create'
+      When call parse_options instances create mybox
       The variable SANDBOX_NAME should eq mybox
       The variable CMD should eq create
     End
 
-    It 'normalizes the bare "detail" alias to CMD=status'
+    It 'parses the bare "detail" word directly to CMD=detail (no normalization)'
       When call parse_options detail
-      The variable CMD should eq status
+      The variable CMD should eq detail
       The variable SANDBOX_NAME should eq ''
     End
 
-    It 'normalizes the "<name> detail" alias to CMD=status'
+    It 'parses "<name> detail" directly to CMD=detail (no normalization)'
+      stub_name_as_instance
       When call parse_options myname detail
-      The variable CMD should eq status
+      The variable CMD should eq detail
       The variable SANDBOX_NAME should eq myname
     End
 
-    It 'defaults QUIET=0 for the "detail" alias, same as "status"'
+    It 'defaults QUIET=0 for CMD=detail'
       QUIET=
       When call parse_options detail
-      The variable CMD should eq status
+      The variable CMD should eq detail
       The variable QUIET should eq 0
+    End
+
+    It 'no longer routes bare "connect" as a recognized per-instance command word (falls through as CMD, same as any other bare word after a name)'
+      # "connect" was dropped entirely (not aliased) -- it isn't in
+      # PER_INSTANCE_COMMANDS. parse_options() doesn't gate the word
+      # immediately following a resolved sandbox name against
+      # PER_INSTANCE_COMMANDS at all; it simply assigns it to CMD (mirroring
+      # the existing "<name> down" passthrough pattern exercised end-to-end
+      # in the "command dispatch: exec/passthrough branches" Describe block
+      # below) and leaves recognizing/rejecting it to src/index.sh's
+      # dispatch chain.
+      stub_name_as_instance
+      When call parse_options mybox connect
+      The variable SANDBOX_NAME should eq mybox
+      The variable CMD should eq connect
+    End
+
+    It 'still produces CMD=attach for "<name> attach" (unchanged spelling)'
+      stub_name_as_instance
+      When call parse_options mybox attach
+      The variable SANDBOX_NAME should eq mybox
+      The variable CMD should eq attach
     End
   End
 
@@ -1776,6 +1910,12 @@ printf '%s\n' "$*" >> "${DISPATCH_DOCKER_LOG}"
 case "$1" in
   info) exit 0 ;;
   inspect) exit 1 ;;
+  # resolve_name_kind()'s instance_exists() check queries `docker ps -a
+  # --filter name=^ai-sandbox-<name>$ --format {{.Names}}`; echo the
+  # matching container name so "dispatchtest" resolves as SANDBOX_NAME_KIND=
+  # instance and Phase 3.5's verb-gating doesn't reject it (see
+  # plan/followups.yaml entry rUS7).
+  ps) echo "ai-sandbox-dispatchtest"; exit 0 ;;
   *) exit 0 ;;
 esac
 MOCK_DOCKER
