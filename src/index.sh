@@ -13,7 +13,7 @@ source ./options.sh
 source ./help.sh
 source ./kill-local.sh
 source ./status.sh
-source ./new-profile.sh
+source ./profiles.sh
 source ./create.sh
 source ./list.sh
 
@@ -25,12 +25,54 @@ parse_options "$@"
 # Export SANDBOX_NAME early so all sourced modules can consume it.
 export SANDBOX_NAME
 
+# --- Phase: profile-kind short-circuit (no docker needed) ---
+# A name that resolves to a profile only supports detail/delete
+# (src/options.sh's parse_options() already verb-gated CMD to one of those
+# two before returning). Dispatch here, before the Docker pre-flight and
+# before profile-installer.js resolution below -- a bare YAML file
+# lookup/deletion must not require Docker to be running or the
+# profile-composition machinery to execute. Consumes SANDBOX_NAME_KIND,
+# already computed once by parse_options() and exported above, rather than
+# calling resolve_name_kind() again here -- a second call would re-run
+# instance_exists()'s `docker ps -a` query on every per-name invocation for
+# no benefit (see Bug 2 in the phase-02-profiles-resource follow-up review).
+# SANDBOX_NAME_KIND is only ever set for the flat per-name dispatch path, so
+# it's empty (falsy against "profile") for every other shape (global/noun
+# commands, `create`), making this a no-op for those regardless.
+if [ -n "${SANDBOX_NAME}" ] && [ "${SANDBOX_NAME_KIND:-}" = "profile" ]; then
+    case "${CMD}" in
+        detail)
+            do_profiles_detail "${SANDBOX_NAME}"
+            exit $?
+            ;;
+        delete)
+            profiles_delete "${SANDBOX_NAME}"
+            exit $?
+            ;;
+        *)
+            # Unreachable in practice: parse_options()'s verb-gating already
+            # rejects any CMD other than detail/delete for a profile-kind
+            # name before parse_options() ever returns. Defensive fallback
+            # only.
+            echo "Error: '${SANDBOX_NAME}' is a profile, not an instance — 'ai-sandbox ${SANDBOX_NAME} ${CMD}' is not supported for profiles; only detail/delete are allowed" 1>&2
+            exit 1
+            ;;
+    esac
+fi
+
 # --- Phase: global command short-circuits (no docker needed) ---
 
-# Bare invocation and explicit `list` both show the instance list.
-# Short-circuits before the Docker pre-flight so `list` works even when the
-# Docker daemon is down (do_list handles empty output gracefully).
-if [ "${CMD}" = "list" ]; then
+# Bare `ls` shows the grouped Instances:/Profiles: listing; `instances ls`
+# shows instances only. Bare invocation (no words at all) now defaults to
+# `enter` (see options.sh), not `ls`. Both short-circuit before the Docker
+# pre-flight so `ls` works even when the Docker daemon is down (do_list /
+# do_profiles_list handle empty output gracefully).
+if [ "${CMD}" = "ls" ] && [ -z "${SANDBOX_NAME}" ]; then
+    do_list_all
+    exit 0
+fi
+
+if [ "${CMD}" = "instances-ls" ]; then
     do_list
     exit 0
 fi
@@ -45,15 +87,30 @@ if [ "${CMD}" = "kill-local-ai" ]; then
     exit 0
 fi
 
-if [ "${CMD}" = "new-profile" ]; then
-    new_profile "${ARGS[@]+"${ARGS[@]}"}" || exit 1
+if [ "${CMD}" = "profiles-ls" ]; then
+    do_profiles_list
+    exit 0
+fi
+
+if [ "${CMD}" = "profiles-create" ]; then
+    # MODE_OVERRIDE is Phase 3's parsed --mode value (src/options.sh's shared
+    # flag parser intercepts --mode before profiles_create() ever sees ARGS),
+    # so it's reconstructed as a --mode flag here for profiles_create()'s own
+    # (unchanged-in-substance) --mode/--output/--plugins parsing. --output and
+    # --plugins aren't intercepted by src/options.sh and pass through in ARGS
+    # unmodified.
+    PROFILES_CREATE_ARGS=("${SANDBOX_NAME}")
+    if [ -n "${MODE_OVERRIDE}" ]; then
+        PROFILES_CREATE_ARGS+=(--mode "${MODE_OVERRIDE}")
+    fi
+    profiles_create "${PROFILES_CREATE_ARGS[@]}" "${ARGS[@]+"${ARGS[@]}"}" || exit 1
     exit 0
 fi
 
 # --- Phase: docker pre-flight ---
-# `status` tolerates docker being down; it will just report the container as
+# `detail` tolerates docker being down; it will just report the container as
 # stopped and no images. Anything else requires a running daemon.
-if [ "${CMD}" != "status" ]; then
+if [ "${CMD}" != "detail" ]; then
     if ! check_docker "starting..."; then
         docker desktop start
         check_docker "bailing out." || exit 1
@@ -349,7 +406,7 @@ if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
     warn_if_ssh_mount_stale
 
     run_enter_shell_if_requested
-elif [ "${CMD}" == "attach" ] || [ "${CMD}" == "connect" ]; then
+elif [ "${CMD}" == "attach" ]; then
     warn_if_ssh_mount_stale
     start_shell
 elif [ "${CMD}" == "fix-ssh" ]; then
@@ -361,7 +418,7 @@ elif [ "${CMD}" == "user-exec" ]; then
     docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u "${HOST_USER}" ai-sandbox "${ARGS[@]+"${ARGS[@]}"}"
 elif [ "${CMD}" == "root-exec" ]; then
     docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} exec -u root ai-sandbox "${ARGS[@]+"${ARGS[@]}"}"
-elif [ "${CMD}" == "status" ]; then
+elif [ "${CMD}" == "detail" ]; then
     do_status || exit $?
 elif [ "${CMD}" == "stop" ]; then
     if is_container_running; then

@@ -1,2 +1,42 @@
 version: 1
-items: []
+items:
+    - title: src/help.sh still documents old list/status/c
+      id: Bak3
+      date: "2026-07-08"
+      tag: dispatch-foundation
+      text: '[phase-01-dispatch-foundation/002-wire-index-and-call-sites.md] src/help.sh still documents old list/status/connect spellings (lines ~28, 39-40, 53) — already in scope for phase-03 docs-and-help task 002 (update-architecture-and-help-text), which explicitly covers help.sh; flagging for cross-reference, not a new work item.'
+    - title: Pre-existing latent bug (out of scope per tas
+      id: QyPz
+      date: "2026-07-09"
+      tag: profiles-resource
+      text: '[phase-02-profiles-resource/001-build-profiles-module.md] Pre-existing latent bug (out of scope per task''s explicit "unchanged in substance" instruction): profiles_create()''s preserved auto-discovery internals (_cp_entries_to_json''s local -n nameref) emit harmless stderr noise under macOS system bash 3.2 but would silently produce empty skills/hooks/agents entries for any user running the CLI under /bin/bash rather than a newer bash. Recorded for awareness; a dedicated follow-up task would be needed to fix since this task was explicitly instructed not to touch that logic.'
+    - title: Deliberate behavior change per literal Requir
+      id: rUS7
+      date: "2026-07-09"
+      tag: profiles-resource
+      text: '[phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md] Deliberate behavior change per literal Requirement 2 implementation: an unknown-kind name now errors for ANY verb (not just detail/delete), removing prior implicit-instance-creation-via-bare-enter for a never-created name (e.g. `ai-sandbox typo-name enter` now errors instead of silently creating a container). Well-supported by current-dispatch-audit.md''s design note and arguably a UX improvement, but breaks 18 currently-passing test/unit/ai_sandbox_spec.sh examples (beyond the known 36-failure baseline) — all synthetic placeholder-name tests in the parse_options() and exec/passthrough Describe blocks with no instance_exists/profile_exists-satisfying mock. Neither plan/phase-04-test-coverage/001-update-existing-dispatch-tests.md nor 002-add-new-grammar-and-gating-tests.md currently lists this test category in scope. Recommend amending one of those two task docs'' scope to cover it before phase-04 executes, or confirming this consequence is intended as-is.'
+    - title: 'Pre-existing latent bug, not touched (out of '
+      id: bgCr
+      date: "2026-07-09"
+      tag: profiles-resource
+      text: '[phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md] Pre-existing latent bug, not touched (out of scope, unrelated to this task''s Requirements): src/profiles.sh''s profiles_create() -> _cp_entries_to_json() uses `local -n` (bash 4.3+ nameref syntax), which throws under macOS system bash 3.2 (bin/ai-sandbox.sh''s shebang target) — harmlessly swallowed in the smoke-tested empty-array case, but would silently produce empty skills/hooks/agents JSON for a profile that has real discoverable entries. Introduced in phase-02 task 001, which fixed two other bash-3.2 portability issues in this same file but missed this one.'
+    - title: src/help.sh (owned by sibling task 002) still
+      id: aJhd
+      date: "2026-07-09"
+      tag: docs-and-help
+      text: '[phase-03-docs-and-help/001-update-readme-and-profiles-spec.md] src/help.sh (owned by sibling task 002) still documented the old CLI grammar as of this task''s run; cross-checked against source instead. Manager may want to re-verify README against help.sh once 002 lands, in case of late drift.'
+    - title: docs/architecture.md step 1 still lists NO_CH
+      id: PVKp
+      date: "2026-07-09"
+      tag: docs-and-help
+      text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] docs/architecture.md step 1 still lists NO_CHROMIUM/NO_DOCKER/ENABLE_DOCKER_PROXY as globals populated by options.sh; these flags were removed in the restructure (now error with a redirect message). Predates and is unrelated to this task''s scoped surface (noun-dispatch/status-detail/attach-connect) — not caught by the task''s grep list. Worth a separate follow-up task.'
+    - title: 'src/help.sh''s per-instance commands list and '
+      id: cfdc
+      date: "2026-07-09"
+      tag: docs-and-help
+      text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] src/help.sh''s per-instance commands list and architecture.md''s step-11 dispatch-word enumeration both omit the ''up'' word (present in PER_INSTANCE_COMMANDS) — this gap predates the CLI restructure entirely (never documented before either) and was out of this task''s named scope.'
+    - title: 2 new_profile() test failures remain (lines 1
+      id: 3P8o
+      date: "2026-07-09"
+      tag: test-coverage
+      text: '[phase-04-test-coverage/001-update-existing-dispatch-tests.md] 2 new_profile() test failures remain (lines 1634, 1642) — confirmed out of scope for this task, already known to be covered by phase-04-test-coverage/002-add-new-grammar-and-gating-tests.md''s scope (renamed to profiles_create() in phase-02). No new followup needed, just confirming for the record.'

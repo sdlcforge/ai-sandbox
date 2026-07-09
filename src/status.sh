@@ -206,7 +206,8 @@ function _render_status_json() {
         '{container:{state:$state}, images:$images, runnable:$runnable, blockers:$blockers, config:$config}'
 }
 
-# Main entry point for `ai-sandbox status` (and its `detail` alias).
+# Main entry point for `ai-sandbox detail` (the CLI-facing command word; this
+# file/function name is unchanged from when the word was called `status`).
 function do_status() {
     local state images config_json
     state="$(_status_container_state)"

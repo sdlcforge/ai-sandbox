@@ -14,6 +14,30 @@ function sandbox_container_name() {
     printf 'ai-sandbox-%s\n' "${SANDBOX_NAME}"
 }
 
+# Return 0 if a sandbox instance container (running or stopped) already exists
+# for name $1, 1 if the docker query succeeded but found no such container,
+# 2 if the docker query itself failed (e.g. daemon not running/reachable).
+# Factored out of src/create.sh's do_create(), which had this query inlined,
+# so both the create-collision check and resolve_name_kind()
+# (phase-02-profiles-resource task 002) can reuse it.
+#
+# The 1-vs-2 distinction matters: callers that only care about "does an
+# instance definitely exist" can keep treating this as boolean (both 1 and 2
+# are falsy in an `if instance_exists ...` test), but resolve_name_kind()
+# needs to tell "definitely no such container" apart from "couldn't ask
+# docker" so it doesn't misclassify a Docker-unreachable name as "unknown"
+# (see Bug 1 in the phase-02-profiles-resource follow-up review). Unlike the
+# prior `2>/dev/null || true` form, a failed `docker ps` now propagates its
+# real exit status via `||` rather than being swallowed.
+function instance_exists() {
+    local name="${1:-}"
+    local existing
+    existing="$(docker ps -a \
+        --filter "name=^ai-sandbox-${name}$" \
+        --format '{{.Names}}' 2>/dev/null)" || return 2
+    [ -n "${existing}" ]
+}
+
 function check_docker() {
     qecho -n "Checking docker is running... "
     if ! docker info > /dev/null 2>&1; then
