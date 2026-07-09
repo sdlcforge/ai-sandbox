@@ -85,7 +85,8 @@ phases:
           tier: sonnet-med
           git:
             branch: phase-03-task-02-update-architecture-help-text
-            commit: []
+            commit:
+                - 9f2685e
             merge: null
     - number: 4
       slug: test-coverage
