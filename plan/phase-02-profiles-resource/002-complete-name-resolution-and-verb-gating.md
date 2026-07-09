@@ -110,3 +110,78 @@ architectural_impact: true
   section, including the architecturally-significant short-circuit note.
 - `plan/notes/profiles-delete-ambiguity.md` — resolution; confirms `<name> delete` (not
   `profiles delete <name>`) is the only profile-deletion spelling.
+
+## Status
+
+- **Outcome:** succeeded
+- **Date:** 2026-07-08
+- **Summary:** `resolve_name_kind()` in `src/options.sh` now consults `instance_exists()`
+  (src/utils.sh) and `profile_exists()` (src/profiles.sh) — instance wins on a same-name
+  collision (defensive only; the phase-02 task 001 create-collision checks already prevent
+  this), profile is returned when only `profile_exists` matches, `unknown` otherwise. A new
+  Phase 3.5 block in `parse_options()` verb-gates `CMD` against the resolved kind once CMD's
+  final value (after any Phase-3 flag-promotion) is known: a `profile`-kind name restricts
+  `CMD` to `detail`/`delete` (new `PROFILE_COMMANDS` table) and errors with a distinct,
+  kind-and-command-naming message otherwise; an `unknown`-kind name always errors with a
+  distinct "not a known instance or profile" message; an `instance`-kind name is completely
+  unrestricted (matches pre-existing per-instance dispatch). Added `_profile_resolve_location()`,
+  `do_profiles_detail()`, and `profiles_delete()` to `src/profiles.sh` — the first resolves
+  which of the three discovery-priority locations owns a profile name (reusing
+  `profile_exists()`'s search order) and returns both the path and a source label;
+  `do_profiles_detail()` cats the raw YAML (no composition, per Requirement 4);
+  `profiles_delete()` does a direct `rm` with no confirmation prompt, refusing (naming the
+  path) when the resolved location is `bundled`. `src/index.sh` gained a new profile-kind
+  short-circuit — calling `resolve_name_kind()` directly on `SANDBOX_NAME` immediately after
+  it's exported, dispatching `detail`/`delete` to the two new functions and `exit`ing —
+  placed before the Docker pre-flight, before `PROJECT_ROOT`/`SCRIPT_DIR` resolution, and
+  before the `profile-installer.js` invocation block, so a bare YAML lookup/deletion needs
+  neither a live Docker daemon nor the profile-composition machinery (confirmed by smoke
+  test: `instance_exists()`'s own `2>/dev/null || true` guard makes the `docker ps -a` call
+  inside `resolve_name_kind()` fail silently and gracefully when the daemon is down). Bare
+  `ls` and `instances ls` are now distinguished: `instances ls`'s sub-verb case sets
+  `CMD="instances-ls"` (was `CMD="ls"`, colliding with bare `ls`) so `src/index.sh` can route
+  it to an instances-only `do_list()`, while bare `ls` now calls a new `do_list_all()`
+  wrapper (`src/list.sh`) that prints "Instances:" + `do_list()` + "Profiles:" +
+  `do_profiles_list()` verbatim (no re-implementation of either table's rendering).
+  `profiles ls` is unaffected (`CMD="profiles-ls"`, unchanged from phase-02 task 001).
+- **Validation:** `shellcheck src/index.sh src/options.sh src/profiles.sh src/list.sh` (the
+  literal command from this task's `## Validation`) reports 10 pre-existing SC1091 "not
+  following" info notices, all on `src/index.sh` `source` lines that predate this task and
+  are unchanged by it (confirmed identical, same 10 lines, against a baseline shellcheck run
+  of the pre-task file versions) — an artifact of shellcheck not being given the sourced
+  sibling files as input when only these 4 files are passed, not a new warning. `make lint`
+  (the project's actual shellcheck target, which passes the full file set so all `source`
+  targets resolve) — passed cleanly, zero output, confirming no new warnings of any kind.
+  `make build` — passed. Manual smoke checks, all confirmed against the built
+  `bin/ai-sandbox.sh` in a scratch project directory with an isolated `XDG_CONFIG_HOME`:
+  `<profile-name> detail` with a fake `docker` on `PATH` that fails every call (simulating
+  the daemon being down) printed the raw YAML with exit 0, confirming the short-circuit
+  bypasses the Docker pre-flight; `<profile-name> delete` removed the project-local profile
+  file and a subsequent `profiles ls` no longer listed it; `base delete` (a bundled profile)
+  was refused with a clear error naming the bundled path; `base enter` (an instance-only verb
+  against a resolved profile) produced the "is a profile, not an instance" error naming both
+  the resolved kind and the offending command; `nonexistent-name-xyz detail` produced the
+  distinct "not a known instance or profile" error, not the profile-gating or reserved-name
+  error; bare `ls` showed grouped `Instances:`/`Profiles:` sections, `instances ls` showed
+  instances only, `profiles ls` showed profiles only. `<instance-name> delete` was confirmed
+  end-to-end against a real, freshly `instances create`-d throwaway instance (built, started,
+  then deleted via `docker compose down`, all through the unmodified `elif CMD == "delete"`
+  branch in `src/index.sh`) — the pre-existing real `flow-rook` instance on this host was
+  verified untouched (`exited`, same state before and after) throughout all smoke testing.
+  `make test.unit` (informational, not part of this task's `## Validation`, matching every
+  other task in this plan) — baseline (this task's changes stashed) is 36 failing examples;
+  with this task's changes, 54 fail — 18 net-new failures, all attributable to the same root
+  cause: `test/unit/ai_sandbox_spec.sh`'s `Describe 'parse_options()'` block (and one
+  unrelated `Describe 'command dispatch: exec/passthrough...'` block testing a prior,
+  already-fixed unbound-ARGS bug) dispatch synthetic placeholder names (`mybox`/`myname`/
+  `dispatchtest`) with no `instance_exists`/`profile_exists`-satisfying mock, so they now hit
+  the new, deliberately unconditional `unknown`-kind error this task adds. See
+  `flagged_for_manager` in this task's structured report for the full accounting and the
+  specific behavior-change tradeoff (implicit instance creation via a bare `enter`/`start` on
+  a never-`create`d name is no longer possible — the name must resolve to an existing
+  instance or profile, or the dispatch is now rejected up front) this implies, and why phase-
+  04-test-coverage's two current task docs (001/002) do not appear to fully anticipate this
+  specific breakage category as currently scoped.
+- **Affected source files:** `src/options.sh`, `src/profiles.sh`, `src/list.sh`,
+  `src/index.sh`, `bin/ai-sandbox.sh` (rollup output, rebuilt via `make build`; not committed
+  — gitignored build artifact).

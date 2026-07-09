@@ -23,3 +23,20 @@ function do_list() {
         printf '%-20s  %-10s  %s\n' "${name}" "${state}" "${profiles:-<none>}"
     done <<< "${rows}"
 }
+
+# Combined "Instances:" / "Profiles:" listing for the bare `ls` word only --
+# not `instances ls` (instances-only) and not `profiles ls` (profiles-only);
+# see
+# plan/phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md
+# Requirement 6. Reuses do_list()/do_profiles_list() verbatim (including
+# their own "No X found." fallback lines) rather than re-implementing table
+# rendering, so each section stays visually consistent with its noun-scoped
+# counterpart by construction. do_profiles_list() is defined in
+# src/profiles.sh, sourced before src/list.sh in src/index.sh.
+function do_list_all() {
+    echo "Instances:"
+    do_list
+    echo
+    echo "Profiles:"
+    do_profiles_list
+}

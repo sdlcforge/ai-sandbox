@@ -54,6 +54,80 @@ function profile_exists() {
     return 1
 }
 
+# Resolve which of the three discovery-priority locations
+# (project-local/user-global/bundled -- same order as profile_exists() and
+# docs/ai-sandbox-profiles-spec.md's "Profile storage and discovery")
+# owns a profile named $1. Echoes "<path><TAB><source-label>" for the first
+# match and returns 0; returns 1 with no output when no location has it.
+# Callers needing to know *which* location matched (do_profiles_detail(),
+# profiles_delete()) use this instead of profile_exists(), which only
+# reports existence.
+function _profile_resolve_location() {
+    local name="${1:-}"
+    local xdg_config="${XDG_CONFIG_HOME:-${HOME}/.config}"
+    local project_path="./profiles/${name}.yaml"
+    local user_path="${xdg_config}/ai-sandbox/profiles/${name}.yaml"
+    local bundled_path
+    bundled_path="$(_profiles_project_root)/profiles/${name}.yaml"
+
+    if [ -f "${project_path}" ]; then
+        printf '%s\t%s\n' "${project_path}" "project-local"
+        return 0
+    fi
+    if [ -f "${user_path}" ]; then
+        printf '%s\t%s\n' "${user_path}" "user-global"
+        return 0
+    fi
+    if [ -f "${bundled_path}" ]; then
+        printf '%s\t%s\n' "${bundled_path}" "bundled"
+        return 0
+    fi
+    return 1
+}
+
+# Print a profile's raw YAML content -- the "detail" verb for a name that
+# resolves to a profile (src/options.sh's verb-gating). Raw file contents is
+# sufficient for V1: "composed" output (profile-installer.js's merge logic)
+# has nothing to compose against for a single named profile. $1 is the
+# profile name.
+function do_profiles_detail() {
+    local name="${1:-}"
+    local location path
+    location="$(_profile_resolve_location "${name}")" || {
+        echo "Error: profile '${name}' not found" >&2
+        return 1
+    }
+    path="${location%%$'\t'*}"
+    cat "${path}"
+}
+
+# Delete a profile's YAML file -- the "delete" verb for a name that resolves
+# to a profile (src/options.sh's verb-gating). Refuses to delete a bundled
+# profile (ships with the ai-sandbox install tree, not a per-user file),
+# naming the bundled path in the error. No confirmation prompt: unlike
+# instance deletion, profile deletion has no running-container state to
+# protect (see
+# plan/phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md
+# Requirement 3). $1 is the profile name.
+function profiles_delete() {
+    local name="${1:-}"
+    local location path source_label
+    location="$(_profile_resolve_location "${name}")" || {
+        echo "Error: profile '${name}' not found" >&2
+        return 1
+    }
+    path="${location%%$'\t'*}"
+    source_label="${location##*$'\t'}"
+
+    if [ "${source_label}" = "bundled" ]; then
+        echo "Error: '${name}' is a bundled profile (${path}) and cannot be deleted -- bundled profiles ship with the ai-sandbox install tree, not as a per-user file." >&2
+        return 1
+    fi
+
+    rm -f "${path}"
+    echo "Deleted profile: ${path}"
+}
+
 # Display a formatted table of all discoverable profiles (project-local,
 # user-global, bundled), deduplicated by discovery priority so a name shadowed
 # at a higher-priority location is listed once, from that location.

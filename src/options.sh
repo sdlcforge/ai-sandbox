@@ -3,11 +3,19 @@
 
 # Parse CLI flags and the command word, per the noun-based dispatch grammar:
 #   ai-sandbox                          -> enter the default/unnamed instance
-#   ai-sandbox ls | instances ls        -> list instances
+#   ai-sandbox ls                       -> grouped Instances:/Profiles: listing
+#   ai-sandbox instances ls             -> list instances only
 #   ai-sandbox instances create <name>  -> create instance <name>
-#   ai-sandbox profiles ls              -> list profiles
+#   ai-sandbox profiles ls              -> list profiles only
 #   ai-sandbox profiles create <name>   -> scaffold profile <name>
-#   ai-sandbox <name> [<verb>]          -> per-instance dispatch, default verb "enter"
+#   ai-sandbox <name> [<verb>]          -> per-instance/per-profile dispatch,
+#                                          resolved by resolve_name_kind() and
+#                                          verb-gated against the resolved
+#                                          kind's allowed-verb set; default
+#                                          verb "enter" (instance kind only --
+#                                          a bare `<profile-name>` with no
+#                                          verb is rejected, since "enter"
+#                                          isn't a profile-appropriate verb)
 #   ai-sandbox help | kill-local-ai
 # Sets globals consumed by index.sh:
 #   SANDBOX_NAME  — empty for global/noun commands; instance name for per-instance commands
@@ -76,12 +84,28 @@ function compute_reserved_names() {
 
 # resolve_name_kind <name>
 # Echoes one of: instance | profile | unknown
-# Still stubbed to always echo "instance" as of phase-02-profiles-resource task
-# 001: profile_exists() now exists (src/profiles.sh), but this stub doesn't
-# consult it yet. task 002 completes this to consult profile_exists too and to
-# drive verb-gating (restricting which CMD values are valid for each kind).
+# Consults instance_exists() (src/utils.sh) and profile_exists()
+# (src/profiles.sh). Both are function definitions registered by the time
+# this is ever called at runtime -- src/index.sh sources utils.sh/profiles.sh
+# before invoking parse_options(), even though profiles.sh is sourced after
+# options.sh in that file's source list; only the *order functions are
+# called in* matters, not the order the files defining them were sourced in.
+# An existing instance always wins over a same-named profile: the
+# create-collision checks in profiles_create()/do_create() (phase-02 task
+# 001) already prevent a name from being both, so this branch order is
+# defensive, not load-bearing, in case that invariant is ever violated by
+# pre-existing state.
 function resolve_name_kind() {
-    echo "instance"
+    local name="${1:-}"
+    if instance_exists "${name}"; then
+        echo "instance"
+        return 0
+    fi
+    if profile_exists "${name}"; then
+        echo "profile"
+        return 0
+    fi
+    echo "unknown"
 }
 
 function parse_options() {
@@ -116,6 +140,11 @@ function parse_options() {
     # (see Phase 2) or after one. Declared here (rather than only where first
     # used) so RESERVED_NAMES below can derive from it.
     local -r PER_INSTANCE_COMMANDS="start enter attach fix-ssh build user-exec root-exec detail stop delete clean up"
+    # Verb-gating allow-list for a name that resolves to a profile (see the
+    # Phase 3.5 check below). Every PER_INSTANCE_COMMANDS word, plus the
+    # passthrough fallback, remains available unrestricted when the name
+    # resolves to an instance instead -- no allow-list needed for that case.
+    local -r PROFILE_COMMANDS="detail delete"
     # Words recognized during parsing that aren't part of any table above:
     # "create" only appears as "instances create", and "ls" is a standalone
     # bare word (see Phase 2) — neither is a GLOBAL_COMMANDS/PER_INSTANCE_COMMANDS
@@ -189,6 +218,15 @@ function parse_options() {
     # explicitly (global command, bare per-instance command, or an explicit
     # `<name> <cmd>` word), so promotion never fires in those cases.
     local cmd_defaulted=false
+    # Result of resolve_name_kind() for the flat per-name dispatch path
+    # (Phase 2's per-name else branch below) -- "instance" | "profile" |
+    # "unknown", or left empty when this invocation took any other dispatch
+    # shape (ls / instances / profiles noun / global / bare per-instance
+    # command word), none of which resolve a name at all. Declared here
+    # (rather than only where first assigned) so it's always defined under
+    # `set -u` for Phase 3.5's verb-gating check below, regardless of which
+    # branch actually ran.
+    local name_kind=""
 
     if [ "${n_remaining}" -eq 0 ]; then
         # Bare invocation → enter the default/unnamed instance (matches the
@@ -209,6 +247,12 @@ function parse_options() {
             remaining=("${remaining[@]:1}")
         elif [ "${first_arg}" = "instances" ]; then
             # Noun word supporting exactly two sub-verbs: ls and create.
+            # "instances ls" is namespaced to CMD="instances-ls" (distinct
+            # from bare CMD="ls" above) so src/index.sh can dispatch it to an
+            # instances-only listing, while bare `ls` produces the grouped
+            # Instances:/Profiles: view -- see
+            # plan/phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md
+            # Requirement 6.
             remaining=("${remaining[@]:1}")
             if [ "${#remaining[@]}" -eq 0 ]; then
                 echo "Error: 'instances' requires a sub-verb (ls or create)" 1>&2
@@ -219,7 +263,7 @@ function parse_options() {
             case "${instances_verb}" in
                 ls)
                     SANDBOX_NAME=""
-                    CMD="ls"
+                    CMD="instances-ls"
                     ;;
                 create)
                     CMD="create"
@@ -317,18 +361,10 @@ function parse_options() {
                 validate_sandbox_name "${SANDBOX_NAME}"
                 check_reserved_name "${SANDBOX_NAME}" "${RESERVED_NAMES}"
 
-                # resolve_name_kind <name>
-                # Echoes one of: instance | profile | unknown
-                # Still stubbed to always echo "instance" as of
-                # phase-02-profiles-resource task 001: profile_exists() now
-                # exists (src/profiles.sh), but this stub doesn't consult it
-                # yet. task 002 completes this to consult profile_exists too
-                # and to drive verb-gating (restricting which CMD values are
-                # valid for each kind). Not acted on yet — captured here so
-                # the extension point exists and that task's diff is additive
-                # rather than needing to re-locate the call site.
-                # shellcheck disable=SC2034 # extension point for a later phase; unused until verb-gating lands
-                local name_kind
+                # Resolve whether SANDBOX_NAME is an existing instance,
+                # existing profile, or neither. Phase 3.5 below gates CMD
+                # against the resolved kind's allowed-verb set once CMD's
+                # final value (after any Phase 3 promotion) is known.
                 name_kind="$(resolve_name_kind "${SANDBOX_NAME}")"
 
                 remaining=("${remaining[@]:1}")
@@ -467,6 +503,34 @@ function parse_options() {
         esac
         i=$(( i + 1 ))
     done
+
+    # --- Phase 3.5: verb-gating for the flat per-name dispatch path ---
+    # name_kind is only ever non-empty when SANDBOX_NAME was resolved from a
+    # bare name in Phase 2's per-name else branch above, so this is a no-op
+    # for every other dispatch shape (ls / instances / profiles noun /
+    # global / bare per-instance command word). Runs after Phase 3 so CMD
+    # reflects any promotion of a command word pushed past a leading flag.
+    if [ -n "${name_kind}" ]; then
+        if [ "${name_kind}" = "unknown" ]; then
+            echo "Error: '${SANDBOX_NAME}' is not a known instance or profile" 1>&2
+            exit 1
+        elif [ "${name_kind}" = "profile" ]; then
+            local profile_verb_ok=false pc
+            for pc in ${PROFILE_COMMANDS}; do
+                if [ "${CMD}" = "${pc}" ]; then
+                    profile_verb_ok=true
+                    break
+                fi
+            done
+            if [ "${profile_verb_ok}" != "true" ]; then
+                echo "Error: '${SANDBOX_NAME}' is a profile, not an instance — 'ai-sandbox ${SANDBOX_NAME} ${CMD}' is not supported for profiles; only detail/delete are allowed" 1>&2
+                exit 1
+            fi
+        fi
+        # name_kind = "instance": every PER_INSTANCE_COMMANDS word, plus the
+        # passthrough fallback, is allowed unrestricted -- matches today's
+        # existing, unchanged per-instance dispatch (no allow-list needed).
+    fi
 
     # --- Phase 4: build SANDBOX_PROFILES from PROFILES (for `create`) ---
     if [ "${CMD}" = "create" ] && [ "${#PROFILES[@]}" -gt 0 ]; then
