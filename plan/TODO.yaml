@@ -114,5 +114,6 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-04-task-02-add-new-grammar-gating-tests
-            commit: []
+            commit:
+                - 9a2c95e
             merge: null
