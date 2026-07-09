@@ -25,3 +25,8 @@ items:
       date: "2026-07-09"
       tag: docs-and-help
       text: '[phase-03-docs-and-help/001-update-readme-and-profiles-spec.md] src/help.sh (owned by sibling task 002) still documented the old CLI grammar as of this task''s run; cross-checked against source instead. Manager may want to re-verify README against help.sh once 002 lands, in case of late drift.'
+    - title: docs/architecture.md step 1 still lists NO_CH
+      id: PVKp
+      date: "2026-07-09"
+      tag: docs-and-help
+      text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] docs/architecture.md step 1 still lists NO_CHROMIUM/NO_DOCKER/ENABLE_DOCKER_PROXY as globals populated by options.sh; these flags were removed in the restructure (now error with a redirect message). Predates and is unrelated to this task''s scoped surface (noun-dispatch/status-detail/attach-connect) — not caught by the task''s grep list. Worth a separate follow-up task.'
