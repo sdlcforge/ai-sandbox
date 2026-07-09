@@ -84,7 +84,7 @@ phases:
           done: false
           tier: sonnet-med
           git:
-            branch: null
+            branch: phase-03-task-02-update-architecture-help-text
             commit: []
             merge: null
     - number: 4
