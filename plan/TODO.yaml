@@ -44,7 +44,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-02-task-01-build-profiles-module
-            commit: []
+            commit:
+                - 2703dcc
             merge: null
         - number: 2
           slug: complete-name-resolution-and-verb-gating
