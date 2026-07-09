@@ -1,10 +1,5 @@
 version: 1
 items:
-    - title: Deliberate behavior change per literal Requir
-      id: rUS7
-      date: "2026-07-09"
-      tag: profiles-resource
-      text: '[phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md] Deliberate behavior change per literal Requirement 2 implementation: an unknown-kind name now errors for ANY verb (not just detail/delete), removing prior implicit-instance-creation-via-bare-enter for a never-created name (e.g. `ai-sandbox typo-name enter` now errors instead of silently creating a container). Well-supported by current-dispatch-audit.md''s design note and arguably a UX improvement, but breaks 18 currently-passing test/unit/ai_sandbox_spec.sh examples (beyond the known 36-failure baseline) — all synthetic placeholder-name tests in the parse_options() and exec/passthrough Describe blocks with no instance_exists/profile_exists-satisfying mock. Neither plan/phase-04-test-coverage/001-update-existing-dispatch-tests.md nor 002-add-new-grammar-and-gating-tests.md currently lists this test category in scope. Recommend amending one of those two task docs'' scope to cover it before phase-04 executes, or confirming this consequence is intended as-is.'
     - title: 'Pre-existing latent bug, not touched (out of '
       id: bgCr
       date: "2026-07-09"
