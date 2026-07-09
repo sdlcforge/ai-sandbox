@@ -47,7 +47,7 @@ phases:
             branch: phase-02-task-01-build-profiles-module
             commit:
                 - 2703dcc
-            merge: null
+            merge: 4973adfec110ace95311929ba5bb47f87a0a1593
         - number: 2
           slug: complete-name-resolution-and-verb-gating
           title: Complete Name Resolution And Verb Gating
