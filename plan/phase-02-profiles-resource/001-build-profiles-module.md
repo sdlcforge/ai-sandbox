@@ -99,6 +99,71 @@ novel CRUD/dispatch work specific to this codebase. Per the resolved
 
 architectural_impact: true
 
+## Status
+
+- **Outcome:** succeeded
+- **Date:** 2026-07-08
+- **Summary:** `src/new-profile.sh` renamed to `src/profiles.sh` (`git mv`); `new_profile()`
+  renamed to `profiles_create()`, taking `<name>` positionally (was `--name`) — auto-discovery
+  logic (skills/hooks/agents scan, `node -e`/js-yaml emission, `local: true` detection) left
+  unchanged in substance. Added `profile_exists()` (three-location discovery: `./profiles/`,
+  `$XDG_CONFIG_HOME/ai-sandbox/profiles/`, and the bundled `<project-root>/profiles/` dir —
+  confirmed via `bin/profile-installer.js`'s own `findProfile()`, which resolves the bundled
+  dir the same way) and `do_profiles_list()` (NAME/SOURCE/MODE table, deduplicated by
+  discovery priority; MODE is read via a cheap grep-based YAML skim rather than invoking
+  `profile-installer.js`/node, documented in a code comment). Added `instance_exists()` to
+  `src/utils.sh`, factored out of `src/create.sh`'s inlined `docker ps -a` collision check;
+  `do_create()` now calls it and additionally rejects a name colliding with an existing
+  profile (cross-kind collision, item 5). `src/options.sh` gained a `profiles` noun branch
+  (parallel to `instances`) recognizing `ls`/`create <name>` only — `CMD` values are
+  namespaced (`profiles-ls`/`profiles-create`) since bare `ls`/`create` are already
+  contractually tied to `do_list()`/`do_create()`. `src/index.sh`: `source ./new-profile.sh`
+  → `source ./profiles.sh`; the old `new-profile` short-circuit replaced with
+  `profiles-ls`/`profiles-create` short-circuits (both run before the Docker pre-flight, like
+  `ls`/`help`/`kill-local-ai`); `profiles-create`'s short-circuit reconstructs a `--mode`
+  flag from `MODE_OVERRIDE` for `profiles_create()`, since `src/options.sh`'s shared Phase 3
+  flag parser intercepts `--mode` into `MODE_OVERRIDE` before `ARGS` is built (`--output`/
+  `--plugins` are untouched by that parser and pass through in `ARGS` unmodified). `GLOBAL_COMMANDS`
+  no longer includes `new-profile` (dropped, not aliased); `src/help.sh`'s stale `new-profile`
+  line removed (the rest of `src/help.sh`'s grammar is already known-stale pending the
+  `docs-and-help` phase, out of this task's scope). Two portability fixes applied to new code:
+  `do_profiles_list()`'s sort uses a `while read` loop instead of `mapfile`/`readarray` (bash
+  4+-only), and `profile_exists()`/`instance_exists()`/`profiles_create()` use `${1:-}` instead
+  of bare `$1` — both because this script's `#!/bin/bash` shebang resolves to macOS's bundled
+  bash 3.2 when run as an installed executable, under `set -euo pipefail`.
+- **Validation:** `shellcheck src/profiles.sh src/options.sh src/utils.sh src/create.sh` (the
+  exact command in this task's `## Validation`) — passed, no warnings. `make lint` (full
+  project, all files including `src/index.sh`/`src/help.sh`) — passed, no new warnings.
+  `make build` — passed. `grep -rn 'new-profile\|new_profile' src/` — only historical/
+  explanatory comments remain (the rename note atop `src/profiles.sh`, one comment in
+  `src/options.sh`); `src/new-profile.sh` no longer exists (`git status` shows the rename).
+  Manual smoke checks — all confirmed against the built `bin/ai-sandbox.sh`, invoked directly
+  (both via the default shebang resolution and explicitly under `/bin/bash`, i.e. macOS
+  system bash 3.2, to catch the portability issues above) in a scratch project directory with
+  an isolated `XDG_CONFIG_HOME`: `profiles create test-profile` wrote
+  `./profiles/test-profile.yaml`; `profiles ls` listed it (`project-local`, `mode: mirror`)
+  alongside the five bundled profiles (`base`/`chromium`/`docker`/`mirror`/`static`) with a
+  user-global shadow of the same name correctly suppressed by discovery priority;
+  `profiles create test-profile` a second time was rejected as a collision;
+  `profiles create flow-rook` (an existing real instance name) was rejected as a collision;
+  `instances create test-profile` (cross-kind) was rejected by `do_create()`'s new
+  `profile_exists()` check, before any image build or `docker compose up`; `profiles create
+  ls`/`profiles create instances` were rejected as reserved names; `profiles delete <name>`
+  produced a clear "not a recognized command" error rather than being reachable. No stray
+  containers or images were left behind by the cross-kind collision test (confirmed via
+  `docker ps -a`). `make test.unit` — run informationally (not part of this task's
+  `## Validation`); the pre-existing 34 `Describe 'parse_options()'` failures from task
+  `phase-01-dispatch-foundation/001` are unchanged (still deferred to `phase-04-test-coverage`
+  per that task's own `## Status`), and the `Describe 'new_profile()'` block (3 examples,
+  ~line 1489) now additionally fails because `new_profile` no longer exists — expected and
+  consistent with the same deferral: `phase-04-test-coverage/002-add-new-grammar-and-gating-tests.md`
+  explicitly names this block as "the natural place to extend/rename" for the `profiles`
+  noun's new test coverage, and this task's own `## Validation` deliberately does not include
+  `make test.unit`/shellspec.
+- **Affected source files:** `src/profiles.sh` (renamed from `src/new-profile.sh`),
+  `src/options.sh`, `src/index.sh`, `src/utils.sh`, `src/create.sh`, `src/help.sh`,
+  `bin/ai-sandbox.sh` (rollup output, rebuilt via `make build`).
+
 ## Assumptions
 
 - `docs/ai-sandbox-profiles-spec.md`'s bundled-profiles directory location is not fully

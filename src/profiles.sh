@@ -1,5 +1,12 @@
 # shellcheck shell=bash
-# new-profile.sh — generate a profile YAML from local Claude assets.
+# profiles.sh — profile scaffolding (profiles_create), listing (do_profiles_list),
+# and existence-checking (profile_exists).
+#
+# Renamed/restructured from new-profile.sh (phase-02-profiles-resource task 001):
+# profiles_create() preserves the auto-discovery logic new_profile() had in
+# substance, just taking <name> positionally (symmetric with `instances create
+# <name>`) instead of via --name. `new-profile`/`new_profile` are dropped
+# entirely, not aliased, per this plan's no-backward-compatibility stance.
 #
 # YAML emission strategy: we use `node -e` with js-yaml.dump to guarantee
 # valid, correctly-quoted YAML output. Hand-rolled bash string concatenation
@@ -15,8 +22,138 @@
 # defaults to empty (no interactive prompting in V1 non-TTY mode).
 # Interactive prompting in V1 is not implemented; documented for V2.
 
-function new_profile() {
-    local name="" mode="mirror" output="" plugins_raw=""
+# Resolve the project root the same way index.sh does (BASH_SOURCE[0], symlinks
+# followed, one directory up from bin/). Self-contained (not reused from
+# index.sh's PROJECT_ROOT global) because profiles_create()/do_profiles_list()
+# are invoked from index.sh's early short-circuit block, before PROJECT_ROOT is
+# computed there -- mirrors the pre-existing node_modules resolution pattern
+# below in profiles_create().
+function _profiles_project_root() {
+    local src="${BASH_SOURCE[0]}"
+    local dir
+    while [ -L "${src}" ]; do
+        dir="$(cd -P "$(dirname "${src}")" && pwd)"
+        src="$(readlink "${src}")"
+        [[ ${src} != /* ]] && src="${dir}/${src}"
+    done
+    dir="$(cd -P "$(dirname "${src}")" && pwd)"
+    (cd -P "${dir}/.." && pwd)
+}
+
+# Return 0 if a profile named $1 exists at any of the three discovery
+# locations from docs/ai-sandbox-profiles-spec.md's "Profile storage and
+# discovery" section (project-local, user-global, bundled), 1 otherwise.
+# Does not distinguish which location matched -- callers needing that
+# (e.g. phase-02 task 002's deletion logic) re-derive it.
+function profile_exists() {
+    local name="${1:-}"
+    local xdg_config="${XDG_CONFIG_HOME:-${HOME}/.config}"
+    [ -f "./profiles/${name}.yaml" ] && return 0
+    [ -f "${xdg_config}/ai-sandbox/profiles/${name}.yaml" ] && return 0
+    [ -f "$(_profiles_project_root)/profiles/${name}.yaml" ] && return 0
+    return 1
+}
+
+# Display a formatted table of all discoverable profiles (project-local,
+# user-global, bundled), deduplicated by discovery priority so a name shadowed
+# at a higher-priority location is listed once, from that location.
+function do_profiles_list() {
+    local xdg_config="${XDG_CONFIG_HOME:-${HOME}/.config}"
+    local project_dir="./profiles"
+    local user_dir="${xdg_config}/ai-sandbox/profiles"
+    local bundled_dir
+    bundled_dir="$(_profiles_project_root)/profiles"
+
+    local -a names=()
+    local -a sources=()
+    local -a files=()
+
+    # Read a top-level `mode:` scalar directly from a profile YAML file via a
+    # fast grep-based skim rather than invoking profile-installer.js/node for
+    # every listed profile -- profiles ls only needs a cheap best-effort hint,
+    # not a fully composed/validated result, and this keeps `profiles ls` from
+    # requiring Node on every call. Handles a bare or single/double-quoted
+    # scalar value; leaves MODE blank (rendered as "-") for anything else
+    # (e.g. absent, or a value profile-installer.js would need to validate).
+    _profiles_mode_skim() {
+        local file="$1" line
+        line="$(grep -m1 -E '^mode:[[:space:]]*' "${file}" 2>/dev/null || true)"
+        line="${line#mode:}"
+        line="${line#"${line%%[![:space:]]*}"}"   # trim leading whitespace
+        line="${line%"${line##*[![:space:]]}"}"   # trim trailing whitespace
+        line="${line%\"}"; line="${line#\"}"
+        line="${line%\'}"; line="${line#\'}"
+        printf '%s' "${line}"
+    }
+
+    # Record <name> once, from the highest-priority location that provides it.
+    # $1 - directory to scan  $2 - source label
+    _profiles_collect_dir() {
+        local dir="$1" source_label="$2" f base name existing
+        [ -d "${dir}" ] || return 0
+        for f in "${dir}"/*.yaml; do
+            [ -e "${f}" ] || continue
+            base="$(basename "${f}")"
+            name="${base%.yaml}"
+            local seen=false
+            for existing in "${names[@]+"${names[@]}"}"; do
+                if [ "${existing}" = "${name}" ]; then
+                    seen=true
+                    break
+                fi
+            done
+            [ "${seen}" = "true" ] && continue
+            names+=("${name}")
+            sources+=("${source_label}")
+            files+=("${f}")
+        done
+    }
+
+    _profiles_collect_dir "${project_dir}" "project-local"
+    _profiles_collect_dir "${user_dir}" "user-global"
+    _profiles_collect_dir "${bundled_dir}" "bundled"
+
+    if [ "${#names[@]}" -eq 0 ]; then
+        echo "No profiles found."
+        return 0
+    fi
+
+    # Sort by name, keeping the parallel arrays aligned. Built with a plain
+    # while-read loop (not `mapfile`/`readarray`) since those are bash-4+
+    # builtins and this script's shebang (#!/bin/bash) resolves to macOS's
+    # bundled bash 3.2 when run as an installed executable.
+    local -a order=()
+    local order_line
+    while IFS= read -r order_line; do
+        order+=("${order_line}")
+    done < <(
+        local i
+        for i in "${!names[@]}"; do printf '%s\t%d\n' "${names[$i]}" "$i"; done \
+            | sort -k1,1
+    )
+
+    printf '%-20s  %-14s  %s\n' "NAME" "SOURCE" "MODE"
+    local entry idx mode
+    for entry in "${order[@]}"; do
+        idx="${entry##*$'\t'}"
+        mode="$(_profiles_mode_skim "${files[$idx]}")"
+        printf '%-20s  %-14s  %s\n' "${names[$idx]}" "${sources[$idx]}" "${mode:--}"
+    done
+}
+
+# Scaffold a profile YAML by auto-discovering skills/hooks/agents. $1 is the
+# profile name (positional, symmetric with `instances create <name>`); the
+# collision check (name vs. existing instance/profile) runs here so it applies
+# regardless of which noun word (`instances create` / `profiles create`) is
+# in play, and regardless of --output overriding the write destination -- the
+# check is about the *name*, not the file path (see
+# plan/phase-02-profiles-resource/001-build-profiles-module.md Requirements
+# item 5). Reserved-word collisions are already rejected earlier, at the
+# src/options.sh dispatch layer, before this function is ever called.
+function profiles_create() {
+    local name="${1:-}"
+    shift || true
+    local mode="mirror" output="" plugins_raw=""
     local -a plugins=()
     local args=("$@")
 
@@ -25,10 +162,6 @@ function new_profile() {
     while [ $i -lt ${#args[@]} ]; do
         local arg="${args[$i]}"
         case "${arg}" in
-            --name)
-                i=$(( i + 1 ))
-                name="${args[$i]}"
-                ;;
             --mode)
                 i=$(( i + 1 ))
                 mode="${args[$i]}"
@@ -49,20 +182,32 @@ function new_profile() {
                 done
                 ;;
             *)
-                echo "Error: unknown option '${arg}' for new-profile" >&2
+                echo "Error: unknown option '${arg}' for 'profiles create'" >&2
                 return 1
                 ;;
         esac
         i=$(( i + 1 ))
     done
 
-    # --- Validate --name (required; must be a valid POSIX filename component) ---
+    # --- Validate name (required positional; must be a valid POSIX filename component) ---
     if [ -z "${name}" ]; then
-        echo "Error: --name is required for new-profile" >&2
+        echo "Error: a profile name is required for 'profiles create'" >&2
         return 1
     fi
     if [[ "${name}" == */* ]]; then
-        echo "Error: --name must be a valid POSIX filename component (no '/' allowed)" >&2
+        echo "Error: profile name must be a valid POSIX filename component (no '/' allowed)" >&2
+        return 1
+    fi
+
+    # --- Collision check: an existing instance, an existing profile (any of
+    # the three locations), or a reserved word (already rejected upstream in
+    # src/options.sh's dispatch layer via check_reserved_name). ---
+    if instance_exists "${name}"; then
+        echo "Error: '${name}' already exists as a sandbox instance. Choose a different profile name." >&2
+        return 1
+    fi
+    if profile_exists "${name}"; then
+        echo "Error: profile '${name}' already exists. Choose a different name or remove the existing profile first." >&2
         return 1
     fi
 
