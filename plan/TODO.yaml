@@ -52,7 +52,7 @@ phases:
           slug: complete-name-resolution-and-verb-gating
           title: Complete Name Resolution And Verb Gating
           path: phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: Completed resolve_name_kind() to consult instance_exists()/profile_exists() (instance wins on collision); added Phase 3.5 verb-gating restricting profile-kind names to detail/delete and rejecting unknown-kind names with a distinct error; added do_profiles_detail()/profiles_delete()/_profile_resolve_location() to src/profiles.sh; added profile-kind short-circuit in src/index.sh ahead of Docker pre-flight; distinguished bare ls (new grouped do_list_all()) from instances ls (now CMD=instances-ls). All manual smoke checks passed against built script with both live and simulated-down Docker daemon, without touching the real flow-rook instance. shellcheck/make lint/make build clean.
           git:
