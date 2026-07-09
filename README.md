@@ -13,7 +13,7 @@
 Optional:
 - [XQuartz](https://www.xquartz.org/) for GUI app support (Chromium)
 - [claude-mem](https://github.com/anthropics/claude-code/tree/main/packages/claude-mem) plugin for persistent memory
-- [`yq`](https://github.com/kislyuk/yq) (the Python `kislyuk/yq` wrapper — **not** `mikefarah/yq`, an incompatible tool that shares the same binary name) for readable YAML rendering of the `status`/`detail` command's `Configuration:` section. Without it, the section degrades gracefully to pretty-printed JSON.
+- [`yq`](https://github.com/kislyuk/yq) (the Python `kislyuk/yq` wrapper — **not** `mikefarah/yq`, an incompatible tool that shares the same binary name) for readable YAML rendering of the `detail` command's `Configuration:` section. Without it, the section degrades gracefully to pretty-printed JSON.
 
 ## Install
 
@@ -27,22 +27,27 @@ npm install -g ai-sandbox
 # Enter the sandbox (builds image if needed, starts container, connects)
 ai-sandbox
 
-# Pass any docker compose command through
-ai-sandbox down
-ai-sandbox logs -f
+# Pass any docker compose command through, scoped to a named instance
+ai-sandbox mybox down
+ai-sandbox mybox logs -f
 ```
 
 ## CLI reference
 
 | Command | Description |
 |---------|-------------|
-| *(no args)* | Build if needed, start if stopped, then connect |
+| *(no args)* | Build if needed, start if stopped, then connect to the default (unnamed) instance. Use `ls` to list instances and profiles instead. |
+| `ls` | List all instances and profiles, grouped as `Instances:` / `Profiles:` |
+| `instances ls` | List instances only |
+| `instances create <name> [options]` | Create and start a new instance named `<name>` |
+| `profiles ls` | List profiles only |
+| `profiles create <name> [options]` | Scaffold a new profile YAML file named `<name>` by auto-discovering skills, hooks, and agents |
 | `build` | Build the Docker image |
 | `start` | Start the container and open a shell |
-| `attach` / `connect` | Connect to an already-running container |
-| `new-profile` | Scaffold a new profile YAML file by auto-discovering skills, hooks, and agents |
+| `attach` | Connect to an already-running container |
+| `<name> delete` | Delete `<name>` — works for both instances (removes the container) and profiles (removes the profile file). There is no separate `profiles delete <name>` form; deletion is always addressed by name. |
 | `fix-ssh` | Recreate the container with the host's current `SSH_AUTH_SOCK` bind-mounted. Run this after a host logout / ssh-agent restart if `git push` inside the container fails — see [SSH agent forwarding](#ssh-agent-forwarding). |
-| `status` / `detail` | Show container/image state, blocking-process conflicts, and (when present) the persisted configuration. `detail` is a pure alias for `status`. |
+| `detail` | Show container/image state, blocking-process conflicts, and (when present) the persisted configuration. |
 | `<any>` | Passed through to `docker compose` |
 
 The image is rebuilt automatically when any file under `docker/` (Dockerfile, compose configs, entrypoint scripts, etc.) or any active profile YAML is newer than the image's build timestamp — you do not need to run `ai-sandbox build` or delete the image manually after pulling changes.
@@ -307,14 +312,14 @@ actually need Docker access and trust the workload.
   work on both sides, but a plugin shipping a native compiled hook would
   need explicit Linux-side handling.
 - *Symmetric mutual exclusion*: see the concurrency invariant note above.
-- *Profiles*: the profiles feature is specified but not yet implemented. The `--profile`, `--mode`, and `new-profile` surface described above reflects the planned interface.
+- *Profiles*: the profiles feature is implemented. The `--profile`, `--mode`, and `profiles create` surface described above is the current interface.
 
 ## Further reading
 
 - [`docs/architecture.md`](docs/architecture.md) — how the CLI is structured,
   the phased command flow, and the design decisions behind per-variant image
   tagging, plugin mount generation, mutual exclusion, and the Docker proxy.
-- [`docs/ai-sandbox-profiles-spec.md`](docs/ai-sandbox-profiles-spec.md) — full profiles specification: YAML schema, composition rules, storage and discovery, `profile-installer.js` interface, and the `new-profile` command.
+- [`docs/ai-sandbox-profiles-spec.md`](docs/ai-sandbox-profiles-spec.md) — full profiles specification: YAML schema, composition rules, storage and discovery, `profile-installer.js` interface, and the `profiles create` command.
 - [`docs/next-steps.md`](docs/next-steps.md) — deferred features and known
   gaps (symmetric mutual exclusion, MCP service manager, plugin-binary
   architecture mismatch).

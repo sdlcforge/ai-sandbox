@@ -84,3 +84,39 @@ rationale.
 - `docs/ai-sandbox-profiles-spec.md` — "The `new-profile` command" section (current state).
 - `plan/phase-02-profiles-resource/001-build-profiles-module.md` — the implementation task
   whose landed behavior this task documents.
+
+## Status
+
+- **Outcome:** succeeded
+- **Date:** 2026-07-08
+- **Summary:** Rewrote `README.md`'s `## CLI reference` table for the noun-based grammar,
+  cross-checked directly against `src/options.sh`/`src/index.sh` (the sibling
+  `002-update-architecture-and-help-text.md` task, which updates `src/help.sh`, had not
+  landed at the time this task ran, so the source dispatch files were used instead of
+  `help.sh` for the manual read-through validation check): added `ls`, `instances ls`,
+  `instances create <name> [options]`, `profiles ls`, `profiles create <name> [options]`,
+  and `<name> delete` rows; dropped `connect` from the `attach` row and the `status`
+  spelling from the `detail` row (removing the "pure alias" language); removed the
+  `new-profile` row; updated the `*(no args)*` row to describe entering the default
+  instance and cross-reference bare `ls`. Replaced the unscoped `ai-sandbox down`/
+  `ai-sandbox logs -f` Quick Start examples with the correctly-scoped `ai-sandbox mybox
+  down`/`ai-sandbox mybox logs -f` form. Updated the `yq` prerequisite note and two
+  "Further reading"/"Current limitations" mentions that referenced `status`/`new-profile`
+  as current spellings. Renamed `docs/ai-sandbox-profiles-spec.md`'s "The `new-profile`
+  command" section to "The `profiles create` command", replaced the `--name <name>` flag
+  row with a positional `<name>` argument row (`--mode`/`--output`/`--plugins` unchanged),
+  updated the section's prose (auto-discovery, output) to the new command name, and added
+  a note pointing profile listing/deletion documentation at `README.md`'s CLI reference
+  instead of duplicating it. Left the YAML schema, composition, and storage/discovery
+  sections of the profiles spec untouched, per requirement 5.
+- **Decisions made (self-fix, same-diff):** `README.md`'s "Current limitations and goals"
+  bullet claiming profiles were "specified but not yet implemented" was stale (phase-02
+  `profiles-resource` had already landed before this task started, per this worktree's git
+  history) and sat two lines from a `new-profile` spelling this task was already correcting
+  in the same file — updated it to state the feature is implemented, as part of the same
+  edit.
+- **Validation:** all three grep checks pass (no `new-profile`/`--name <name>` remaining in
+  the profiles spec; no unscoped `ai-sandbox down`/`ai-sandbox logs` examples or stray
+  `status`/`connect` spellings in `README.md`; no `new-profile` remaining in `README.md`).
+  Manual read-through cross-checked the CLI reference table against `src/options.sh` and
+  `src/index.sh` directly.
