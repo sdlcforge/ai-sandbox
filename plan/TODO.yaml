@@ -55,7 +55,7 @@ phases:
           done: false
           tier: sonnet-high
           git:
-            branch: null
+            branch: phase-02-task-02-complete-name-resolution-verb
             commit: []
             merge: null
     - number: 3
