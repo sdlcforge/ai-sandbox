@@ -59,7 +59,7 @@ phases:
             branch: phase-02-task-02-complete-name-resolution-verb
             commit:
                 - b5f183e
-            merge: null
+            merge: 3d3fb0704e02fbf165c6c29014414e3e8645702d
     - number: 3
       slug: docs-and-help
       title: Docs And Help
