@@ -76,7 +76,7 @@ phases:
             branch: phase-03-task-01-update-readme-profiles-spec
             commit:
                 - cc71f90
-            merge: null
+            merge: bdb6aa7ac695a4ccdd191584f4c74869295d3e55
         - number: 2
           slug: update-architecture-and-help-text
           title: Update Architecture And Help Text
