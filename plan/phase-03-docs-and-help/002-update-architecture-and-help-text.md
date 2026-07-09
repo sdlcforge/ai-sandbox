@@ -71,3 +71,35 @@ concurrently once this phase's prerequisites land.
 - `plan/notes/current-dispatch-audit.md` — "Other project docs referencing dropped
   spellings" section (exact line references into `docs/architecture.md` as of the audit).
 - `src/help.sh` (current implementation, to be rewritten in place, same file).
+
+## Status
+
+- **Outcome:** succeeded
+- **Date:** 2026-07-08
+- **Validation:** `shellcheck src/help.sh` passed; `make build` succeeded; `grep -n
+  'new-profile\|connect\b' src/help.sh docs/architecture.md` and `grep -n '"pure alias"'
+  docs/architecture.md` both returned no matches; manual `ai-sandbox help` run
+  cross-checked against `src/options.sh`'s `GLOBAL_COMMANDS`/`NOUN_WORDS`/
+  `PER_INSTANCE_COMMANDS`/`PROFILE_COMMANDS` tables — every documented word is
+  accurate to the current grammar.
+- **Affected source files:** `docs/architecture.md`, `src/help.sh`.
+- **Decisions/self-fixes made (same-diff, within these two files):**
+  - `docs/architecture.md` step 2 ("Short-circuits") was extended to name the
+    profile-kind `detail`/`delete` short-circuit and the `ls`/`instances
+    ls`/`profiles ls`/`profiles create` short-circuits, so it no longer
+    contradicts the rewritten step 11 that now references it by number.
+  - `docs/architecture.md`'s "retained plain labels ... used by `list`" phrase
+    (in the Config persistence and restore section) was updated to `ls`, the
+    current CLI word for the listing feature that phrase describes.
+  - `docs/architecture.md`'s Test strategy bullet ("gated by `status
+    --test-check`") was updated to `detail --test-check` — a genuine stale CLI
+    spelling caught by the requirement-3 grep sweep, distinct from the
+    already-fixed `make/60-test.integration-bash.mk` invocation.
+  - `src/help.sh`'s `detail` row description was extended to note that for a
+    name resolving to a profile, `detail` prints the raw YAML instead of
+    container state (mirroring the same treatment already required for the
+    `delete` row, per `src/profiles.sh:do_profiles_detail()`'s documented
+    behavior).
+- **Note:** the `new-profile` row the task doc expected to remove from
+  `src/help.sh` was already absent when this task started (no changes needed
+  for that specific item beyond confirming the validation grep passes).
