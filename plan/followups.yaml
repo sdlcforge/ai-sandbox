@@ -5,3 +5,8 @@ items:
       date: "2026-07-08"
       tag: dispatch-foundation
       text: '[phase-01-dispatch-foundation/002-wire-index-and-call-sites.md] src/help.sh still documents old list/status/connect spellings (lines ~28, 39-40, 53) — already in scope for phase-03 docs-and-help task 002 (update-architecture-and-help-text), which explicitly covers help.sh; flagging for cross-reference, not a new work item.'
+    - title: Pre-existing latent bug (out of scope per tas
+      id: QyPz
+      date: "2026-07-09"
+      tag: profiles-resource
+      text: '[phase-02-profiles-resource/001-build-profiles-module.md] Pre-existing latent bug (out of scope per task''s explicit "unchanged in substance" instruction): profiles_create()''s preserved auto-discovery internals (_cp_entries_to_json''s local -n nameref) emit harmless stderr noise under macOS system bash 3.2 but would silently produce empty skills/hooks/agents entries for any user running the CLI under /bin/bash rather than a newer bash. Recorded for awareness; a dedicated follow-up task would be needed to fix since this task was explicitly instructed not to touch that logic.'
