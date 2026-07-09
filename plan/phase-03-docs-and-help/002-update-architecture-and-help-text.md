@@ -29,9 +29,12 @@ concurrently once this phase's prerequisites land.
 3. **`docs/architecture.md` other mentions.** Grep for any other prose referencing
    `create <name>` (verb-first), bare `list`, `new-profile`, `connect`, or `status` as a
    currently-recognized CLI word (distinct from internal identifiers like `STATUS_JSON`,
-   `status.sh`, or `status --test-check` which are explicitly out of scope — see
+   `status.sh`, and `do_status`, which are unchanged and out of scope — see
    `plan/notes/current-dispatch-audit.md`'s confirmed assumption that these internals are
-   unchanged) and update each.
+   unchanged) and update each. Note: `make/60-test.integration-bash.mk`'s live CLI
+   invocation of `status --test-check` was not an internal identifier and was a real
+   regression — it has already been fixed (to `detail --test-check`) by a prior task, so
+   this phase does not need to touch that file.
 4. **`src/help.sh` full rewrite.** Rewrite both the `Global commands:` and `Per-instance
    commands:` sections of `print_help()`'s heredoc:
    - Replace `create <name> [options]` and `list` global-command rows with `instances ls`,
