@@ -30,3 +30,8 @@ items:
       date: "2026-07-09"
       tag: docs-and-help
       text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] docs/architecture.md step 1 still lists NO_CHROMIUM/NO_DOCKER/ENABLE_DOCKER_PROXY as globals populated by options.sh; these flags were removed in the restructure (now error with a redirect message). Predates and is unrelated to this task''s scoped surface (noun-dispatch/status-detail/attach-connect) — not caught by the task''s grep list. Worth a separate follow-up task.'
+    - title: 'src/help.sh''s per-instance commands list and '
+      id: cfdc
+      date: "2026-07-09"
+      tag: docs-and-help
+      text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] src/help.sh''s per-instance commands list and architecture.md''s step-11 dispatch-word enumeration both omit the ''up'' word (present in PER_INSTANCE_COMMANDS) — this gap predates the CLI restructure entirely (never documented before either) and was out of this task''s named scope.'
