@@ -20,3 +20,8 @@ items:
       date: "2026-07-09"
       tag: profiles-resource
       text: '[phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md] Pre-existing latent bug, not touched (out of scope, unrelated to this task''s Requirements): src/profiles.sh''s profiles_create() -> _cp_entries_to_json() uses `local -n` (bash 4.3+ nameref syntax), which throws under macOS system bash 3.2 (bin/ai-sandbox.sh''s shebang target) — harmlessly swallowed in the smoke-tested empty-array case, but would silently produce empty skills/hooks/agents JSON for a profile that has real discoverable entries. Introduced in phase-02 task 001, which fixed two other bash-3.2 portability issues in this same file but missed this one.'
+    - title: src/help.sh (owned by sibling task 002) still
+      id: aJhd
+      date: "2026-07-09"
+      tag: docs-and-help
+      text: '[phase-03-docs-and-help/001-update-readme-and-profiles-spec.md] src/help.sh (owned by sibling task 002) still documented the old CLI grammar as of this task''s run; cross-checked against source instead. Manager may want to re-verify README against help.sh once 002 lands, in case of late drift.'
