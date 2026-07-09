@@ -4,7 +4,7 @@
 
 This document is the canonical specification for the ai-sandbox **profiles** feature. It is the source of truth for all implementation work, review, and user documentation relating to profiles.
 
-A profile is the unit of environment configuration for ai-sandbox. Profiles replace ad-hoc CLI flags — `--docker`, `--no-chromium`, etc. — with reusable, composable YAML files that fully describe what an ai-sandbox container contains and how it is started. This document specifies the YAML schema, the composition rules, the storage and discovery order, the `profile-installer.js` interface, the `new-profile` command, and how profiles integrate with the existing CLI.
+A profile is the unit of environment configuration for ai-sandbox. Profiles replace ad-hoc CLI flags — `--docker`, `--no-chromium`, etc. — with reusable, composable YAML files that fully describe what an ai-sandbox container contains and how it is started. This document specifies the YAML schema, the composition rules, the storage and discovery order, the `profile-installer.js` interface, the `profiles create` command, and how profiles integrate with the existing CLI.
 
 ## Profile concept
 
@@ -290,7 +290,7 @@ $XDG_CONFIG_HOME/ai-sandbox/. Setting local=true. This profile may not be usable
 on other machines.
 ```
 
-`new-profile` sets `local: true` in the written YAML when it auto-discovers paths from `~/.claude` or `./.claude/`.
+`profiles create` sets `local: true` in the written YAML when it auto-discovers paths from `~/.claude` or `./.claude/`.
 
 Local profiles are not inherently unshareable — the profile file itself can be committed to source control and used by a team — but their `src` paths are absolute or relative to the current machine's filesystem layout and may not resolve on another machine. Teammates who clone the profile must update `src` values to match their own filesystem.
 
@@ -318,7 +318,7 @@ default_profiles:
 
 When `ai-sandbox start` is called with no `--profile` flags, the `default_profiles` list is used as if the user had passed `--profile base --profile mirror`. The pre-populated default is `[base, mirror]`, which reproduces the behavior of a pre-profile ai-sandbox invocation.
 
-Users can change the defaults by editing this file. `new-profile` does not modify `default_profiles` — users add their own profiles to the list manually.
+Users can change the defaults by editing this file. `profiles create` does not modify `default_profiles` — users add their own profiles to the list manually.
 
 ## Image tagging by profile
 
@@ -389,22 +389,24 @@ PROFILE_COMPOSITION_HASH=a1b2c3d4
 | 0 | Success. Stdout contains the three output blocks. |
 | 1 | Input error: profile not found, unknown key (only for strict-mode callers), type mismatch, missing `src` path, scalar conflict, or missing required env var. Stderr contains a human-readable error. |
 
-## The `new-profile` command
+## The `profiles create` command
 
-`new-profile` is a new ai-sandbox subcommand that scaffolds a profile YAML file by auto-discovering skills, hooks, and agents from the standard locations and prompting the user for any remaining configuration.
+`ai-sandbox profiles create <name>` scaffolds a profile YAML file by auto-discovering skills, hooks, and agents from the standard locations and prompting the user for any remaining configuration.
+
+Profile listing (`ai-sandbox profiles ls`) and deletion (`ai-sandbox <name> delete`) are documented in `README.md`'s [CLI reference](../README.md#cli-reference) rather than duplicated here — this section covers only `profiles create`'s own flags and auto-discovery behavior, not the general CLI grammar.
 
 ### Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--name <name>` | required | Profile name. Used as the filename (`<name>.yaml`) and the `metadata.name` value. |
+| `<name>` | required | Positional argument (not a flag). Profile name, used as the filename (`<name>.yaml`) and the `metadata.name` value. |
 | `--mode <mirror\|static>` | `mirror` | Container mode. Written to `metadata` and the `mode` field. |
 | `--output <path>` | `./profiles/<name>.yaml` | Destination path for the written YAML file. |
 | `--plugins <name,...>` | (empty) | Comma-separated list of plugin names to include. Can be specified multiple times. Also accepted interactively when not given. |
 
 ### Auto-discovery
 
-`new-profile` discovers source files from the following locations, in order:
+`profiles create` discovers source files from the following locations, in order:
 
 - Skills: `~/.claude/skills/` and `./.claude/skills/` (current working directory).
 - Hooks: `~/.claude/hooks/` and `./.claude/hooks/`.
@@ -412,11 +414,11 @@ PROFILE_COMPOSITION_HASH=a1b2c3d4
 
 Each discovered path is added to the appropriate list in the generated YAML with `src` set to the absolute resolved path and `dst` set to the corresponding in-container path under `/home/<user>/.claude/`.
 
-If any discovered path is outside `$XDG_CONFIG_HOME/ai-sandbox/`, `new-profile` sets `local: true` in the written YAML (matching the `profile-installer` auto-detection rule).
+If any discovered path is outside `$XDG_CONFIG_HOME/ai-sandbox/`, `profiles create` sets `local: true` in the written YAML (matching the `profile-installer` auto-detection rule).
 
 ### Output
 
-On success, `new-profile` writes the profile YAML to `--output` and prints the generated file path to stdout:
+On success, `profiles create` writes the profile YAML to `--output` and prints the generated file path to stdout:
 
 ```
 Created profile: ./profiles/my-project.yaml
