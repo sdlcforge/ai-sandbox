@@ -31,7 +31,7 @@ export SANDBOX_NAME
 # now defaults to `enter` (see options.sh), not `ls`.
 # Short-circuits before the Docker pre-flight so `ls` works even when the
 # Docker daemon is down (do_list handles empty output gracefully).
-if [ "${CMD}" = "ls" ]; then
+if [ "${CMD}" = "ls" ] && [ -z "${SANDBOX_NAME}" ]; then
     do_list
     exit 0
 fi
