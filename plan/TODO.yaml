@@ -63,6 +63,7 @@ phases:
     - number: 3
       slug: docs-and-help
       title: Docs And Help
+      diff_base: 738487df1bb6e0c1dbce98e6254f5b176b038882
       tasks:
         - number: 1
           slug: update-readme-and-profiles-spec
