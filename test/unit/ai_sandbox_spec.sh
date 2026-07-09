@@ -1101,6 +1101,137 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'parse_options() — instances noun'
+    # "instances ls" -> CMD=instances-ls (with empty SANDBOX_NAME) is already
+    # covered by the 'routes "instances ls" to CMD=instances-ls...' It block
+    # in the 'parse_options()' Describe block above (added by phase-04 task
+    # 001). This block adds the previously-uncovered combined-flags
+    # "instances create" shape per this task's Requirement 1 -- mirrors the
+    # individual --profile/--mode flag-parsing tests above, but asserts both
+    # flags threaded through together in a single end-to-end invocation.
+    It 'parses "instances create <name> --profile <p> --mode <m>" end-to-end'
+      When call parse_options instances create foo --profile base --mode static
+      The variable CMD should eq create
+      The variable SANDBOX_NAME should eq foo
+      The variable "PROFILES[*]" should eq base
+      The variable MODE_OVERRIDE should eq static
+    End
+  End
+
+  Describe 'parse_options() — profiles noun'
+    # profiles ls / profiles create <name> end-to-end parse behavior --
+    # phase-01-dispatch-foundation/001 established the CMD-namespacing
+    # pattern ("instances-ls"); phase-02-profiles-resource/001 applied the
+    # same pattern to profiles ("profiles-ls"/"profiles-create") since bare
+    # CMD="ls"/"create" are already contractually tied to
+    # do_list()/do_create(). Profile deletion ("<name> delete") is NOT a
+    # noun-level verb (see plan/notes/profiles-delete-ambiguity.md) -- it's
+    # covered by the 'parse_options() — per-name verb-gating' Describe block
+    # below instead.
+    It 'routes "profiles ls" to CMD=profiles-ls with empty SANDBOX_NAME (profiles-only listing)'
+      When call parse_options profiles ls
+      The variable CMD should eq profiles-ls
+      The variable SANDBOX_NAME should eq ''
+    End
+
+    It 'parses "profiles create <name> --mode <m>" end-to-end'
+      When call parse_options profiles create bar --mode mirror
+      The variable CMD should eq profiles-create
+      The variable SANDBOX_NAME should eq bar
+      The variable MODE_OVERRIDE should eq mirror
+    End
+  End
+
+  Describe 'compute_reserved_names() — structural derivation'
+    # Requirement 3 (drift-can't-happen-again guarantee): prove RESERVED_NAMES
+    # is *derived from* the live command tables via compute_reserved_names()
+    # at parse time, not a hand-maintained literal that happens to match
+    # today's tables -- see plan/notes/current-dispatch-audit.md's "Confirmed
+    # table contents" section for the original drift bug this replaces. The
+    # 'rejects "instances create <word>"...' tests in the 'parse_options()'
+    # Describe block above already re-assert today's known reserved words;
+    # this block instead exercises the derivation mechanism itself.
+    It 'echoes the union of its four input tables verbatim'
+      When call compute_reserved_names 'a b' 'c d' 'e' 'f g'
+      The output should eq 'a b c d e f g'
+    End
+
+    It 'parse_options() consumes whatever compute_reserved_names() returns -- injecting a synthetic word makes it reserved automatically, with no other change'
+      # Overriding compute_reserved_names() itself (rather than adding
+      # another known-word assertion) proves parse_options() actually calls
+      # through the derivation function at parse time instead of inlining a
+      # snapshot of its result -- i.e. a future addition to any underlying
+      # table is automatically reserved without a second, hand-maintained edit.
+      compute_reserved_names() { echo "$1 $2 $3 $4 totallynotreal"; }
+      When run parse_options instances create totallynotreal
+      The status should be failure
+      The stderr should include 'reserved name'
+      The stderr should include 'totallynotreal'
+    End
+  End
+
+  Describe 'parse_options() — per-name verb-gating (resolve_name_kind())'
+    # Mirrors the 'parse_options()' Describe block's stub_name_as_instance()
+    # docker-mocking convention for the other two resolve_name_kind()
+    # outcomes. profile_exists() is pure bash (no docker involved), so it's
+    # overridden directly here per this file's convention for pure-bash
+    # helpers (see the header comment on this file re: function mocking).
+    stub_name_as_profile() {
+      docker() { return 0; }
+      profile_exists() { return 0; }
+    }
+    stub_name_as_unknown() {
+      docker() { return 0; }
+      profile_exists() { return 1; }
+    }
+
+    It 'allows CMD=detail for a name that resolves to a profile'
+      stub_name_as_profile
+      When call parse_options myprofile detail
+      The variable CMD should eq detail
+      The variable SANDBOX_NAME should eq myprofile
+      The variable SANDBOX_NAME_KIND should eq profile
+    End
+
+    It 'allows CMD=delete for a name that resolves to a profile (the sole profile-deletion spelling; see plan/notes/profiles-delete-ambiguity.md)'
+      stub_name_as_profile
+      When call parse_options myprofile delete
+      The variable CMD should eq delete
+      The variable SANDBOX_NAME_KIND should eq profile
+    End
+
+    It 'rejects an instance-only verb (enter) against a name that resolves to a profile, with a distinct "is a profile, not an instance" error'
+      stub_name_as_profile
+      When run parse_options myprofile enter
+      The status should be failure
+      The stderr should include "is a profile, not an instance"
+      The stderr should include 'myprofile'
+    End
+
+    It 'rejects a bare name (default CMD=enter) that resolves to a profile, since "enter" is not a profile-appropriate verb'
+      stub_name_as_profile
+      When run parse_options myprofile
+      The status should be failure
+      The stderr should include "is a profile, not an instance"
+    End
+
+    It 'rejects any verb against a name that resolves to neither an instance nor a profile ("unknown"), with a distinct error'
+      stub_name_as_unknown
+      When run parse_options ghostname detail
+      The status should be failure
+      The stderr should include 'is not a known instance or profile'
+      The stderr should not include 'is a profile, not an instance'
+      The stderr should not include 'reserved name'
+    End
+
+    It 'rejects a bare unresolvable name with no verb ("unknown"), same distinct error'
+      stub_name_as_unknown
+      When run parse_options ghostname
+      The status should be failure
+      The stderr should include 'is not a known instance or profile'
+    End
+  End
+
   Describe 'do_status() — Configuration: display (ai.sandbox.config label decode)'
     # Helper: base64-encode a config-input JSON payload exactly as
     # src/index.sh's assembly block does, mirroring the restore_saved_config()
@@ -1620,7 +1751,12 @@ Describe 'ai-sandbox.sh'
     End
   End
 
-  Describe 'new_profile()'
+  Describe 'profiles_create()'
+    # Renamed/rewritten from new_profile() (phase-02-profiles-resource task
+    # 001, "Build Profiles Module"): the auto-discovery scaffolding logic is
+    # unchanged in substance, but the name-input mechanism changed from the
+    # --name flag to a positional <name> argument (symmetric with
+    # `instances create <name>`). See src/profiles.sh.
     setup() {
       export TMPDIR_CP="$(mktemp -d)"
       export HOME="${TMPDIR_CP}"
@@ -1633,22 +1769,130 @@ Describe 'ai-sandbox.sh'
 
     It 'writes the profile file and prints success'
       output_file="${TMPDIR_CP}/test-profile.yaml"
-      When call new_profile --name t --output "${output_file}"
+      # Docker is stubbed unreachable so the instance-collision check
+      # (instance_exists(), which shells out to `docker ps -a`) resolves
+      # deterministically to "no such instance" without depending on a real
+      # docker daemon being available/running.
+      docker() { return 1; }
+      When call profiles_create t --output "${output_file}"
       The output should include 'Created profile:'
       The path "${output_file}" should be exist
       The status should be success
     End
 
-    It 'errors when --name is missing'
-      When run new_profile --output /tmp/nope.yaml
+    It 'errors when the name is missing'
+      When run profiles_create "" --output /tmp/nope.yaml
       The status should be failure
-      The stderr should include '--name is required'
+      The stderr should include 'a profile name is required'
     End
 
-    It 'errors when --name contains a path separator'
-      When run new_profile --name bad/name --output /tmp/nope.yaml
+    It 'errors when the name contains a path separator'
+      When run profiles_create bad/name --output /tmp/nope.yaml
       The status should be failure
-      The stderr should include '/'
+      The stderr should include "no '/' allowed"
+    End
+  End
+
+  Describe 'profiles_create() — name-collision checks'
+    # Requirement 4: a create-collision check must reject a name colliding
+    # with an existing instance, an existing profile, or a reserved word
+    # (reserved-word coverage already lives in the 'parse_options()' Describe
+    # block's "rejects ... because ... is a reserved name" tests -- not
+    # duplicated here). This block covers profiles_create()'s own two
+    # collision checks directly, including the profiles-create/existing-
+    # instance cross-kind case.
+    setup() {
+      export TMPDIR_PC="$(mktemp -d)"
+      export HOME="${TMPDIR_PC}"
+    }
+    cleanup() {
+      rm -rf "${TMPDIR_PC}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'rejects "profiles create <name>" when <name> collides with an existing instance (cross-kind)'
+      docker() { if [ "$1" = "ps" ]; then echo "ai-sandbox-existing"; fi; return 0; }
+      When run profiles_create existing --output "${TMPDIR_PC}/nope.yaml"
+      The status should be failure
+      The stderr should include 'already exists as a sandbox instance'
+    End
+
+    It 'rejects "profiles create <name>" when <name> collides with an existing profile (same-kind)'
+      docker() { return 1; }
+      profile_exists() { return 0; }
+      When run profiles_create existing --output "${TMPDIR_PC}/nope.yaml"
+      The status should be failure
+      The stderr should include 'already exists. Choose a different name'
+    End
+  End
+
+  Describe 'do_create() — name-collision checks'
+    # Symmetric coverage for the "instances create" side of Requirement 4:
+    # do_create()'s own two collision checks (src/create.sh), including the
+    # instances-create/existing-profile cross-kind case. Both examples return
+    # before do_create() reaches ensure_image()/docker compose, so no real
+    # image build or container is touched.
+    It 'rejects "instances create <name>" when <name> collides with an existing instance (same-kind)'
+      SANDBOX_NAME="existing"
+      docker() { if [ "$1" = "ps" ]; then echo "ai-sandbox-existing"; fi; return 0; }
+      When run do_create
+      The status should be failure
+      The stderr should include 'already exists'
+      The stderr should include "ai-sandbox existing start"
+    End
+
+    It 'rejects "instances create <name>" when <name> collides with an existing profile (cross-kind)'
+      SANDBOX_NAME="existing"
+      docker() { return 1; }
+      profile_exists() { return 0; }
+      When run do_create
+      The status should be failure
+      The stderr should include 'already exists as a profile'
+    End
+  End
+
+  Describe 'profiles_delete()'
+    # Deletion is exclusively "ai-sandbox <name> delete" (resolved via
+    # resolve_name_kind()'s per-name dispatch path, see the 'parse_options()
+    # — per-name verb-gating' Describe block above for the CMD=delete
+    # parse-level coverage), never a "profiles delete <name>" noun-level
+    # command -- see plan/notes/profiles-delete-ambiguity.md. This block
+    # covers profiles_delete() itself (src/profiles.sh), including the
+    # bundled/read-only refusal from profiles-resource task 002 Requirement 3.
+    setup() {
+      export PD_WORK_DIR="$(mktemp -d)"
+      export PD_ORIG_PWD="${PWD}"
+      export XDG_CONFIG_HOME="${PD_WORK_DIR}/xdg-config"
+      mkdir -p "${PD_WORK_DIR}/cwd"
+      cd "${PD_WORK_DIR}/cwd" || exit
+    }
+    cleanup() {
+      cd "${PD_ORIG_PWD}" || exit
+      rm -rf "${PD_WORK_DIR}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'refuses to delete a bundled profile, naming the bundled path'
+      # No project-local (isolated empty cwd) or user-global (isolated
+      # XDG_CONFIG_HOME) "base.yaml" shadows the real bundled profile, so
+      # this deterministically resolves to the bundled copy shipped in this
+      # repo's own profiles/ directory.
+      When run profiles_delete base
+      The status should be failure
+      The stderr should include 'bundled profile'
+      The stderr should include 'cannot be deleted'
+      The stderr should include 'profiles/base.yaml'
+    End
+
+    It 'deletes a user-global profile and confirms removal'
+      mkdir -p "${XDG_CONFIG_HOME}/ai-sandbox/profiles"
+      target="${XDG_CONFIG_HOME}/ai-sandbox/profiles/testdel.yaml"
+      echo 'mode: mirror' > "${target}"
+      When call profiles_delete testdel
+      The output should include 'Deleted profile:'
+      The path "${target}" should not be exist
     End
   End
 
