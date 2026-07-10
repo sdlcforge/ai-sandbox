@@ -45,3 +45,8 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] Recommend a follow-up task to modernize docker_proxy_spec.sh/clean_container_spec.sh/lifecycle_spec.sh to the current CLI grammar so make test.integration can pass as a whole again.'
+    - title: The task doc's requirement 2 offered 'have fi
+      id: VqTZ
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] The task doc''s requirement 2 offered ''have fix_ssh() itself call ensure_clean_slate_credentials()'' as an alternative mechanism; as implemented it would not actually fix the bug since COMPOSE_FILES is already finalized by the time fix_ssh() runs. Worth correcting in the phase''s design notes if this option gets referenced again elsewhere.'
