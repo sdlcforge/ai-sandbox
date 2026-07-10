@@ -234,3 +234,94 @@ architectural_impact: true
 - After adding the `-p` flag fix to `do_build()`/`fix_ssh()`.
 - After the new unit tests pass.
 - After the new integration tests pass and orphan-cleanup is confirmed.
+
+## Status
+
+**Outcome: succeeded.** Implemented 2026-07-10.
+
+- Broadened the `src/index.sh` restore call site to `if should_restore_config
+  "${CMD}"; then restore_saved_config; fi`, and added the extracted,
+  unit-tested predicate `should_restore_config()` to `src/utils.sh` (returns
+  true for every `CMD` reachable at that call site except `create`).
+- Added `-p "${COMPOSE_PROJECT}"` to `do_build()`'s and `fix_ssh()`'s `docker
+  compose` invocations in `src/utils.sh`.
+- Unit tests: new `Describe` blocks for `should_restore_config()` (one `CMD`
+  per requirement's enumerated list, all true, plus `create` false),
+  `do_build()`, and `fix_ssh()` in `test/unit/ai_sandbox_spec.sh`. Also
+  updated the pre-existing `ensure_image()` "calls build when image not
+  found" test's `docker()` mock and `setup()` (added `COMPOSE_PROJECT`) since
+  it exercises `do_build()` indirectly and would otherwise hit an unbound
+  variable under `set -u` — a same-diff fix in a file already part of this
+  task's edits, recorded here per the task-agent's decision log.
+- Integration tests: added `test/integration/docker_proxy_teardown_spec.sh`
+  (new file, per the task's stated alternative to extending
+  `docker_proxy_spec.sh`) with four dedicated named instances
+  (`docker-td-delete`, `docker-td-stop`, `docker-td-fixssh`,
+  `docker-td-clean`, in that order — `clean` runs last because
+  `do_clean_images()` sweeps every `ai-sandbox:*` image and would otherwise
+  force an unnecessary rebuild for a later scenario), covering all four
+  Requirement 4 scenarios with no `--profile docker` re-passed on the
+  follow-up command.
+- Confirmed each new integration test actually reproduces the bug pre-fix: ran
+  the same spec file against the pre-fix commit (571916b, via a disposable
+  detached `git worktree`, not by touching this worktree's committed history)
+  and observed 6/10 examples fail exactly as expected (orphaned sidecar
+  container/network after `delete`/`clean`; sidecar left running after
+  `stop`; `fix-ssh` hitting a container-name conflict from its own missing
+  `-p` scope and losing `DOCKER_HOST`). Re-ran against the fixed code: 10/10
+  pass, and manual `docker ps -a`/`docker network ls` scoped to each test
+  project confirm no leftover resources.
+- Empirical verification performed (per the task's Assumptions section):
+  `docker-socket-proxy`'s `container_name: ai-sandbox-docker-proxy` (in
+  `docker/docker-compose.proxy.yaml`) is a **fixed literal**, not scoped per
+  compose project, so at most one docker-capable instance can exist
+  cluster-wide at a time; Compose still labels that container with the owning
+  project (`com.docker.compose.project=ai-sandbox-<name>`), so project-label
+  filters correctly scope assertions. The `docker-proxy` *network*, by
+  contrast, is project-scoped (`ai-sandbox-<name>_docker-proxy`). This is
+  documented in the new spec file's header comment.
+
+### Validation results
+
+- `make build`: passed.
+- `make lint`: passed (shellcheck clean across `src/`, `docker/`, `test/`,
+  including the new `test/integration/docker_proxy_teardown_spec.sh`).
+- `make test.unit`: passed, 216 examples / 0 failures.
+- New integration spec in isolation
+  (`shellspec test/integration/docker_proxy_teardown_spec.sh`, with
+  `AI_SANDBOX_SKIP_PLUGIN_CHECK=1` since a host-side `claude` process was
+  present in the environment running this task): passed, 10 examples / 0
+  failures, run twice back-to-back for stability given the sidecar's shared
+  singleton container name.
+- Full `make test.integration`: **fails**, but not because of anything in
+  this task's diff. Running the complete suite surfaced three distinct,
+  pre-existing, unrelated defects, none of which this task's diff touches
+  and none of which reproduce differently on the pre-fix commit (confirmed:
+  this task's diff never edits `src/options.sh` or `qecho()`):
+  1. `test/integration/docker_proxy_spec.sh` and
+     `test/integration/clean_container_spec.sh` invoke a CLI flag ordering
+     (`--profile docker start`, `--clean credtest start`) that the current
+     dispatch grammar rejects outright (`Error: sandbox name '--profile' is
+     invalid`) — apparently stale since an earlier CLI-grammar rewrite
+     (`src/options.sh`'s per-instance dispatch now requires flags *after*
+     the verb, e.g. `start --profile docker`) was never propagated to these
+     two integration spec files.
+  2. `test/integration/lifecycle_spec.sh` invokes the retired `status`
+     command word (replaced by `detail`; see `src/options.sh`'s own comment
+     that "detail" is now the sole spelling), so it falls through as a
+     literal (unknown) per-name dispatch attempt instead of reporting status.
+  3. A separate, already-tracked `qecho()`/`QUIET` inversion bug (a
+     sibling branch, `2026-07-10-fix-quiet-stdout-leak-and-stat`, is
+     actively addressing it) leaks a "Checking docker is running..."
+     preflight line onto stdout regardless of `--quiet`, breaking several
+     exact-match (`should eq`) assertions in `container_spec.sh`.
+  `test/integration/named_instance_enter_spec.sh` (uses the modern grammar,
+  like this task's new spec file) passed cleanly alongside the new
+  `docker_proxy_teardown_spec.sh`, corroborating that the failures above are
+  isolated to the older, stale-grammar/legacy-assertion spec files rather
+  than anything this task changed.
+
+None of the above three pre-existing defects were touched: none live in a
+file this task's diff already edits, and fixing any of them is a
+nontrivial, separate piece of work outside `## Requirements`. Flagged for the
+manager in the task-agent's structured report.
