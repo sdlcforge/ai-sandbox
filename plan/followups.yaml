@@ -30,3 +30,8 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] test/integration/docker_proxy_spec.sh and test/integration/clean_container_spec.sh are currently broken, independent of this task: both invoke a CLI flag ordering (--profile docker start, --clean credtest start) that the current dispatch grammar rejects outright. Stale from an earlier CLI-grammar rewrite never propagated to these two spec files.'
+    - title: test/integration/lifecycle_spec.sh invokes th
+      id: ps6H
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] test/integration/lifecycle_spec.sh invokes the retired status command word (replaced by detail), so it falls through as an unknown per-name dispatch attempt instead of reporting status.'
