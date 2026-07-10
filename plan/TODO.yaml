@@ -49,6 +49,7 @@ phases:
           path: phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md
           done: false
           tier: sonnet-high
+          digest: Task 003's EFFECTIVE_PROXY label fallback fired unconditionally on every per-instance command, including start/enter, silently re-granting the docker capability (and network access to the docker-socket-proxy sidecar, a documented escape vector) even when a user explicitly asked to remove it via --profile. Added should_force_proxy_label_fallback() (src/utils.sh), scoped to {stop, delete, clean, fix-ssh} — the only commands where the original orphaned-sidecar bug manifests — and guarded the fallback in src/index.sh with it, plus a one-line stderr warning whenever the fallback actually overrides EFFECTIVE_PROXY. Added unit coverage for the predicate and a new live-Docker integration test proving "start --profile <non-docker>" now actually drops the capability; A/B-verified against task 003's merge commit via a disposable detached worktree (fails pre-fix, passes post-fix). Confirmed tasks 001 and 003's own integration suites still pass unmodified. Requirement 4 (amending the phase-2 doc-update task) was explicitly left untouched per the task doc's own instruction.
           git:
             branch: phase-01-task-04-scope-proxy-label-fallback
             commit:
