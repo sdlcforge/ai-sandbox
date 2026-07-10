@@ -50,7 +50,7 @@ phases:
           done: false
           tier: sonnet-high
           git:
-            branch: null
+            branch: phase-01-task-04-scope-proxy-label-fallback
             commit: []
             merge: null
     - number: 2
