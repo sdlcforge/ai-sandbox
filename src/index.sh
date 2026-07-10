@@ -305,12 +305,32 @@ export AI_SANDBOX_MARKETPLACES AI_SANDBOX_PLUGINS AI_SANDBOX_ENABLE_ALL_PLUGINS
   "${PROFILE_CAPABILITIES}" "${PROFILE_ASSEMBLED_DOCKERFILE}" >/dev/null
 export AI_SANDBOX_DOCKERFILE="${PROFILE_ASSEMBLED_DOCKERFILE}"
 
-# --- Phase: credential snapshot (clean-slate mode, start/enter/create/up only) ---
+# --- Phase: credential snapshot (clean-slate mode, start/enter/create/up/fix-ssh only) ---
 # Export AI_SANDBOX_CREDENTIALS_JSON_B64 before compose assembly so the claude-auth
 # compose file is included only when credentials are actually available.
+#
+# fix-ssh is included alongside start/enter/create/up (regression fix): once
+# should_restore_config() (src/utils.sh) started restoring CLEAN_SLATE for
+# every per-instance CMD except create, a bare `fix-ssh` on a --clean-created
+# instance now correctly restores CLEAN_SLATE=true, which routes the
+# COMPOSE_FILES assembly below into the AI_SANDBOX_CREDENTIALS_JSON_B64-gated
+# docker-compose.claude-auth.yaml branch instead of docker-compose.mirror-
+# claude.yaml. fix_ssh() (src/utils.sh) then runs `docker compose ... up -d
+# --force-recreate --no-deps ai-sandbox` using COMPOSE_FILES as already
+# assembled below -- by the time fix_ssh() itself runs (command-dispatch
+# phase, well after COMPOSE_FILES is fixed), it is too late for fix_ssh() to
+# populate credentials itself, since that decision has already been baked
+# into COMPOSE_FILES. Without this guard here, the credentials would never
+# have been captured, so neither compose overlay would apply them, and
+# --force-recreate would destroy the previous container's writable-layer
+# credentials with nothing to replace them (clean-slate mode never bind-
+# mounts host ~/.claude). Populating the snapshot here, before COMPOSE_FILES
+# assembly, is the only point in the pipeline where it can still affect
+# which overlay gets selected.
 if [ "${CLEAN_SLATE:-false}" = "true" ] && \
    { [ "${CMD}" = "start" ] || [ "${CMD}" = "enter" ] || \
-     [ "${CMD}" = "create" ] || [ "${CMD}" = "up" ]; }; then
+     [ "${CMD}" = "create" ] || [ "${CMD}" = "up" ] || \
+     [ "${CMD}" = "fix-ssh" ]; }; then
     ensure_clean_slate_credentials
 fi
 

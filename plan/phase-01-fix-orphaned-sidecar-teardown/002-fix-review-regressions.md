@@ -154,3 +154,87 @@ architectural_impact: true
   regression test.
 - After confirming task 001's own orphaned-sidecar integration tests still
   pass unmodified.
+
+## Status
+
+**Outcome: succeeded.** Implemented 2026-07-10.
+
+- Requirement 1 (profile-restore hard-failure): `restore_saved_config()`
+  (`src/utils.sh`) now re-validates each restored profile name via the
+  existing `profile_exists()` helper (`src/profiles.sh` — already checks the
+  same three discovery locations `bin/profile-installer.js`'s `findProfile()`
+  does: project-local, user-global, bundled) before assigning `PROFILES`,
+  mirroring the marketplace-scheme re-validation a few lines below it in the
+  same function. An unresolvable restored name is dropped with a warning to
+  stderr instead of being restored verbatim; when every restored name is
+  dropped, `PROFILES` is left untouched (empty), so
+  `bin/profile-installer.js` falls back to its own default-profile
+  resolution instead of `die()`-ing. Scoped automatically to
+  `CONFIG_FLAGS_PROVIDED == false` since that's already `restore_saved_config()`'s
+  own outer guard — no additional condition needed.
+- Requirement 2 (fix-ssh clean-slate credential loss): added `fix-ssh` to
+  `src/index.sh`'s credential-snapshot CMD guard, alongside
+  `start`/`enter`/`create`/`up`. Chose this over the task doc's other listed
+  option (`fix_ssh()` itself calling `ensure_clean_slate_credentials()`
+  before the compose recreate) because `COMPOSE_FILES` — including the
+  claude-auth-vs-mirror-claude overlay choice — is already fully assembled
+  earlier in `src/index.sh`'s linear phase sequence, before command dispatch
+  ever calls `fix_ssh()`; by the time `fix_ssh()` runs, populating the
+  credential env var can no longer change which overlay was already selected
+  into the `COMPOSE_FILES` string it's handed. The CMD-guard fix is a
+  one-line addition consistent with the existing architecture and the
+  pattern already used for the other three CMDs.
+- Unit tests (`test/unit/ai_sandbox_spec.sh`):
+  - Two new `restore_saved_config()` examples: drops an unresolvable
+    restored profile while keeping a valid sibling; falls back to empty
+    `PROFILES` (asserted via `should be undefined`, since bash's
+    `${arr[@]+x}` existence test can't distinguish a zero-element array from
+    an unset one) when every restored profile is unresolvable.
+  - Three new end-to-end `When run script` examples (real built
+    `bin/ai-sandbox.sh`, real `bin/profile-installer.js`/`profiles/` tree,
+    mocked `docker`) confirming `delete`/`stop`/`clean` with no `--profile`
+    flag succeed (with the warning) against a persisted config recording an
+    unresolvable profile name, rather than hard-aborting before CMD
+    dispatch.
+  - One new end-to-end `When run script` example for `fix-ssh` on a
+    restored-clean-slate instance: mocks `docker`, shadows `security` so the
+    test never touches the real host Keychain, plants a fake
+    `~/.claude/.credentials.json` under a throwaway `HOME`, and spins up a
+    background Python UNIX-socket listener for `SSH_AUTH_SOCK` (a plain `-S`
+    file check isn't sufficient — `ssh-add -l` against a dead/unbound socket
+    path exits 2, which `ssh_preflight()` treats as fatal; a live-but-silent
+    listener makes it exit 1, "communication with agent failed", which is
+    tolerated). Asserts `docker-compose.claude-auth.yaml` is present in the
+    logged `--force-recreate` compose invocation.
+- A/B verification (per task doc's Validation section): built a disposable
+  detached `git worktree` at task 001's merge commit (`55e5469`), copied over
+  the updated spec file only (no source fix), and ran the full unit suite —
+  all 6 new regression examples failed exactly as the root-cause analysis
+  predicted (2 `restore_saved_config()` examples; 3 teardown-command
+  end-to-end examples failing with `status: 1` and the real
+  `profile-installer:` `die()` message on stderr; 1 fix-ssh example missing
+  `docker-compose.claude-auth.yaml` from the logged compose call), with the
+  other 191 pre-existing examples unaffected. Re-ran against the fixed
+  worktree: all 197 examples pass.
+- `make test.unit`: 222 examples, 0 failures. `make lint`: clean (no new
+  `shellcheck disable` needed).
+- `test/integration/docker_proxy_teardown_spec.sh` (task 001's own
+  orphaned-sidecar regression suite, all 4 scenarios: delete/stop/fix-ssh/
+  clean) re-run standalone: 10 examples, 0 failures — task 001's fix is
+  unaffected by this task's changes.
+- `make test.integration` (full suite, `AI_SANDBOX_SKIP_PLUGIN_CHECK=1`,
+  live Docker daemon): 25 failures / 2 before-all-hook errors / 2 warnings,
+  concentrated entirely in `clean_container_spec.sh`, `container_spec.sh`,
+  `docker_proxy_spec.sh`, and `lifecycle_spec.sh` — all pre-existing and
+  unrelated to this task's diff. Confirmed via the same disposable
+  detached-worktree baseline at commit `55e5469`: identical 25
+  failures / 2 errors / 2 warnings occur there too, with no source changes
+  from this task applied. `docker_proxy_teardown_spec.sh`,
+  `named_instance_enter_spec.sh`, and `plugin_install_spec.sh` (14 examples
+  combined) pass cleanly both before and after this task's changes.
+- Grep-verified: the new `_restored_profiles`/`_validated_profiles` arrays in
+  `restore_saved_config()` are only ever expanded under a length guard
+  (`"${#_validated_profiles[@]}" -gt 0`) or after a non-empty guard
+  (`saved_profiles` non-empty before `_restored_profiles` is populated),
+  matching the pre-existing `_validated_marketplaces` pattern in the same
+  function — no unbound-variable risk reintroduced under `set -u`.

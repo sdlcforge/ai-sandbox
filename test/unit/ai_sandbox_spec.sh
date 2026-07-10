@@ -514,6 +514,78 @@ Describe 'ai-sandbox.sh'
       The stderr should include 'ftp://bad.example.com'
     End
 
+    It 'drops a restored profile name that no longer resolves, keeping other valid restored profiles (regression: profile-restore hard-failure on teardown commands)'
+      # Root cause: unlike the marketplace-scheme validation above, the
+      # profile-name restore previously had no fallback -- a restored name
+      # that no longer resolves (deleted/renamed profile, or a project-local
+      # profile only resolvable relative to the create-time CWD) would be
+      # restored verbatim into PROFILES, and bin/profile-installer.js's
+      # loadProfile() call would then die() -> process.exit(1), which
+      # src/index.sh's `PROFILE_INSTALLER_OUTPUT="$(node ...)" || exit $?`
+      # propagates, hard-aborting the whole invocation -- including
+      # delete/clean/stop, the exact commands a user needs when an instance
+      # is broken -- before CMD dispatch is ever reached. profile_exists()
+      # (src/profiles.sh) is pure bash (no docker involved), so it's
+      # overridden directly here per this file's convention for mocking pure-
+      # bash helpers (see "parse_options() -- per-name verb-gating" above).
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      config_b64="$(encode_config '{"version":1,"profiles":["base","ghost-profile"]}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      profile_exists() { [ "$1" = "base" ]; }
+      When call restore_saved_config
+      The status should be success
+      The variable "PROFILES[*]" should eq 'base'
+      The stderr should include 'ghost-profile'
+      The stderr should include 'no longer found'
+    End
+
+    It 'falls back to default profile resolution (empty PROFILES) when every restored profile is unresolvable'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      config_b64="$(encode_config '{"version":1,"profiles":["ghost-one","ghost-two"]}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      profile_exists() { return 1; }
+      When call restore_saved_config
+      The status should be success
+      # bash's ${arr[*]+x} existence test (which the variable subject uses
+      # under the hood) treats a zero-element array the same as an unset
+      # variable, so "should be undefined" -- not "should eq ''" -- is the
+      # correct assertion for "PROFILES was left as the empty array it
+      # started as".
+      The variable "PROFILES[*]" should be undefined
+      The stderr should include 'ghost-one'
+      The stderr should include 'ghost-two'
+    End
+
     It 'treats an oversized ai.sandbox.config label as absent rather than decoding it (followup qVbA)'
       # Defense-in-depth size bound: an (implausible, since the label is only
       # writable by the host process at create time) oversized label must
@@ -2338,6 +2410,191 @@ MOCK_DOCKER
       The status should be success
       The output should include 'confirmed.'
       The contents of file "${DISPATCH_DOCKER_LOG}" should include 'exec -u root ai-sandbox echo hi'
+    End
+  End
+
+  Describe 'command dispatch: teardown commands survive an unresolvable restored profile (regression: profile-restore hard-failure on teardown commands)'
+    # End-to-end regression coverage for task doc requirement 1
+    # (plan/phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md):
+    # the graceful-degradation fix lives in restore_saved_config()'s runtime
+    # call to profile_exists()/PROFILE_JSON assembly, which only fully
+    # exercises end to end when the real bin/profile-installer.js gets
+    # invoked with the (now-filtered) PROFILES array -- so this runs the real
+    # built script via `When run script`, same convention and rationale as
+    # the "command dispatch: exec/passthrough branches" Describe block above.
+    # `docker inspect ... ai.sandbox.config` is mocked to return a persisted
+    # config recording a profile name ("ghost-profile") that does not exist
+    # anywhere under this repo's real profiles/ tree -- simulating a profile
+    # that was valid at `create` time but has since been deleted/renamed.
+    # Without the fix, bin/profile-installer.js's loadProfile() would die()
+    # on "ghost-profile" and src/index.sh's `|| exit $?` would abort before
+    # CMD dispatch, so `delete` would never reach `docker compose ... down`.
+    setup() {
+      DISPATCH_WORK_DIR="$(mktemp -d)"
+      export XDG_CACHE_HOME="${DISPATCH_WORK_DIR}/cache"
+      DISPATCH_MOCK_BIN="${DISPATCH_WORK_DIR}/mockbin"
+      mkdir -p "${DISPATCH_MOCK_BIN}"
+      DISPATCH_DOCKER_LOG="${DISPATCH_WORK_DIR}/docker_calls.log"
+      : > "${DISPATCH_DOCKER_LOG}"
+      export DISPATCH_DOCKER_LOG
+      # Persisted ai.sandbox.config label: profiles=["ghost-profile"], a name
+      # that does not resolve to any file under ./profiles,
+      # ${XDG_CONFIG_HOME:-$HOME/.config}/ai-sandbox/profiles, or this repo's
+      # bundled profiles/ dir.
+      config_json='{"version":1,"profiles":["ghost-profile"],"mode":"","no_isolate_config":false,"clean_slate":false,"marketplaces":[],"plugins":[],"enable_all_plugins":false}'
+      config_b64="$(printf '%s' "${config_json}" | base64 | tr -d '\n')"
+      export DISPATCH_CONFIG_B64="${config_b64}"
+      cat > "${DISPATCH_MOCK_BIN}/docker" <<'MOCK_DOCKER'
+#!/bin/bash
+printf '%s\n' "$*" >> "${DISPATCH_DOCKER_LOG}"
+case "$1" in
+  info) exit 0 ;;
+  ps) echo "ai-sandbox-dispatchtest"; exit 0 ;;
+  inspect)
+    if [[ "$*" == *"ai.sandbox.config"* ]]; then
+      echo "${DISPATCH_CONFIG_B64}"
+    elif [[ "$*" == *"State.Status"* ]]; then
+      # Reported as exited (not running) so delete/stop/clean skip the
+      # interactive confirm_stop_running() prompt.
+      echo "exited"
+    fi
+    exit 0
+    ;;
+  *) exit 0 ;;
+esac
+MOCK_DOCKER
+      chmod +x "${DISPATCH_MOCK_BIN}/docker"
+      export PATH="${DISPATCH_MOCK_BIN}:${PATH}"
+      export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
+    }
+    cleanup() {
+      rm -rf "${DISPATCH_WORK_DIR}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'lets delete (no --profile flag) succeed with a warning instead of hard-aborting on an unresolvable restored profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest delete
+      The status should be success
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The output should include "deleted"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' down'
+    End
+
+    It 'lets stop (no --profile flag) succeed with a warning instead of hard-aborting on an unresolvable restored profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest stop
+      The status should be success
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The output should include "stopped"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' stop'
+    End
+
+    It 'lets clean (no --profile flag) succeed with a warning instead of hard-aborting on an unresolvable restored profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest clean
+      The status should be success
+      The output should include 'confirmed.'
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' down'
+    End
+  End
+
+  Describe 'command dispatch: fix-ssh on a clean-slate instance preserves credentials across --force-recreate (regression: fix-ssh clean-slate credential loss)'
+    # End-to-end regression coverage for task doc requirement 2
+    # (plan/phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md):
+    # the fix lives in src/index.sh's credential-snapshot CMD guard (inline
+    # top-level script logic, not a function), so -- same rationale as the
+    # other end-to-end Describe blocks in this file -- this runs the real
+    # built bin/ai-sandbox.sh via `When run script`.
+    #
+    # `docker inspect ... ai.sandbox.config` is mocked to return a persisted
+    # config recording clean_slate=true (as `create --clean` would save), so
+    # restore_saved_config() sets CLEAN_SLATE=true for a bare `fix-ssh` (no
+    # --clean flag this run) exactly as should_restore_config()'s broadened
+    # trigger (task 001) intends. `security` is shadowed to always fail so
+    # the test never touches the real host Keychain; ensure_clean_slate_
+    # credentials() then falls back to a fake ~/.claude/.credentials.json
+    # planted under a throwaway HOME. `ssh_preflight()`'s SSH_AUTH_SOCK check
+    # needs a real, live-but-protocol-silent UNIX socket (a plain `-S` file
+    # test isn't enough: ssh-add -l against a dead/unbound socket path exits
+    # 2, which fix_ssh() treats as fatal) -- a background Python listener
+    # provides one without speaking the ssh-agent protocol (ssh-add exits 1,
+    # "communication with agent failed", which ssh_preflight() tolerates).
+    #
+    # Without the fix, AI_SANDBOX_CREDENTIALS_JSON_B64 is never populated for
+    # fix-ssh, so COMPOSE_FILES omits docker-compose.claude-auth.yaml (and,
+    # since CLEAN_SLATE=true also skips docker-compose.mirror-claude.yaml),
+    # leaving --force-recreate with no credential source at all.
+    setup() {
+      DISPATCH_WORK_DIR="$(mktemp -d)"
+      export XDG_CACHE_HOME="${DISPATCH_WORK_DIR}/cache"
+      DISPATCH_MOCK_BIN="${DISPATCH_WORK_DIR}/mockbin"
+      mkdir -p "${DISPATCH_MOCK_BIN}"
+      DISPATCH_DOCKER_LOG="${DISPATCH_WORK_DIR}/docker_calls.log"
+      : > "${DISPATCH_DOCKER_LOG}"
+      export DISPATCH_DOCKER_LOG
+      config_json='{"version":1,"profiles":[],"mode":"","no_isolate_config":false,"clean_slate":true,"marketplaces":[],"plugins":[],"enable_all_plugins":false}'
+      config_b64="$(printf '%s' "${config_json}" | base64 | tr -d '\n')"
+      export DISPATCH_CONFIG_B64="${config_b64}"
+      cat > "${DISPATCH_MOCK_BIN}/docker" <<'MOCK_DOCKER'
+#!/bin/bash
+printf '%s\n' "$*" >> "${DISPATCH_DOCKER_LOG}"
+case "$1" in
+  info) exit 0 ;;
+  ps) echo "ai-sandbox-dispatchtest"; exit 0 ;;
+  inspect)
+    if [[ "$*" == *"ai.sandbox.config"* ]]; then
+      echo "${DISPATCH_CONFIG_B64}"
+    fi
+    exit 0
+    ;;
+  *) exit 0 ;;
+esac
+MOCK_DOCKER
+      chmod +x "${DISPATCH_MOCK_BIN}/docker"
+      # Shadow `security` so the test never reads the real host Keychain.
+      cat > "${DISPATCH_MOCK_BIN}/security" <<'MOCK_SECURITY'
+#!/bin/bash
+exit 1
+MOCK_SECURITY
+      chmod +x "${DISPATCH_MOCK_BIN}/security"
+      export PATH="${DISPATCH_MOCK_BIN}:${PATH}"
+      export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
+
+      DISPATCH_FAKE_HOME="${DISPATCH_WORK_DIR}/home"
+      mkdir -p "${DISPATCH_FAKE_HOME}/.claude"
+      printf '%s' '{"claudeAiOauth":{"accessToken":"file-tok","refreshToken":"file-ref","expiresAt":9999999999000}}' \
+        > "${DISPATCH_FAKE_HOME}/.claude/.credentials.json"
+      export HOME="${DISPATCH_FAKE_HOME}"
+
+      DISPATCH_SSH_SOCK="${DISPATCH_WORK_DIR}/agent.sock"
+      python3 -c "
+import socket, time
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.bind('${DISPATCH_SSH_SOCK}')
+s.listen(1)
+time.sleep(30)
+" &
+      DISPATCH_SSH_LISTENER_PID=$!
+      # Give the listener a moment to bind before the script under test runs.
+      sleep 0.3
+      export SSH_AUTH_SOCK="${DISPATCH_SSH_SOCK}"
+    }
+    cleanup() {
+      kill "${DISPATCH_SSH_LISTENER_PID}" 2>/dev/null || true
+      rm -rf "${DISPATCH_WORK_DIR}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'includes docker-compose.claude-auth.yaml in the force-recreate compose call so credentials survive'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest fix-ssh
+      The status should be success
+      The output should include 'Container recreated with SSH_AUTH_SOCK='
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'docker-compose.claude-auth.yaml'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'force-recreate'
     End
   End
 End
