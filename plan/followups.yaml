@@ -55,3 +55,8 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] Pre-existing integration test failures unrelated to this task (clean_container_spec.sh, container_spec.sh, docker_proxy_spec.sh, lifecycle_spec.sh) confirmed identical at task 001''s baseline — same class already tracked via followups AQag/ps6H/jWIn/Trit from prior sessions; not newly introduced.'
+    - title: 'Minor: running the integration suite leaves s'
+      id: MVL1
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] Minor: running the integration suite leaves stray .ai-sandbox.<instance>.log files in the repo root not covered by .gitignore''s /.ai-sandbox*.startup.log pattern — a latent gitignore gap in the existing test suite design, not introduced by this task.'
