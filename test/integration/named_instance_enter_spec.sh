@@ -5,7 +5,7 @@ Describe 'Named-instance enter' integration
   # sandbox started by container_spec.sh or the "credtest" instance started
   # by clean_container_spec.sh when both run in the same session.
   create_instance() {
-    ./bin/ai-sandbox.sh create enter-test --mode static --clean --quiet \
+    ./bin/ai-sandbox.sh instances create enter-test --mode static --clean --quiet \
       2> ./.ai-sandbox.enter-test.log || {
       cat ./.ai-sandbox.enter-test.log >&2
       echo "Named instance 'enter-test' failed to be created" >&2
