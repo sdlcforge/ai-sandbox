@@ -40,3 +40,8 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] A separate, already-tracked qecho()/QUIET inversion bug (sibling branch 2026-07-10-fix-quiet-stdout-leak-and-stat is actively addressing it) leaks a ''Checking docker is running...'' line onto stdout regardless of --quiet, breaking several exact-match assertions in container_spec.sh.'
+    - title: Recommend a follow-up task to modernize docke
+      id: Ia7w
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] Recommend a follow-up task to modernize docker_proxy_spec.sh/clean_container_spec.sh/lifecycle_spec.sh to the current CLI grammar so make test.integration can pass as a whole again.'
