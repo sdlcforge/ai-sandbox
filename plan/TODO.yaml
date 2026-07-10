@@ -31,6 +31,16 @@ phases:
             commit:
                 - 55b05fe
             merge: 4f9708dfa7e7441f4dd3ab2ef6a26f954a5ae5ed
+        - number: 3
+          slug: fix-capability-loss-on-profile-drop
+          title: Fix Capability Loss When Restore Drops An Unresolvable Profile
+          path: phase-01-fix-orphaned-sidecar-teardown/003-fix-capability-loss-on-profile-drop.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
     - number: 2
       slug: doc-updates
       title: Documentation Updates
