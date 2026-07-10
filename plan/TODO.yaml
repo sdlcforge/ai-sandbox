@@ -11,7 +11,7 @@ phases:
           slug: restore-config-for-teardown-commands
           title: Restore Config For Teardown Commands
           path: phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: 'Root cause: src/index.sh only called restore_saved_config() for CMD == start|enter, so every other per-instance command (delete, clean, stop, fix-ssh, etc.) ran with whatever --profile flags (usually none) the invocation passed, silently dropping the persisted docker capability and its proxy sidecar/network from that invocation''s compose-file assembly. Fixed by extracting a should_restore_config() predicate (true for every reachable CMD except create) and broadening the call site to use it. Also fixed a related missing -p "${COMPOSE_PROJECT}" flag on do_build() and fix_ssh()''s compose invocations. Verified via from-scratch reproduction against the pre-fix commit that the new integration tests actually fail without the fix and pass with it.'
           git:
