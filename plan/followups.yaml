@@ -75,3 +75,8 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md] Pre-existing, out-of-scope latent bug noticed during validation: do_create() (src/create.sh) is invoked as do_create || exit $? in src/index.sh; under bash''s documented set -e exception for compound commands used as the left side of ||, this suppresses errexit for the entire do_create() function body — so a real failure inside it (e.g. docker compose up -d failing due to a container-name conflict, which was hit once during validation from an unrelated concurrent sibling test run) is silently swallowed and do_create() still prints "Sandbox ''...'' created and started." This is unrelated to this task''s diff and was not touched; surfacing it for awareness since it could mask real creation failures.'
+    - title: Environmental/test-infrastructure observation
+      id: DvGv
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md] Environmental/test-infrastructure observation: the docker-capable integration suite shares a single, non-project-scoped, fixed container name (ai-sandbox-docker-proxy) across the whole suite and across any concurrently-running ai-sandbox worktree/branch on the same Docker daemon. During validation, a sibling task''s concurrent make test.integration run (a different worktree, 2026-07-10-lockdown-egress) transiently collided with the new test via that shared name; the window was waited out and retried successfully. Not a defect in this change, but worth the manager''s awareness for future parallel-dispatch runs against a shared Docker daemon.'
