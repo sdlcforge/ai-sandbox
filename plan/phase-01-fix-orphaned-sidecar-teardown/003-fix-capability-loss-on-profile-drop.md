@@ -191,3 +191,64 @@ architectural_impact: true
 - After the `EFFECTIVE_PROXY` label-fallback fix lands in `src/utils.sh`/`src/index.sh`.
 - After the new live-Docker integration test is written and A/B-verified.
 - After confirming task 001's own integration suite still passes unmodified.
+
+## Status
+
+**Outcome:** succeeded. Date: 2026-07-10.
+
+- Requirement 1 (capability loss on profile drop): added `is_docker_proxy_label_true()`
+  (`src/utils.sh`) — a single-field `docker inspect` of the persisted
+  `ai.sandbox.docker-proxy` label, naturally scoped to "a container already
+  exists" because the inspect itself fails (and the function returns false)
+  when no container exists for `SANDBOX_NAME`, so no separate
+  `is_container_running_or_stopped()` round trip was needed. Wired into
+  `src/index.sh`'s `EFFECTIVE_PROXY` computation immediately after the
+  existing `profile_has_capability docker` check: only forces
+  `EFFECTIVE_PROXY=true` when the current resolution says `false` and the
+  label says `true` (the one required direction; the reverse is left alone
+  per the task doc). No existing "nearby" multi-field `docker inspect` call
+  could be reused for this without over-complicating scope (the only nearby
+  inspect, inside `restore_saved_config()`, is conditionally skipped
+  whenever `CONFIG_FLAGS_PROVIDED=true`, which would miss the
+  directly-provided-`--profile`-flag drift scenario the task doc also calls
+  out), so a new single-purpose inspect was added instead — see
+  `decisions_made` in the structured report for the full reasoning.
+- Requirement 2 (live-Docker integration test): added
+  `test/integration/docker_proxy_dropped_profile_spec.sh` — creates a
+  docker-capable instance via a throwaway project-local custom profile
+  (`./profiles/td-capdrop-docker.yaml`), deletes the profile file to
+  simulate it becoming unresolvable, then runs `delete` with no `--profile`
+  flag and asserts success, the drop warning, and no orphaned sidecar
+  container/network. Confirmed via A/B against a disposable detached
+  `git worktree` at task 002's merge commit (`4f9708d`): the new test FAILS
+  there (2 of 3 examples: orphaned `ai-sandbox-docker-proxy` container and
+  `docker-proxy` network both left behind) and PASSES in this worktree
+  post-fix (3 of 3). Also added unit-level coverage: an
+  `is_docker_proxy_label_true()` `Describe` block and an end-to-end
+  `When run script`-based `Describe` block (mocked `docker`, mirroring task
+  002's own unit-test pattern) covering `delete`/`stop`/`clean`.
+- Requirement 3 (symlinked-profile false-positive drop, optional): took the
+  minimum documented option — added a one-line comment on
+  `restore_saved_config()`'s validation block (`src/utils.sh`) noting the
+  divergence from `bin/profile-installer.js`'s symlink-following
+  `findProfile()`. No behavior change (deliberately out of scope per the
+  task doc's "optional" framing).
+- Validation: `make build`, `make lint` (shellcheck clean, no new
+  `# shellcheck disable`s needed), `make test.unit` (229 examples, 0
+  failures, including the new/updated ones) all green.
+  `test/integration/docker_proxy_dropped_profile_spec.sh` and
+  `test/integration/docker_proxy_teardown_spec.sh` (task 001's suite, run
+  together, 13 examples) both pass with a live Docker daemon
+  (`AI_SANDBOX_SKIP_PLUGIN_CHECK=1` to clear the host-side plugin-conflict
+  preflight). Confirmed no leftover `ai-sandbox-docker-proxy` container or
+  `*_docker-proxy` network after both suites via `docker ps -a` /
+  `docker network ls`. Grep-verified the existing `ARGS[@]+`
+  nounset-safe-expansion pattern in `src/index.sh` is unchanged and intact
+  around the edited `EFFECTIVE_PROXY` block.
+- Full `make test.integration` (whole suite, not just the two files above)
+  shows 25 pre-existing failures + 2 errors + 2 warnings unrelated to this
+  task (`lifecycle_spec.sh`, `container_spec.sh`, `clean_container_spec.sh`,
+  `docker_proxy_spec.sh`) — confirmed identical in nature and count against
+  the task 002 merge-commit baseline in the same disposable worktree, so
+  these are a pre-existing local-environment issue, not a regression
+  introduced here. See `flagged_for_manager` in the structured report.

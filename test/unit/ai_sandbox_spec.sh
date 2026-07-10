@@ -113,6 +113,49 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'is_docker_proxy_label_true()'
+    # Unit coverage for the authoritative-label fallback this task adds to
+    # src/index.sh's EFFECTIVE_PROXY computation (phase-01/003). See the
+    # 'command dispatch: dropped custom profile' Describe block below for the
+    # end-to-end regression coverage of the actual EFFECTIVE_PROXY fallback
+    # behavior this function backs.
+    It 'returns success when the persisted label is "true"'
+      SANDBOX_NAME="test"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo "true"; return 0; fi
+      }
+      When call is_docker_proxy_label_true
+      The status should be success
+    End
+
+    It 'returns failure when the persisted label is "false"'
+      SANDBOX_NAME="test"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo "false"; return 0; fi
+      }
+      When call is_docker_proxy_label_true
+      The status should be failure
+    End
+
+    It 'returns failure when the label is absent (empty output, e.g. pre-label container)'
+      SANDBOX_NAME="test"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo ""; return 0; fi
+      }
+      When call is_docker_proxy_label_true
+      The status should be failure
+    End
+
+    It 'returns failure when no container exists (inspect fails) -- naturally scopes the fallback off of create'
+      SANDBOX_NAME="test"
+      docker() {
+        if [ "$1" = "inspect" ]; then return 1; fi
+      }
+      When call is_docker_proxy_label_true
+      The status should be failure
+    End
+  End
+
   Describe 'ensure_image()'
     setup() {
       export TOOL_CACHE_DIR="$(mktemp -d)"
@@ -2497,6 +2540,101 @@ MOCK_DOCKER
       The output should include 'confirmed.'
       The stderr should include "dropping restored profile 'ghost-profile'"
       The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' down'
+    End
+  End
+
+  Describe 'command dispatch: dropped custom profile that provided the docker capability does not orphan the sidecar (regression: EFFECTIVE_PROXY label fallback, phase-01/003)'
+    # End-to-end regression coverage for task doc requirement 1
+    # (plan/phase-01-fix-orphaned-sidecar-teardown/003-fix-capability-loss-on-profile-drop.md).
+    # Same setup as the "teardown commands survive an unresolvable restored
+    # profile" Describe block above (restore_saved_config() drops
+    # "ghost-profile", falling back to the default [base, mirror]
+    # composition, which has no docker capability), but here the container's
+    # persisted ai.sandbox.docker-proxy label is also mocked as "true" --
+    # recording that the instance *was* created with the docker capability
+    # via that now-unresolvable profile. Without this task's fix,
+    # EFFECTIVE_PROXY silently recomputes to false and COMPOSE_FILES omits
+    # docker-compose.proxy.yaml, leaving the docker-socket-proxy sidecar
+    # orphaned (delete/clean) or left running (stop) -- the same bug class
+    # task 001 fixed, reintroduced in this narrower scenario.
+    setup() {
+      DISPATCH_WORK_DIR="$(mktemp -d)"
+      export XDG_CACHE_HOME="${DISPATCH_WORK_DIR}/cache"
+      DISPATCH_MOCK_BIN="${DISPATCH_WORK_DIR}/mockbin"
+      mkdir -p "${DISPATCH_MOCK_BIN}"
+      DISPATCH_DOCKER_LOG="${DISPATCH_WORK_DIR}/docker_calls.log"
+      : > "${DISPATCH_DOCKER_LOG}"
+      export DISPATCH_DOCKER_LOG
+      # Persisted ai.sandbox.config label: profiles=["ghost-profile"], a name
+      # that does not resolve to any file under ./profiles,
+      # ${XDG_CONFIG_HOME:-$HOME/.config}/ai-sandbox/profiles, or this repo's
+      # bundled profiles/ dir -- so it gets dropped, and PROFILES falls back
+      # to the default [base, mirror] composition (no docker capability).
+      config_json='{"version":1,"profiles":["ghost-profile"],"mode":"","no_isolate_config":false,"clean_slate":false,"marketplaces":[],"plugins":[],"enable_all_plugins":false}'
+      config_b64="$(printf '%s' "${config_json}" | base64 | tr -d '\n')"
+      export DISPATCH_CONFIG_B64="${config_b64}"
+      cat > "${DISPATCH_MOCK_BIN}/docker" <<'MOCK_DOCKER'
+#!/bin/bash
+printf '%s\n' "$*" >> "${DISPATCH_DOCKER_LOG}"
+case "$1" in
+  info) exit 0 ;;
+  ps) echo "ai-sandbox-dispatchtest"; exit 0 ;;
+  inspect)
+    if [[ "$*" == *"ai.sandbox.config"* ]]; then
+      echo "${DISPATCH_CONFIG_B64}"
+    elif [[ "$*" == *"docker-proxy"* ]]; then
+      # Instance was created with the docker capability (via the
+      # now-dropped "ghost-profile"); the label persists independent of
+      # whether that profile still resolves.
+      echo "true"
+    elif [[ "$*" == *"State.Status"* ]]; then
+      # Reported as exited (not running) so delete/stop/clean skip the
+      # interactive confirm_stop_running() prompt.
+      echo "exited"
+    fi
+    exit 0
+    ;;
+  *) exit 0 ;;
+esac
+MOCK_DOCKER
+      chmod +x "${DISPATCH_MOCK_BIN}/docker"
+      export PATH="${DISPATCH_MOCK_BIN}:${PATH}"
+      export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
+    }
+    cleanup() {
+      rm -rf "${DISPATCH_WORK_DIR}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'includes docker-compose.proxy.yaml in the down call for delete (no --profile flag) despite the dropped profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest delete
+      The status should be success
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The output should include "deleted"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'docker-compose.proxy.yaml'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' down'
+    End
+
+    It 'includes docker-compose.proxy.yaml in the stop call for stop (no --profile flag) despite the dropped profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest stop
+      The status should be success
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The output should include "stopped"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'docker-compose.proxy.yaml'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' stop'
+    End
+
+    It 'includes docker-compose.proxy.yaml in the down call for clean (no --profile flag) despite the dropped profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest clean
+      The status should be success
+      The output should include 'confirmed.'
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'docker-compose.proxy.yaml'
       The contents of file "${DISPATCH_DOCKER_LOG}" should include ' down'
     End
   End

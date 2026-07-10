@@ -277,6 +277,30 @@ if profile_has_capability docker; then
 else
   EFFECTIVE_PROXY=false
 fi
+
+# Fallback: the computation above only reflects *this invocation's* profile
+# resolution, which can drift from the instance's actual persisted
+# composition -- e.g. restore_saved_config() (src/utils.sh) drops a restored
+# profile name that no longer resolves (task 002's graceful-degradation
+# fix), or a directly-provided --profile flag names a profile that has since
+# lost the docker capability it once had. When that drift silently flips a
+# docker-capable instance's EFFECTIVE_PROXY to false, COMPOSE_FILES below
+# omits docker-compose.proxy.yaml and delete/stop/clean leave the
+# docker-socket-proxy sidecar orphaned (or, for stop, left running) -- the
+# exact orphaned-sidecar bug this codebase exists to prevent, reintroduced in
+# a narrower scenario. Use the container's own persisted
+# ai.sandbox.docker-proxy label (docker/docker-compose.yaml) as an
+# authoritative fallback, independent of profile resolution:
+# is_docker_proxy_label_true() (src/utils.sh) is naturally scoped to "a
+# container already exists" (its docker inspect fails, and so it returns
+# false, when SANDBOX_NAME has no container yet -- e.g. `create`), so no
+# separate existence guard is needed here. Only the "label true, current
+# false" direction is forced: the reverse (label false, current resolution
+# true) is not a regression risk -- an invocation that correctly resolves the
+# docker capability today should get it.
+if [ "${EFFECTIVE_PROXY}" != "true" ] && is_docker_proxy_label_true; then
+  EFFECTIVE_PROXY=true
+fi
 export EFFECTIVE_PROXY NO_ISOLATE_CONFIG
 
 # Extract plugin-marketplace configuration for container passthrough.

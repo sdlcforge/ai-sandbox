@@ -107,6 +107,27 @@ function is_container_running() {
     [ "${state}" = "running" ]
 }
 
+# Return 0 if the current SANDBOX_NAME's container has a persisted
+# ai.sandbox.docker-proxy label (docker/docker-compose.yaml) of "true", 1
+# otherwise (label absent/false, or no container exists yet). Single-field
+# docker inspect -- the inspect itself fails when no container exists for
+# SANDBOX_NAME, and that failure is treated as "false" via `|| return 1`, so
+# this is naturally scoped to "a container already exists" (mirroring
+# is_container_running_or_stopped()'s guard semantics) without a second,
+# separate existence-check round trip.
+#
+# Used as an authoritative fallback for EFFECTIVE_PROXY (src/index.sh) when
+# this invocation's profile resolution would otherwise say the docker
+# capability is absent, even though the instance was actually created with
+# it -- see that call site's comment for the full rationale.
+function is_docker_proxy_label_true() {
+    local label
+    label="$(docker inspect -f \
+        '{{index .Config.Labels "ai.sandbox.docker-proxy"}}' \
+        "$(sandbox_container_name)" 2>/dev/null)" || return 1
+    [ "${label}" = "true" ]
+}
+
 # Return 0 if the named capability is present in PROFILE_CAPABILITIES (a
 # space-separated list), 1 otherwise. Matches whole tokens, not substrings.
 # $1 — capability name to test for.
@@ -231,6 +252,14 @@ function restore_saved_config() {
             # PROFILES stays unset and profile-installer.js falls back to its
             # own default-profile resolution (config.yaml, else [base,
             # mirror]) instead of failing.
+            #
+            # Note: profile_exists() deliberately rejects symlinked profile
+            # files (src/profiles.sh) as a security guard, while
+            # bin/profile-installer.js's findProfile() follows symlinks and
+            # would load the same path -- so a restored name that only
+            # resolves via a symlink is spuriously dropped here even though
+            # profile-installer.js would have loaded it fine. Safe direction
+            # (over-conservative fallback, not a crash); left as-is.
             local _restored_profiles _validated_profiles=() _prof
             IFS='|' read -ra _restored_profiles <<< "${saved_profiles}"
             for _prof in "${_restored_profiles[@]}"; do
