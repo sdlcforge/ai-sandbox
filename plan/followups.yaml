@@ -70,3 +70,8 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-01-fix-orphaned-sidecar-teardown/003-fix-capability-loss-on-profile-drop.md] gitignore gap: .ai-sandbox.<name>.log files from integration test create_* helpers aren''t covered by .gitignore''s narrower pattern — same latent gap noted by task 002, not touched here either.'
+    - title: Pre-existing, out-of-scope latent bug noticed
+      id: 1C2m
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md] Pre-existing, out-of-scope latent bug noticed during validation: do_create() (src/create.sh) is invoked as do_create || exit $? in src/index.sh; under bash''s documented set -e exception for compound commands used as the left side of ||, this suppresses errexit for the entire do_create() function body — so a real failure inside it (e.g. docker compose up -d failing due to a container-name conflict, which was hit once during validation from an unrelated concurrent sibling test run) is silently swallowed and do_create() still prints "Sandbox ''...'' created and started." This is unrelated to this task''s diff and was not touched; surfacing it for awareness since it could mask real creation failures.'
