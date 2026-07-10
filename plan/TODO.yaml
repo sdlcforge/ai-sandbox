@@ -39,7 +39,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-03-fix-capability-loss-on-profile
-            commit: []
+            commit:
+                - cc12d8d
             merge: null
     - number: 2
       slug: doc-updates
