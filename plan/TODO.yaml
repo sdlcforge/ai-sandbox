@@ -30,7 +30,7 @@ phases:
             branch: phase-01-task-02-fix-review-regressions
             commit:
                 - 55b05fe
-            merge: null
+            merge: 4f9708dfa7e7441f4dd3ab2ef6a26f954a5ae5ed
     - number: 2
       slug: doc-updates
       title: Documentation Updates
