@@ -15,3 +15,8 @@ items:
       date: "2026-07-09"
       tag: docs-and-help
       text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] src/help.sh''s per-instance commands list and architecture.md''s step-11 dispatch-word enumeration both omit the ''up'' word (present in PER_INSTANCE_COMMANDS) — this gap predates the CLI restructure entirely (never documented before either) and was out of this task''s named scope.'
+    - title: sandbox-volumes tests fail on ~/.config drift
+      id: Jis0
+      date: "2026-07-10"
+      tag: fix-quiet-stdout-leak-and-status-failures
+      text: 'Discovered while fixing followups Trit/zSwd, out of scope for those. test/integration/container_spec.sh''s "sandbox-volumes reports clean status on an untouched overlay" (line 51) and "sandbox-volumes shows a diff for the drifted path" (line 68) fail because they mount and diff the real host ~/.config (mirror mode) and assume it''s pristine on a fresh container boot. On the dev machine this ran on, ~/.config legitimately contains drift-triggering content unrelated to any test action (e.g. iterm2/sockets/secrets being a live socket, dangling node_modules symlinks) — confirmed by running `sandbox-volumes diff "$HOME/.config"` against a brand-new container immediately after boot, before any test executes user-exec. Fixing this requires a design decision: should sandbox-volumes ignore certain classes of pre-existing drift, should this test target an isolated scratch $XDG_CONFIG_HOME instead of the real one, or should CI run against a throwaway home directory? Needs manager/user input before implementation.'
