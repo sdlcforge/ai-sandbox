@@ -43,6 +43,16 @@ phases:
             commit:
                 - cc12d8d
             merge: 4fa1bc2912d87b242f5524579cb3e3e1eb8b92a9
+        - number: 4
+          slug: scope-proxy-label-fallback
+          title: Scope Proxy-Label Fallback To Teardown Commands Only
+          path: phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
     - number: 2
       slug: doc-updates
       title: Documentation Updates
