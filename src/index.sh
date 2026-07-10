@@ -127,12 +127,17 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 PROJECT_ROOT="$(cd -P "${SCRIPT_DIR}/.." && pwd)"
 
-# --- Phase: restore saved config for start/enter (no config flags) ---
-# When start/enter is called without any config-changing flags, read the
-# profiles/mode/clean-slate settings that were saved at `create` time so the
-# container restarts with its original composition without requiring the user
-# to re-specify --profile/--mode/--clean flags each time.
-if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
+# --- Phase: restore saved config for every per-instance command except create (no config flags) ---
+# When any per-instance command other than `create` is called without any
+# config-changing flags, read the profiles/mode/clean-slate settings that
+# were saved at `create` time so this invocation's compose-file assembly
+# reflects the instance's actual persisted composition (e.g. the `docker`
+# capability / proxy sidecar) instead of just whatever --profile flags
+# (usually none) this particular invocation passed. should_restore_config()
+# excludes only `create`, which provisions fresh state and has no prior
+# config to restore. See should_restore_config()'s doc comment (src/utils.sh)
+# for the full rationale.
+if should_restore_config "${CMD}"; then
     restore_saved_config
 fi
 
