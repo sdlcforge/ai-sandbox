@@ -25,6 +25,7 @@ phases:
           path: phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md
           done: false
           tier: sonnet-high
+          digest: 'Fixed both review-flagged regressions from task 001''s restore-broadening. Requirement 1: restore_saved_config() now re-validates each restored profile name against profile_exists() before trusting it, dropping unresolvable names with a warning instead of letting bin/profile-installer.js hard-die() and abort delete/stop/clean/etc. before dispatch. Requirement 2: added fix-ssh to src/index.sh''s credential-snapshot CMD guard so a restored CLEAN_SLATE=true correctly triggers credential capture before COMPOSE_FILES assembly picks the claude-auth overlay, preventing --force-recreate from destroying credentials with nothing to replace them. Both fixes are minimal, mirror existing codebase patterns, and are backed by 6 new regression tests A/B-verified against task 001''s merge commit. Full unit suite (222 examples) and the orphaned-sidecar integration suite (10 examples) are green; unrelated pre-existing integration failures confirmed identical before and after this diff.'
           git:
             branch: phase-01-task-02-fix-review-regressions
             commit:
