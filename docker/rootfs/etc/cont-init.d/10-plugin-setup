@@ -53,7 +53,10 @@ if [ -n "${AI_SANDBOX_MARKETPLACES:-}" ]; then
     done
 fi
 
-# Enable individual plugins (pipe-separated).
+# Install (and thereby enable) individual plugins (pipe-separated). "install"
+# is used rather than "enable" because "enable" only works on a plugin that is
+# already installed but currently disabled -- a plugin named solely via
+# --enable-plugin has never been installed, so "enable" always fails for it.
 if [ -n "${AI_SANDBOX_PLUGINS:-}" ]; then
     _copy="${AI_SANDBOX_PLUGINS}"
     while [ -n "${_copy}" ]; do
@@ -69,7 +72,7 @@ if [ -n "${AI_SANDBOX_PLUGINS:-}" ]; then
             printf '[10-plugin-setup] plugin already enabled: %s\n' "${_plugin}"
         else
             printf '[10-plugin-setup] enabling plugin: %s\n' "${_plugin}"
-            _run "${CLAUDE_BIN}" plugins enable "${_plugin}" 2>&1 \
+            _run "${CLAUDE_BIN}" plugins install "${_plugin}" 2>&1 \
                 || printf '[10-plugin-setup] warn: failed to enable plugin: %s\n' \
                     "${_plugin}" >&2
         fi

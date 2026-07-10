@@ -1,0 +1,14 @@
+{
+  "name": "hello-world-marketplace",
+  "owner": {
+    "name": "ai-sandbox test fixtures"
+  },
+  "plugins": [
+    {
+      "name": "hello-world",
+      "description": "Trivial test plugin exercising --add-marketplace/--enable-plugin end to end",
+      "version": "0.0.1",
+      "source": "./plugins/hello-world"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "name": "hello-world",
+  "version": "0.0.1",
+  "description": "Trivial test plugin exercising --add-marketplace/--enable-plugin end to end"
+}
