@@ -50,3 +50,8 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] The task doc''s requirement 2 offered ''have fix_ssh() itself call ensure_clean_slate_credentials()'' as an alternative mechanism; as implemented it would not actually fix the bug since COMPOSE_FILES is already finalized by the time fix_ssh() runs. Worth correcting in the phase''s design notes if this option gets referenced again elsewhere.'
+    - title: Pre-existing integration test failures unrela
+      id: fXCK
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] Pre-existing integration test failures unrelated to this task (clean_container_spec.sh, container_spec.sh, docker_proxy_spec.sh, lifecycle_spec.sh) confirmed identical at task 001''s baseline — same class already tracked via followups AQag/ps6H/jWIn/Trit from prior sessions; not newly introduced.'
