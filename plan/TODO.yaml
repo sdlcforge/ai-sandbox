@@ -5,4 +5,14 @@ phases:
     - number: 1
       slug: fix-orphaned-sidecar-teardown
       title: Fix Orphaned Sidecar Teardown
-      tasks: []
+      tasks:
+        - number: 1
+          slug: restore-config-for-teardown-commands
+          title: Restore Config For Teardown Commands
+          path: phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
