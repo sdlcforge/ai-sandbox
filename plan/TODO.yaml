@@ -42,7 +42,7 @@ phases:
             branch: phase-01-task-03-fix-capability-loss-on-profile
             commit:
                 - cc12d8d
-            merge: null
+            merge: 4fa1bc2912d87b242f5524579cb3e3e1eb8b92a9
     - number: 2
       slug: doc-updates
       title: Documentation Updates
