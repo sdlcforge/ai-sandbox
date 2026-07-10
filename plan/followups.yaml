@@ -65,3 +65,8 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-01-fix-orphaned-sidecar-teardown/003-fix-capability-loss-on-profile-drop.md] Full make test.integration shows 25 pre-existing failures/2 errors/2 warnings in lifecycle_spec.sh, container_spec.sh, clean_container_spec.sh, docker_proxy_spec.sh — confirmed identical against a baseline at task 002''s merge commit, so pre-existing and unrelated to this task, not a regression.'
+    - title: 'gitignore gap: .ai-sandbox.<name>.log files f'
+      id: 68bH
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/003-fix-capability-loss-on-profile-drop.md] gitignore gap: .ai-sandbox.<name>.log files from integration test create_* helpers aren''t covered by .gitignore''s narrower pattern — same latent gap noted by task 002, not touched here either.'
