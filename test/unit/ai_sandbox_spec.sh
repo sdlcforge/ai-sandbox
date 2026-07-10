@@ -370,6 +370,82 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'should_force_proxy_label_fallback()'
+    # Regression coverage for phase-01/004 (scoping task 003's EFFECTIVE_PROXY
+    # label fallback down to only the teardown/preserve commands where the
+    # orphaned-sidecar bug actually manifests). The third phase-1 gate review
+    # found task 003's fallback applied unconditionally to every per-instance
+    # CMD, including start/enter, which meant an explicit, user-confirmed
+    # --profile change removing the docker capability was silently reverted --
+    # violating docs/architecture.md's "Matches" subsection ("explicit
+    # invocation always wins" invariant). Only stop/delete/clean/fix-ssh may
+    # trigger the fallback; every other reachable CMD value must not.
+    It 'returns true for CMD=stop'
+      When call should_force_proxy_label_fallback stop
+      The status should be success
+    End
+
+    It 'returns true for CMD=delete'
+      When call should_force_proxy_label_fallback delete
+      The status should be success
+    End
+
+    It 'returns true for CMD=clean'
+      When call should_force_proxy_label_fallback clean
+      The status should be success
+    End
+
+    It 'returns true for CMD=fix-ssh'
+      When call should_force_proxy_label_fallback fix-ssh
+      The status should be success
+    End
+
+    It 'returns false for CMD=start (explicit profile change must take effect)'
+      When call should_force_proxy_label_fallback start
+      The status should be failure
+    End
+
+    It 'returns false for CMD=enter (explicit profile change must take effect)'
+      When call should_force_proxy_label_fallback enter
+      The status should be failure
+    End
+
+    It 'returns false for CMD=up'
+      When call should_force_proxy_label_fallback up
+      The status should be failure
+    End
+
+    It 'returns false for CMD=create (no prior container to read a label from)'
+      When call should_force_proxy_label_fallback create
+      The status should be failure
+    End
+
+    It 'returns false for CMD=detail (do_status() never consumes EFFECTIVE_PROXY)'
+      When call should_force_proxy_label_fallback detail
+      The status should be failure
+    End
+
+    It 'returns false for CMD=build'
+      When call should_force_proxy_label_fallback build
+      The status should be failure
+    End
+
+    It 'returns false for CMD=user-exec'
+      When call should_force_proxy_label_fallback user-exec
+      The status should be failure
+    End
+
+    It 'returns false for CMD=root-exec'
+      When call should_force_proxy_label_fallback root-exec
+      The status should be failure
+    End
+
+    It 'returns false for CMD=attach'
+      When call should_force_proxy_label_fallback attach
+      The status should be failure
+    End
+  End
+
   Describe 'restore_saved_config()'
     # Helper: base64-encode a config-input JSON payload exactly as
     # src/index.sh's assembly block does, for use as the mocked

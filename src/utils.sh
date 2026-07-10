@@ -169,6 +169,43 @@ function should_restore_config() {
     [ "${1:-}" != "create" ]
 }
 
+# Return 0 (true) if src/index.sh's EFFECTIVE_PROXY label-fallback block
+# (the container's persisted ai.sandbox.docker-proxy label overriding this
+# invocation's profile-resolved EFFECTIVE_PROXY from false to true) should
+# apply for the given CMD, 1 (false) otherwise.
+#
+# The orphaned-sidecar bug that fallback protects against (phase-01/003) only
+# ever manifests on the four commands that can act on an *existing* instance
+# without necessarily re-specifying its original composition: stop/delete/
+# clean (whose `docker compose ... stop`/`down` calls silently drop the proxy
+# sidecar/network from their compose-file list when EFFECTIVE_PROXY
+# incorrectly resolves false) and fix-ssh (whose --force-recreate would drop
+# DOCKER_HOST from the recreated container). Every other per-instance CMD --
+# most importantly start/enter, but also up/the docker-compose passthrough/
+# create/detail/build/user-exec/root-exec/attach -- must NOT apply the
+# fallback: those are exactly the commands whose documented purpose
+# (docs/architecture.md's "Matches" subsection, "explicit invocation always
+# wins") is to let an explicit, confirmed invocation change the container's
+# composition, including deliberately dropping the docker capability. Without
+# this scoping, an explicit `start --profile <non-docker>` on a docker-capable
+# instance would have the label fallback silently re-grant network access to
+# the docker-socket-proxy sidecar -- a documented container-escape vector
+# (docker/docker-compose.proxy.yaml) -- against the user's explicit intent,
+# with no way to actually remove the capability short of delete + create.
+#
+# create is excluded because it provisions fresh state (no prior container to
+# read a label from -- is_docker_proxy_label_true() would always return false
+# there anyway, via its own container-existence guard); detail is excluded
+# because do_status() never consumes EFFECTIVE_PROXY. Neither exclusion
+# changes behavior; both just skip a provably-wasted docker inspect call.
+# $1 -- the CMD value to test.
+function should_force_proxy_label_fallback() {
+    case "${1:-}" in
+        stop|delete|clean|fix-ssh) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # Restore PROFILES / MODE_OVERRIDE / NO_ISOLATE_CONFIG / CLEAN_SLATE /
 # CLI_MARKETPLACES / CLI_PLUGINS / CLI_ENABLE_ALL -- the complete seven-
 # dimension config-input record (see plan/notes/config-persistence-design.md)
