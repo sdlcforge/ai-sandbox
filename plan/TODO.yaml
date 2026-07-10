@@ -1,0 +1,8 @@
+slug: fix-orphaned-sidecar
+version: 1
+title: ""
+phases:
+    - number: 1
+      slug: fix-orphaned-sidecar-teardown
+      title: Fix Orphaned Sidecar Teardown
+      tasks: []
