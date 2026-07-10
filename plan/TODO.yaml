@@ -15,7 +15,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-01-restore-config-teardown-comman
-            commit: []
+            commit:
+                - c96efe2
             merge: null
     - number: 2
       slug: doc-updates
