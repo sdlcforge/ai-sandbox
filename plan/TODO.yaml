@@ -54,7 +54,7 @@ phases:
             branch: phase-01-task-04-scope-proxy-label-fallback
             commit:
                 - 716d157
-            merge: null
+            merge: a16c5c1ad79efb4f93f79e82a54c6b42f0ac8a70
     - number: 2
       slug: doc-updates
       title: Documentation Updates
