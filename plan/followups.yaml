@@ -15,11 +15,6 @@ items:
       date: "2026-07-09"
       tag: docs-and-help
       text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] src/help.sh''s per-instance commands list and architecture.md''s step-11 dispatch-word enumeration both omit the ''up'' word (present in PER_INSTANCE_COMMANDS) — this gap predates the CLI restructure entirely (never documented before either) and was out of this task''s named scope.'
-    - title: --quiet leaks docker-check output to stdout
-      id: Trit
-      date: "2026-07-10"
-      tag: fix-dockerfile-path-drift
-      text: Discovered while fixing followup J9mV (Dockerfile PATH drift), confirmed pre-existing on baseline via git stash A/B test — unrelated to that fix, out of scope for it. Under --quiet, several user-exec/root-exec invocations still print "Checking docker is running... confirmed." to stdout (src/utils.sh:42 area — qecho -n "Checking docker is running... " followed by an apparently un-guarded echo/print of "confirmed."). This pollutes stdout for tests using exact-match assertions (`The output should eq ...`), causing 10 failures in test/integration/container_spec.sh (sandbox-volumes status, Bun, User UID, Firewall rules, SSH agent forwarding, DEVCONTAINER env, Config isolation) plus similar failures observed in lifecycle_spec.sh, clean_container_spec.sh, and docker_proxy_spec.sh during a full `make test.integration` run. Needs investigation of the docker-running check path to properly gate the "confirmed." output behind QUIET.
     - title: 'Integration suite: BeforeAll/status failures'
       id: zSwd
       date: "2026-07-10"
