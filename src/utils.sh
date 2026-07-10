@@ -212,7 +212,37 @@ function restore_saved_config() {
         saved_enable_all="$(printf '%s' "${saved_config_json}" | jq -r 'if .enable_all_plugins == null then "" else (.enable_all_plugins | tostring) end' 2>/dev/null || true)"
 
         if [ -n "${saved_profiles}" ]; then
-            IFS='|' read -ra PROFILES <<< "${saved_profiles}"
+            # Re-validate that each restored profile name still resolves via
+            # the same three discovery locations profile-installer.js's
+            # findProfile() checks (profile_exists(), src/profiles.sh) --
+            # mirrors the marketplace-scheme re-validation a few lines below.
+            # A profile that resolved fine at `create` time can go stale
+            # later (deleted, renamed, or a project-local profile only
+            # resolvable relative to the create-time CWD). Without this
+            # check, restoring an unresolvable name verbatim makes
+            # bin/profile-installer.js's loadProfile() call die() ->
+            # process.exit(1), and src/index.sh's
+            # `PROFILE_INSTALLER_OUTPUT="$(node ...)" || exit $?` propagates
+            # that failure, hard-aborting the whole invocation before CMD
+            # dispatch is ever reached -- including delete/clean/stop, the
+            # exact commands a user needs when an instance is broken. Drop
+            # (with a warning) any entry that doesn't resolve, rather than
+            # restoring it verbatim; when every restored name is dropped,
+            # PROFILES stays unset and profile-installer.js falls back to its
+            # own default-profile resolution (config.yaml, else [base,
+            # mirror]) instead of failing.
+            local _restored_profiles _validated_profiles=() _prof
+            IFS='|' read -ra _restored_profiles <<< "${saved_profiles}"
+            for _prof in "${_restored_profiles[@]}"; do
+                if profile_exists "${_prof}"; then
+                    _validated_profiles+=("${_prof}")
+                else
+                    echo "Warning: dropping restored profile '${_prof}' -- no longer found in any search location (./profiles, \${XDG_CONFIG_HOME:-\$HOME/.config}/ai-sandbox/profiles, or the bundled profiles/ dir); falling back to default profile resolution" 1>&2
+                fi
+            done
+            if [ "${#_validated_profiles[@]}" -gt 0 ]; then
+                PROFILES=("${_validated_profiles[@]}")
+            fi
         fi
         if [ -n "${saved_mode}" ]; then
             MODE_OVERRIDE="${saved_mode}"
