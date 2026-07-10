@@ -37,6 +37,7 @@ phases:
           path: phase-01-fix-orphaned-sidecar-teardown/003-fix-capability-loss-on-profile-drop.md
           done: false
           tier: sonnet-high
+          digest: 'Closed the capability-loss-on-profile-drop gap left by task 002: EFFECTIVE_PROXY now falls back to the container''s persisted ai.sandbox.docker-proxy label whenever this invocation''s profile resolution would otherwise say the docker capability is absent but a container already exists — covering both restore_saved_config()''s profile-drop path and a directly-provided --profile flag naming a since-drifted profile. Added a live-Docker integration test using a throwaway custom profile deleted mid-flight, A/B-verified against task 002''s merge commit (fails pre-fix, passes post-fix). Re-ran task 001''s integration suite alongside the new file — all 13 examples across both files pass, no sidecar container/network left behind.'
           git:
             branch: phase-01-task-03-fix-capability-loss-on-profile
             commit:
