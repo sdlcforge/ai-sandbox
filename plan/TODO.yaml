@@ -5,6 +5,7 @@ phases:
     - number: 1
       slug: fix-orphaned-sidecar-teardown
       title: Fix Orphaned Sidecar Teardown
+      diff_base: 7c02e87dde4cc074d3889a3488f6d741e982bc0e
       tasks:
         - number: 1
           slug: restore-config-for-teardown-commands
