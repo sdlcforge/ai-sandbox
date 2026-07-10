@@ -25,3 +25,8 @@ items:
       date: "2026-07-10"
       tag: fix-dockerfile-path-drift
       text: 'Discovered while fixing followup J9mV, out of scope for that task — not investigated further. A full `make test.integration` run shows BeforeAll hook errors in clean_container_spec.sh and docker_proxy_spec.sh, and several lifecycle_spec.sh failures referencing "Error: ''status'' is not a known instance or profile". These look like separate, pre-existing test/CLI issues — possibly related to or compounding the same --quiet stdout-pollution bug (see sibling followup "--quiet leaks docker-check output to stdout"), or a separate `status` subcommand naming/resolution issue. Needs triage to determine root cause(s) and whether it''s one bug or several.'
+    - title: test/integration/docker_proxy_spec.sh and tes
+      id: AQag
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] test/integration/docker_proxy_spec.sh and test/integration/clean_container_spec.sh are currently broken, independent of this task: both invoke a CLI flag ordering (--profile docker start, --clean credtest start) that the current dispatch grammar rejects outright. Stale from an earlier CLI-grammar rewrite never propagated to these two spec files.'
