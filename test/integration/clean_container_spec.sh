@@ -5,7 +5,16 @@ Describe 'Clean-slate credential injection' integration
   # Uses a named sandbox ("credtest") to avoid colliding with the default
   # sandbox started by container_spec.sh when both run in the same session.
   start_clean_container() {
-    ./bin/ai-sandbox.sh --clean credtest start --quiet \
+    # 'credtest' is a brand-new name each run (AfterAll fully deletes it, not
+    # just stops it -- see stop_clean_container below), so it must be
+    # provisioned via 'instances create' rather than '<name> start':
+    # parse_options()'s Phase 3.5 verb-gating rejects any per-instance verb
+    # (including 'start') against a name that doesn't already resolve to an
+    # existing instance or profile ("... is not a known instance or
+    # profile"). 'instances create <name> [options]' is the only dispatch
+    # shape that provisions a brand-new name. See src/options.sh Phase 3.5
+    # and src/create.sh's do_create().
+    ./bin/ai-sandbox.sh instances create credtest --clean --quiet \
       2> ./.ai-sandbox.credtest.log || {
       cat ./.ai-sandbox.credtest.log >&2
       echo "Clean-slate container 'credtest' failed to become ready" >&2
@@ -13,7 +22,11 @@ Describe 'Clean-slate credential injection' integration
     }
   }
   stop_clean_container() {
-    ./bin/ai-sandbox.sh credtest stop --quiet 2>/dev/null || true
+    # Fully remove (not just stop) so a re-run of this suite finds no
+    # pre-existing 'credtest' instance and 'instances create' above succeeds
+    # again -- do_create() rejects a name collision with an existing
+    # instance, including one that is merely stopped/preserved.
+    ./bin/ai-sandbox.sh credtest delete --quiet --yes 2>/dev/null || true
   }
 
   BeforeAll 'start_clean_container'

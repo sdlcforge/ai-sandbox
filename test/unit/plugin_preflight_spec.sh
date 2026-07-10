@@ -48,10 +48,18 @@ JSON
   Describe 'check_host_plugin_conflicts()'
     It 'bypasses when AI_SANDBOX_SKIP_PLUGIN_CHECK=1'
       export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
-      QUIET=1
+      QUIET=0
       When call check_host_plugin_conflicts
       The status should be success
       The output should include 'Skipping'
+    End
+
+    It 'bypasses silently when AI_SANDBOX_SKIP_PLUGIN_CHECK=1 and QUIET=1'
+      export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
+      QUIET=1
+      When call check_host_plugin_conflicts
+      The status should be success
+      The output should eq ''
     End
   End
 
