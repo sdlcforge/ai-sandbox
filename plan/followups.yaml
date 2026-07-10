@@ -15,8 +15,3 @@ items:
       date: "2026-07-09"
       tag: docs-and-help
       text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] src/help.sh''s per-instance commands list and architecture.md''s step-11 dispatch-word enumeration both omit the ''up'' word (present in PER_INSTANCE_COMMANDS) — this gap predates the CLI restructure entirely (never documented before either) and was out of this task''s named scope.'
-    - title: 'Integration suite: BeforeAll/status failures'
-      id: zSwd
-      date: "2026-07-10"
-      tag: fix-dockerfile-path-drift
-      text: 'Discovered while fixing followup J9mV, out of scope for that task — not investigated further. A full `make test.integration` run shows BeforeAll hook errors in clean_container_spec.sh and docker_proxy_spec.sh, and several lifecycle_spec.sh failures referencing "Error: ''status'' is not a known instance or profile". These look like separate, pre-existing test/CLI issues — possibly related to or compounding the same --quiet stdout-pollution bug (see sibling followup "--quiet leaks docker-check output to stdout"), or a separate `status` subcommand naming/resolution issue. Needs triage to determine root cause(s) and whether it''s one bug or several.'
