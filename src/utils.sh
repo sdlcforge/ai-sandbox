@@ -4,7 +4,7 @@
 export QUIET=1 # default — overridden by parse_options
 
 function qecho() {
-    if [ ${QUIET} -ne 0 ]; then echo "$@"; fi
+    if [ ${QUIET} -eq 0 ]; then echo "$@"; fi
 }
 
 # Returns the container name for the current SANDBOX_NAME.

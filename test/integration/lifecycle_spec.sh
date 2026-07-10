@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2034 # ShellSpec's "The variable X should ..." reads locals via framework assertions, not direct references
 
 Describe 'Docker lifecycle' integration
   Include "$PWD/bin/ai-sandbox.sh"
@@ -10,15 +11,30 @@ Describe 'Docker lifecycle' integration
   AfterAll 'cleanup_containers'
 
   Describe 'cleanup_stale_container()'
+    # The anonymous/default instance's container is named "ai-sandbox-" (a
+    # trailing hyphen, from container_name: ai-sandbox-${SANDBOX_NAME} with an
+    # empty SANDBOX_NAME) under the current per-instance naming scheme -- see
+    # src/utils.sh's sandbox_container_name(). A bare "ai-sandbox" (no
+    # trailing hyphen) predates that scheme and is never matched by
+    # cleanup_stale_container()/`clean`.
     create_stale_container() {
-      docker create --name ai-sandbox ubuntu:latest >/dev/null 2>&1 || true
+      docker create --name "ai-sandbox-" ubuntu:latest >/dev/null 2>&1 || true
     }
     Before 'create_stale_container'
 
+    container_gone() {
+      ! docker inspect "ai-sandbox-" >/dev/null 2>&1
+    }
+
     It 'removes a stale (created but not started) container'
-      When call ./bin/ai-sandbox.sh clean
-      The output should include "deleted 'ai-sandbox'"
+      # `clean` doesn't print a per-container confirmation message today, so
+      # assert the observable side effect (the stale container is actually
+      # gone) rather than matching on output text.
+      ./bin/ai-sandbox.sh clean >/dev/null 2>&1
+      clean_status=$?
+      When call container_gone
       The status should be success
+      The variable clean_status should eq 0
     End
   End
 
@@ -31,7 +47,7 @@ Describe 'Docker lifecycle' integration
     Before 'start_fresh'
 
     It 'container is running'
-      When call ./bin/ai-sandbox.sh --quiet status
+      When call ./bin/ai-sandbox.sh --quiet detail
       The output should include 'running'
     End
   End
@@ -49,7 +65,7 @@ Describe 'Docker lifecycle' integration
     End
 
     It 'container is still running after second start'
-      When call ./bin/ai-sandbox.sh --quiet status
+      When call ./bin/ai-sandbox.sh --quiet detail
       The output should include 'running'
     End
   End
@@ -57,12 +73,16 @@ Describe 'Docker lifecycle' integration
   Describe 'stop'
     It 'removes the container with compose down'
       When call ./bin/ai-sandbox.sh --quiet --yes stop
-      The stderr should include "Container ai-sandbox Stopped"
+      # docker compose's own progress output names the container per
+      # container_name: ai-sandbox-${SANDBOX_NAME} (trailing hyphen for the
+      # empty/anonymous SANDBOX_NAME here) -- see src/utils.sh's
+      # sandbox_container_name().
+      The stderr should include "Container ai-sandbox- Stopped"
       The status should be success
     End
 
     It 'container is gone after down'
-      When call ./bin/ai-sandbox.sh --quiet status
+      When call ./bin/ai-sandbox.sh --quiet detail
       The output should include 'Container: stopped'
     End
   End

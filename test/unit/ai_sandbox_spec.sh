@@ -7,6 +7,7 @@ Describe 'ai-sandbox.sh'
 
   Describe 'check_docker()'
     It 'succeeds and prints confirmed when docker is running'
+      QUIET=0
       docker() { if [ "$1" = "info" ]; then return 0; fi; }
       When call check_docker
       The output should include 'confirmed.'
@@ -14,6 +15,7 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'fails and prints message arg when docker is not running'
+      QUIET=0
       docker() { if [ "$1" = "info" ]; then return 1; fi; }
       When call check_docker "starting..."
       The output should include 'starting...'
@@ -21,10 +23,19 @@ Describe 'ai-sandbox.sh'
     End
 
     It 'fails and prints default message when docker is not running and no arg'
+      QUIET=0
       docker() { if [ "$1" = "info" ]; then return 1; fi; }
       When call check_docker ""
       The output should include 'NOT running.'
       The status should be failure
+    End
+
+    It 'prints nothing when QUIET=1 (quiet mode)'
+      QUIET=1
+      docker() { if [ "$1" = "info" ]; then return 0; fi; }
+      When call check_docker
+      The output should eq ''
+      The status should be success
     End
   End
 
@@ -39,13 +50,20 @@ Describe 'ai-sandbox.sh'
     After 'cleanup'
 
     It 'downloads when file does not exist'
-      curl() { touch "$6"; return 0; }
+      QUIET=0
+      # Use the last positional arg (rather than a fixed "$6") for the
+      # destination path: QUIET=0 here routes download_tool() through its
+      # "curl -f -SL ... -o <dest>" (5-arg) branch rather than the default
+      # "curl --progress-bar ... -o <dest>" (6-arg) branch, so a fixed index
+      # would be wrong for one of the two branches.
+      curl() { touch "${!#}"; return 0; }
       When call download_tool "https://example.com/tool.tar.gz" "tool.tar.gz"
       The output should include 'Downloading tool.tar.gz'
       The status should be success
     End
 
     It 'skips when file already exists'
+      QUIET=0
       touch "${TOOL_CACHE_DIR}/tool.tar.gz"
       When call download_tool "https://example.com/tool.tar.gz" "tool.tar.gz"
       The output should include 'already exists'
@@ -126,6 +144,7 @@ Describe 'ai-sandbox.sh'
     After 'cleanup'
 
     It 'calls build when image not found'
+      QUIET=0
       built=false
       docker() {
         case "$1" in
@@ -1941,6 +1960,7 @@ Describe 'ai-sandbox.sh'
 
     It 'calls compose down when container is in dead state'
       SANDBOX_NAME="test"
+      QUIET=0
       downed=false
       docker() {
         case "$1" in
@@ -1962,6 +1982,7 @@ Describe 'ai-sandbox.sh'
 
     It 'falls back to docker rm -f when compose down fails'
       SANDBOX_NAME="test"
+      QUIET=0
       removed=false
       docker() {
         case "$1" in
@@ -2176,7 +2197,7 @@ MOCK_DOCKER
     It 'dispatches the generic passthrough branch without an unbound-variable error when no extra ARGS are given (regression: bare "<name> down")'
       When run script "$PWD/bin/ai-sandbox.sh" dispatchtest down
       The status should be success
-      The output should include 'confirmed.'
+      The output should eq ''
       The stderr should not include 'unbound variable'
       The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
     End
@@ -2184,7 +2205,7 @@ MOCK_DOCKER
     It 'dispatches user-exec without an unbound-variable error when no trailing command args are given'
       When run script "$PWD/bin/ai-sandbox.sh" dispatchtest user-exec
       The status should be success
-      The output should include 'confirmed.'
+      The output should eq ''
       The stderr should not include 'unbound variable'
       The contents of file "${DISPATCH_DOCKER_LOG}" should include 'exec -u'
     End
@@ -2192,7 +2213,7 @@ MOCK_DOCKER
     It 'dispatches root-exec without an unbound-variable error when no trailing command args are given'
       When run script "$PWD/bin/ai-sandbox.sh" dispatchtest root-exec
       The status should be success
-      The output should include 'confirmed.'
+      The output should eq ''
       The stderr should not include 'unbound variable'
       The contents of file "${DISPATCH_DOCKER_LOG}" should include 'exec -u root ai-sandbox'
     End
@@ -2200,7 +2221,7 @@ MOCK_DOCKER
     It 'still forwards trailing ARGS to user-exec unchanged (regression: the empty-array guard must not break the non-empty case)'
       When run script "$PWD/bin/ai-sandbox.sh" dispatchtest user-exec echo hi
       The status should be success
-      The output should include 'confirmed.'
+      The output should eq ''
       The contents of file "${DISPATCH_DOCKER_LOG}" should include 'exec -u'
       The contents of file "${DISPATCH_DOCKER_LOG}" should include 'ai-sandbox echo hi'
     End
@@ -2208,7 +2229,7 @@ MOCK_DOCKER
     It 'still forwards trailing ARGS to root-exec unchanged (regression: the empty-array guard must not break the non-empty case)'
       When run script "$PWD/bin/ai-sandbox.sh" dispatchtest root-exec echo hi
       The status should be success
-      The output should include 'confirmed.'
+      The output should eq ''
       The contents of file "${DISPATCH_DOCKER_LOG}" should include 'exec -u root ai-sandbox echo hi'
     End
   End
