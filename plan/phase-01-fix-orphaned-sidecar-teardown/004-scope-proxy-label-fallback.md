@@ -185,3 +185,77 @@ architectural_impact: true
   written and A/B-verified.
 - After confirming tasks 001's and 003's own integration suites still pass
   unmodified.
+
+## Status
+
+**Outcome:** succeeded — 2026-07-10.
+
+- Added `should_force_proxy_label_fallback()` to `src/utils.sh`, mirroring
+  `should_restore_config()`'s doc-comment style: returns true only for
+  `CMD` in `{stop, delete, clean, fix-ssh}`, false for everything else
+  (including `start`/`enter`/`up`/passthrough/`create`/`detail`/`build`/
+  `user-exec`/`root-exec`/`attach`).
+- Guarded the `EFFECTIVE_PROXY` label-fallback block in `src/index.sh` with
+  this predicate, and added a one-line `Warning: ...` to stderr (naming the
+  instance and the command) whenever the fallback actually flips
+  `EFFECTIVE_PROXY` from `false` to `true`.
+- Added a `should_force_proxy_label_fallback()` unit `Describe` block to
+  `test/unit/ai_sandbox_spec.sh` enumerating all reachable `CMD` values
+  (mirrors `should_restore_config()`'s existing block).
+- Added `test/integration/docker_proxy_explicit_profile_override_spec.sh`
+  for requirement 3 item 1 (start-with-explicit-non-docker-profile actually
+  drops the capability). **Decision on test level (per the task doc's
+  latitude):** chose a live-Docker integration test rather than a
+  mocked-docker unit-level `When run script` test. Reason: unlike
+  delete/stop/clean (task 002/003's existing dispatch tests), `CMD=start`
+  also triggers `resolve_and_download_tools()` (`src/tool-versions.sh`),
+  which shells out to several real upstream version-check endpoints via
+  `curl` under `set -euo pipefail`, each guarded by its own `||`-fallback
+  pipeline. Mocking that convincingly would add more incidental complexity
+  than it removes and risked masking a genuine `errexit`/`pipefail`
+  interaction behind an over-permissive mock, so the new test instead
+  follows this suite's existing live-Docker precedent (e.g.
+  `docker_proxy_teardown_spec.sh`, `docker_proxy_dropped_profile_spec.sh`).
+  It uses `start` (not `enter`, which additionally execs an interactive
+  shell) and asserts the outcome the fallback would otherwise have
+  overridden: the recreated container's own `ai.sandbox.docker-proxy`
+  label and the absence of `DOCKER_HOST`.
+- **A/B verification (task doc requirement 3, final paragraph):** using a
+  disposable detached `git worktree` at task 003's merge commit (`4fa1bc2`,
+  "Merge branch 'phase-01-task-03-fix-capability-loss-on-profile'"), with
+  the new spec file copied in (it doesn't exist at that commit): the test
+  **fails** there — `ai.sandbox.docker-proxy` label stays `"true"` and
+  `DOCKER_HOST` still resolves to the proxy after the explicit
+  `start --profile base` — reproducing exactly the bug this task fixes.
+  Re-run against this worktree's post-fix code, the same test **passes**.
+  Disposable worktree was removed after verification; no changes were made
+  to this worktree's committed history.
+- **Validation results:**
+  - `make build` — clean.
+  - `make lint` — clean (shellcheck, no new findings; no new
+    `# shellcheck disable` comments were needed).
+  - `make test.unit` — 242 examples, 0 failures (includes the 14 new
+    predicate examples).
+  - `test/integration/docker_proxy_teardown_spec.sh` (task 001) and
+    `test/integration/docker_proxy_dropped_profile_spec.sh` (task 003),
+    re-run together with the new file: 16 examples, 0 failures — both
+    existing suites unaffected.
+  - `test/integration/docker_proxy_explicit_profile_override_spec.sh` (new):
+    3 examples, 0 failures on its own, and A/B-verified per above.
+  - Grep-verified `${1:-}` (predicate arg) / `${CMD}` / `${SANDBOX_NAME}`
+    usage in the touched code remains correctly guarded under
+    `set -euo pipefail`; no new unset-variable exposure introduced.
+- Requirement 4 (amending `plan/phase-02-doc-updates/001-update-architecture-docs.md`
+  to cover tasks 002/003) was explicitly out of scope for this task's own
+  diff per the task doc and was not touched.
+- **Environmental note (not a defect in this change):** the docker-capable
+  integration suite in this repo shares a single, non-project-scoped,
+  fixed container name (`ai-sandbox-docker-proxy`, `docker/docker-compose.proxy.yaml`)
+  across the whole suite, and across any concurrently-running `ai-sandbox`
+  worktree on the same Docker daemon. During validation, a sibling task's
+  concurrent `test.integration` run (a different worktree/branch) transiently
+  collided with this task's new test via that shared name; the run was
+  retried once the sibling's window cleared and passed cleanly. This is a
+  pre-existing test-suite fragility (undocumented multi-worktree/concurrent-run
+  hazard), not something this task's `## Requirements` asked it to address;
+  flagged for the manager's awareness only.
