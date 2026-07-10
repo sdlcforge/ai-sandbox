@@ -122,7 +122,14 @@ Describe 'Container internals' integration
 
   Describe 'Claude Code'
     It 'is installed and on PATH'
-      When call ./bin/ai-sandbox.sh --quiet user-exec claude --version
+      # `sh -c`/bare argv `user-exec` does not pick up `claude` on PATH: the
+      # assembled Dockerfile actually used to build the image is
+      # docker/Dockerfile.base (see docker/scripts/assemble-dockerfile.sh),
+      # which only appends the .bun/bin/.local/bin/go/bin PATH additions to
+      # ~/.zshenv (no image-level `ENV PATH=...`). `zsh -c` picks it up
+      # because zsh always sources ~/.zshenv (even non-interactively),
+      # matching the sibling 'Bun'/'git-delta' tests' convention above.
+      When call ./bin/ai-sandbox.sh --quiet user-exec zsh -c "claude --version"
       The output should be present
       The status should be success
     End
