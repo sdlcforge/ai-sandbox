@@ -117,6 +117,7 @@ Describe 'ai-sandbox.sh'
     setup() {
       export TOOL_CACHE_DIR="$(mktemp -d)"
       export AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-test"
+      export COMPOSE_PROJECT="ai-sandbox-flow-rook"
       unset PROFILE_COMPOSITION_HASH
     }
     cleanup() {
@@ -137,6 +138,9 @@ Describe 'ai-sandbox.sh'
             ;;
           compose)
             shift
+            # do_build() now emits '-p "${COMPOSE_PROJECT}"' before
+            # ${COMPOSE_FILES} (regression: missing -p flag) -- skip it too.
+            [ "$1" = "-p" ] && { shift; shift; }
             while [ "$1" = "-f" ]; do shift; shift; done
             [ "$1" = "build" ] && built=true
             ;;
@@ -161,6 +165,27 @@ Describe 'ai-sandbox.sh'
       COMPOSE_FILES="-f docker-compose.yaml"
       When call ensure_image
       The output should eq ''
+    End
+  End
+
+  Describe 'do_build()'
+    It 'scopes the build to the current compose project (regression: missing -p flag)'
+      # Without -p "${COMPOSE_PROJECT}", build resolves against Compose's
+      # default project-name derivation instead of the named instance's
+      # actual project scope -- the same class of bug the start_shell()
+      # regression test above already caught and fixed for exec.
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-test"
+      COMPOSE_FILES="-f docker-compose.yaml"
+      COMPOSE_PROJECT="ai-sandbox-flow-rook"
+      SSH_AUTH_SOCK="/tmp/ssh"
+      docker() {
+        case "$1" in
+          image) [ "$2" = "rm" ] && return 0 ;;
+          compose) printf '%s\n' "$*" ;;
+        esac
+      }
+      When call do_build
+      The output should include 'compose -p ai-sandbox-flow-rook -f docker-compose.yaml build'
     End
   End
 
@@ -218,6 +243,87 @@ Describe 'ai-sandbox.sh'
       When call run_enter_shell_if_requested
       The status should be success
       The variable called should eq false
+    End
+  End
+
+  Describe 'should_restore_config()'
+    # Regression coverage for the orphaned docker-socket-proxy sidecar bug:
+    # src/index.sh's restore call site previously gated restore_saved_config()
+    # to only CMD=start/enter, so every other per-instance command (delete,
+    # clean, stop, build, fix-ssh, ...) ran with whatever --profile flags
+    # (usually none) this invocation passed rather than the instance's
+    # persisted composition -- silently dropping the docker capability (and
+    # therefore the proxy sidecar/network) from that invocation's compose-file
+    # assembly. should_restore_config() must return true for every CMD value
+    # reachable at that call site except "create".
+    It 'returns true for CMD=start'
+      When call should_restore_config start
+      The status should be success
+    End
+
+    It 'returns true for CMD=enter'
+      When call should_restore_config enter
+      The status should be success
+    End
+
+    It 'returns true for CMD=attach'
+      When call should_restore_config attach
+      The status should be success
+    End
+
+    It 'returns true for CMD=fix-ssh'
+      When call should_restore_config fix-ssh
+      The status should be success
+    End
+
+    It 'returns true for CMD=build'
+      When call should_restore_config build
+      The status should be success
+    End
+
+    It 'returns true for CMD=user-exec'
+      When call should_restore_config user-exec
+      The status should be success
+    End
+
+    It 'returns true for CMD=root-exec'
+      When call should_restore_config root-exec
+      The status should be success
+    End
+
+    It 'returns true for CMD=detail'
+      When call should_restore_config detail
+      The status should be success
+    End
+
+    It 'returns true for CMD=stop'
+      When call should_restore_config stop
+      The status should be success
+    End
+
+    It 'returns true for CMD=delete'
+      When call should_restore_config delete
+      The status should be success
+    End
+
+    It 'returns true for CMD=clean'
+      When call should_restore_config clean
+      The status should be success
+    End
+
+    It 'returns true for CMD=up'
+      When call should_restore_config up
+      The status should be success
+    End
+
+    It 'returns true for an arbitrary word forwarded to the docker-compose passthrough branch (e.g. CMD=logs)'
+      When call should_restore_config logs
+      The status should be success
+    End
+
+    It 'returns false for CMD=create (fresh state, nothing to restore)'
+      When call should_restore_config create
+      The status should be failure
     End
   End
 
@@ -1748,6 +1854,28 @@ Describe 'ai-sandbox.sh'
       When call warn_if_ssh_mount_stale
       The output should eq ''
       The stderr should eq ''
+    End
+  End
+
+  Describe 'fix_ssh()'
+    It 'scopes the recreate to the current compose project (regression: missing -p flag)'
+      # Without -p "${COMPOSE_PROJECT}", the recreate resolves against
+      # Compose's default project-name derivation instead of the named
+      # instance's actual project scope -- the same class of bug the
+      # start_shell() regression test above already caught and fixed for exec.
+      SANDBOX_NAME="test"
+      COMPOSE_FILES="-f docker-compose.yaml"
+      COMPOSE_PROJECT="ai-sandbox-flow-rook"
+      SSH_AUTH_SOCK="/tmp/agent.sock"
+      QUIET=1
+      ssh_preflight() { return 0; }
+      docker() {
+        case "$1" in
+          compose) printf '%s\n' "$*" ;;
+        esac
+      }
+      When call fix_ssh
+      The output should include 'compose -p ai-sandbox-flow-rook -f docker-compose.yaml up -d --force-recreate --no-deps ai-sandbox'
     End
   End
 

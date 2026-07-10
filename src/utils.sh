@@ -118,16 +118,47 @@ function profile_has_capability() {
     return 1
 }
 
+# Return 0 (true) if src/index.sh's restore call site should attempt
+# restore_saved_config() for the given CMD, 1 (false) otherwise.
+#
+# Every per-instance CMD value reachable at that call site --
+# PER_INSTANCE_COMMANDS (src/options.sh) minus `create`, plus any arbitrary
+# word forwarded to the docker-compose passthrough branch (src/index.sh's
+# final dispatch `else`) -- operates on an already-created instance, so its
+# compose-file assembly (and in particular EFFECTIVE_PROXY / the docker
+# capability, which gates whether docker-compose.proxy.yaml's sidecar and
+# network are included) must reflect that instance's actual persisted
+# composition rather than just whatever --profile flags (usually none) this
+# particular invocation passed. Without this, running e.g. `delete`/`clean`/
+# `stop`/`fix-ssh` with no --profile flag on a docker-capable instance
+# silently drops the docker capability for that invocation's compose-file
+# list, leaving the docker-socket-proxy sidecar container/network orphaned
+# (stop) or only partially torn down (delete/clean), or the recreated
+# container missing DOCKER_HOST (fix-ssh).
+#
+# restore_saved_config()'s own internal guard (CONFIG_FLAGS_PROVIDED /
+# is_container_running_or_stopped) already makes it safe to call
+# unconditionally for all of those CMD values, so this predicate only needs
+# to exclude `create`: it deliberately provisions fresh state and already
+# rejects name collisions in do_create() (src/create.sh) before a restored
+# value would ever be consulted -- calling restore_saved_config() ahead of
+# that check would be a harmless but pointless `docker inspect`.
+# $1 -- the CMD value to test.
+function should_restore_config() {
+    [ "${1:-}" != "create" ]
+}
+
 # Restore PROFILES / MODE_OVERRIDE / NO_ISOLATE_CONFIG / CLEAN_SLATE /
 # CLI_MARKETPLACES / CLI_PLUGINS / CLI_ENABLE_ALL -- the complete seven-
 # dimension config-input record (see plan/notes/config-persistence-design.md)
 # -- from the single ai.sandbox.config label saved on the container at
 # `create` time, when the current invocation didn't pass any config-changing
-# flags itself. Called for `start`/`enter`; when CONFIG_FLAGS_PROVIDED is
-# "true" (i.e. --profile/--mode/--no-isolate-config/--add-marketplace/
-# --enable-plugin/--enable-all/--clean was explicitly passed this run) or no
-# container exists yet, returns immediately without touching any of the seven
-# globals, so the explicit flags on the current invocation always win.
+# flags itself. Called for every CMD except `create` (see
+# should_restore_config()); when CONFIG_FLAGS_PROVIDED is "true" (i.e.
+# --profile/--mode/--no-isolate-config/--add-marketplace/--enable-plugin/
+# --enable-all/--clean was explicitly passed this run) or no container exists
+# yet, returns immediately without touching any of the seven globals, so the
+# explicit flags on the current invocation always win.
 #
 # No fallback of any kind: only the single ai.sandbox.config label is read.
 # When the label is absent or empty -- including on any container created
@@ -399,7 +430,12 @@ function ensure_image() {
 
 function do_build() {
     docker image rm -f "${AI_SANDBOX_IMAGE_TAG}" >/dev/null 2>&1 || true
-    docker compose ${COMPOSE_FILES} build --ssh "default=${SSH_AUTH_SOCK}"
+    # -p "${COMPOSE_PROJECT}" scopes the build to this instance's compose
+    # project, matching every other compose invocation in the codebase (e.g.
+    # start_shell() above, src/index.sh, src/create.sh) -- without it, this
+    # resolves against Compose's default project-name derivation instead of
+    # the named instance's actual project scope.
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} build --ssh "default=${SSH_AUTH_SOCK}"
 }
 
 # Remove all ai-sandbox:* variant images from the local daemon.
@@ -500,7 +536,12 @@ function fix_ssh() {
         return 1
     fi
     # 'ai-sandbox' here is the compose service name, not the container name.
-    docker compose ${COMPOSE_FILES} up -d --force-recreate --no-deps ai-sandbox
+    # -p "${COMPOSE_PROJECT}" scopes the recreate to this instance's compose
+    # project, matching every other compose invocation in the codebase (e.g.
+    # start_shell() above, src/index.sh, src/create.sh) -- without it, this
+    # resolves against Compose's default project-name derivation instead of
+    # the named instance's actual project scope.
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} up -d --force-recreate --no-deps ai-sandbox
     qecho "Container recreated with SSH_AUTH_SOCK=${SSH_AUTH_SOCK}"
 }
 
