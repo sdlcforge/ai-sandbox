@@ -78,6 +78,7 @@ phases:
           path: phase-02-doc-updates/001-update-architecture-docs.md
           done: false
           tier: sonnet-high
+          digest: 'Updated docs/architecture.md''s Restore and Docker access sections to describe the end state shipped across phase-1 tasks 001-005: restore_saved_config() fires for every per-instance CMD except create, and the is_docker_proxy_label_true() EFFECTIVE_PROXY fallback is described with its exact CMD x CONFIG_FLAGS_PROVIDED scope. The Matches subsection gained a cross-reference to the fallback as a worked example of the explicit-invocation-always-wins invariant. docs/ai-sandbox-profiles-spec.md confirmed to need no changes. Only docs/architecture.md was edited.'
           git:
             branch: phase-02-task-01-update-architecture-docs
             commit:
