@@ -299,19 +299,23 @@ fi
 # true) is not a regression risk -- an invocation that correctly resolves the
 # docker capability today should get it.
 #
-# should_force_proxy_label_fallback() (src/utils.sh) scopes this to only the
-# teardown/preserve commands (stop/delete/clean/fix-ssh) where the orphaned-
-# sidecar bug actually manifests -- NOT start/enter/up/the passthrough
-# branch/create/detail/build/user-exec/root-exec/attach, where an explicit,
-# confirmed invocation (docs/architecture.md's "Matches" subsection,
-# "explicit invocation always wins") must be allowed to actually change the
-# composition, including deliberately dropping the docker capability. Applying
-# the fallback there would silently re-grant network access to the
-# docker-socket-proxy sidecar (a documented container-escape vector) against
-# the user's explicit intent (phase-01/004).
-if should_force_proxy_label_fallback "${CMD}" \
+# should_force_proxy_label_fallback() (src/utils.sh) scopes this to
+# stop/delete/clean unconditionally (teardown/preserve commands with no
+# legitimate "explicit invocation" story to override the label), and to
+# fix-ssh/start/enter/up only when this invocation's CONFIG_FLAGS_PROVIDED is
+# not "true" -- i.e. a bare restore/resume, not this run's own explicit
+# composition choice. create/detail/build/user-exec/root-exec/attach are
+# never in scope. When CONFIG_FLAGS_PROVIDED is "true" for fix-ssh/start/
+# enter/up, an explicit, confirmed invocation (docs/architecture.md's
+# "Matches" subsection, "explicit invocation always wins") must be allowed to
+# actually change the composition, including deliberately dropping the docker
+# capability -- applying the fallback there would silently re-grant network
+# access to the docker-socket-proxy sidecar (a documented container-escape
+# vector) against the user's explicit intent (phase-01/004, refined by
+# phase-01/005 to gate on CONFIG_FLAGS_PROVIDED rather than CMD alone).
+if should_force_proxy_label_fallback "${CMD}" "${CONFIG_FLAGS_PROVIDED}" \
     && [ "${EFFECTIVE_PROXY}" != "true" ] && is_docker_proxy_label_true; then
-  echo "Warning: honoring the persisted ai.sandbox.docker-proxy label (true) for '${SANDBOX_NAME}' over this invocation's resolved profile composition (false) -- '${CMD}' is a teardown/preserve command, so the instance's actual persisted composition is used instead of what this run's profile resolution would otherwise produce." 1>&2
+  echo "Warning: honoring the persisted ai.sandbox.docker-proxy label (true) for '${SANDBOX_NAME}' over this invocation's resolved profile composition (false) -- '${CMD}' did not explicitly change this instance's composition this run, so the instance's actual persisted composition is used instead of what this run's profile resolution would otherwise produce." 1>&2
   EFFECTIVE_PROXY=true
 fi
 export EFFECTIVE_PROXY NO_ISOLATE_CONFIG

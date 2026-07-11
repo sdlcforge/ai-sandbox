@@ -235,3 +235,80 @@ architectural_impact: true
   written and A/B-verified.
 - After confirming tasks 001/003/004's own integration suites still pass
   unmodified.
+
+## Status
+
+**Outcome:** succeeded. Date: 2026-07-10.
+
+Widened `should_force_proxy_label_fallback()` (`src/utils.sh`) to a
+two-argument predicate: `$1` is `CMD` as before, `$2` is this invocation's
+`CONFIG_FLAGS_PROVIDED`. `stop`/`delete`/`clean` still return true
+unconditionally; `fix-ssh`/`start`/`enter`/`up` now return true only when
+`$2 != "true"` (`[ "${2:-}" != "true" ]`, nounset-safe); every other CMD
+still returns false regardless of `$2`. Updated the call site
+(`src/index.sh`'s `EFFECTIVE_PROXY` fallback block) to pass
+`"${CONFIG_FLAGS_PROVIDED}"` as the second argument, and rewrote both the
+function's doc-comment and the call site's inline comment to state the
+corrected rule (no more "NOT start/enter/up/.../create/..." framing).
+Also updated the fallback's stderr warning message text (same file, same
+diff) since its old wording ("'${CMD}' is a teardown/preserve command") was
+no longer accurate once `start`/`enter`/`fix-ssh`/`up` can also enter this
+branch under `CONFIG_FLAGS_PROVIDED=false`.
+
+Extended `should_force_proxy_label_fallback()`'s unit `Describe` block
+(`test/unit/ai_sandbox_spec.sh`) to the full CMD x CONFIG_FLAGS_PROVIDED
+matrix described in Requirement 5 (unset/false/true variants for the four
+conditionally-scoped CMDs, unconditional coverage for the three
+unconditionally-true and several unconditionally-false CMDs).
+
+Added two new live-Docker integration regression tests:
+- `test/integration/docker_proxy_start_drift_spec.sh` (Requirement 2, gap
+  1): creates a docker-capable instance on a throwaway custom profile,
+  stops it, deletes the profile file to make it unresolvable, then runs a
+  bare `start` (no `--profile`) and asserts the recreated container's
+  `ai.sandbox.docker-proxy` label is still `true` and `DOCKER_HOST` still
+  resolves.
+- `test/integration/docker_proxy_fix_ssh_explicit_override_spec.sh`
+  (Requirement 3, gap 2): creates a docker-capable instance, runs `fix-ssh
+  --profile base`, and asserts the recreated container's
+  `ai.sandbox.docker-proxy` label is `false` and `DOCKER_HOST` no longer
+  resolves.
+
+Both new tests were A/B-verified against task 004's merge commit
+(`a16c5c1`) via a disposable detached `git worktree` (mirroring tasks
+001-004's precedent): both fail pre-fix (gap 1: label/DOCKER_HOST lost
+after the drifted-profile bare start; gap 2: label/DOCKER_HOST incorrectly
+retained despite the explicit `--profile base`) and pass post-fix.
+
+`docker_proxy_teardown_spec.sh` (001), `docker_proxy_dropped_profile_spec.sh`
+(003), and `docker_proxy_explicit_profile_override_spec.sh` (004) all still
+pass unmodified (verified together with the two new suites: 22 examples, 0
+failures).
+
+**Validation summary:**
+- `make build`: no-op (sources already current from iterative builds during
+  implementation); rollup output matches the edited `src/` sources.
+- `make lint`: clean (shellcheck across `src/`, `docker/`, `test/`,
+  including both new test files).
+- `make test.unit`: 253 examples, 0 failures (includes the extended
+  predicate matrix).
+- New regression tests (Requirements 2 and 3): both pass on current code;
+  both A/B-verified to fail pre-fix / pass post-fix against `a16c5c1`.
+- `docker_proxy_teardown_spec.sh` / `docker_proxy_dropped_profile_spec.sh` /
+  `docker_proxy_explicit_profile_override_spec.sh`: all pass unmodified.
+- Grep/read verification of nounset/quoting: `${2:-}` guards the predicate's
+  now-optional second positional param; the call site passes
+  `"${CONFIG_FLAGS_PROVIDED}"` (always set by `parse_options()`, no `:-`
+  needed there, matching `restore_saved_config()`'s existing convention).
+
+**Requirement 6:** confirmed both round-4 non-blocking findings
+(arch-review-003's missing `--remove-orphans`, and efficiency-001/002/003's
+redundant-inspect-calls) are already recorded in `plan/followups.yaml`
+under tag `fix-orphaned-sidecar-teardown` (ids `j7jf` and the entry
+immediately preceding it) as of task start; neither was touched in this
+task's diff.
+
+No deviations from the task doc's `## Assumptions`; the live-Docker
+integration path (not the mocked-docker alternative) was used for both new
+tests, mirroring tasks 001/003/004's own precedent for this exact scenario
+shape.
