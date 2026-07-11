@@ -159,3 +159,25 @@ unless noted):
   reconfirmed identical at each task's baseline throughout the plan — not
   newly introduced, already tracked (`AQag`/`ps6H`/`jWIn`/`Ia7w`/`fXCK`/
   `MVL1`/`n58c`/`68bH`).
+
+## Final Task State
+
+# TODO
+
+## Purpose and scope
+
+Tracking document for the active plan.
+
+## Tasks
+
+### Phase 01 — Fix Orphaned Sidecar Teardown
+
+- [x] [001-restore-config-for-teardown-commands.md](./phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md) — tier `sonnet-high` · branch `phase-01-task-01-restore-config-teardown-comman` · commit `c96efe2` · merge `55e5469c24b1caa172538b150fdf9bd08d2b0bdc`
+- [x] [002-fix-review-regressions.md](./phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md) — tier `sonnet-high` · branch `phase-01-task-02-fix-review-regressions` · commit `55b05fe` · merge `4f9708dfa7e7441f4dd3ab2ef6a26f954a5ae5ed`
+- [x] [003-fix-capability-loss-on-profile-drop.md](./phase-01-fix-orphaned-sidecar-teardown/003-fix-capability-loss-on-profile-drop.md) — tier `sonnet-high` · branch `phase-01-task-03-fix-capability-loss-on-profile` · commit `cc12d8d` · merge `4fa1bc2912d87b242f5524579cb3e3e1eb8b92a9`
+- [x] [004-scope-proxy-label-fallback.md](./phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md) — tier `sonnet-high` · branch `phase-01-task-04-scope-proxy-label-fallback` · commit `716d157` · merge `a16c5c1ad79efb4f93f79e82a54c6b42f0ac8a70`
+- [x] [005-gate-label-fallback-on-explicit-invocation.md](./phase-01-fix-orphaned-sidecar-teardown/005-gate-label-fallback-on-explicit-invocation.md) — tier `sonnet-high` · branch `phase-01-task-05-gate-label-fallback-on-explici` · commit `b580a52` · merge `1e7e820e0323c7fc6bfb17fc2998d9b59895c99f`
+
+### Phase 02 — Documentation Updates
+
+- [x] [001-update-architecture-docs.md](./phase-02-doc-updates/001-update-architecture-docs.md) — tier `sonnet-high` · branch `phase-02-task-01-update-architecture-docs` · commit `bdccd55` · merge `d835c5d90397dbb4148a5d64f9e2525626e150c1`
