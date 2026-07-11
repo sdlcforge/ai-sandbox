@@ -155,3 +155,8 @@ items:
       date: "2026-07-11"
       tag: network-capabilities
       text: '[phase-review, phase-02-network-capabilities, security-003] The AI_SANDBOX_WEB_SEARCH iptables chain''s RFC-reserved/private exclusion list covers all security-relevant ranges (RFC1918, loopback, link-local incl. cloud-metadata, CGNAT, multicast, reserved) matching Task 001''s explicit spec, but omits a few non-private IANA special-purpose ranges: 192.0.0.0/24 (IETF Protocol Assignments), 192.0.2.0/24 / 198.51.100.0/24 / 203.0.113.0/24 (TEST-NET-1/2/3), 198.18.0.0/15 (benchmarking), 192.88.99.0/24 (deprecated 6to4 relay). No security benefit (none are LAN/host-facing) but worth closing for completeness against the IANA registry.'
+    - title: Boot-window docker exec can race firewall
+      id: Qk6L
+      date: "2026-07-11"
+      tag: network-capabilities
+      text: '[phase-02-network-capabilities, task 008] The container is docker-exec-able the instant PID 1 starts, during 03-init-firewall''s poll loop, before the firewall is confirmed applied. A docker exec that races the boot window can attach to an unfirewalled shell (empirically confirmed). This window is inherent to Phase 1''s wait-based handshake design (exists in the success path too, ~1-2s typically, bounded by AI_SANDBOX_FIREWALL_WAIT_TIMEOUT default 60s) and unchanged by task 008 (S6_BEHAVIOUR_IF_STAGE2_FAILS=2 only governs what happens after 03-init-firewall returns, not the window before it does). Matters most for `ai-sandbox enter`, whose start_shell (src/utils.sh) execs in right after `up -d` without blocking on the firewall marker. Recommended fix: gate start_shell/enter''s exec on the firewall completion marker, or tie a container healthcheck to 03-init-firewall and have the launcher --wait on it.'
