@@ -160,3 +160,8 @@ items:
       date: "2026-07-11"
       tag: network-capabilities
       text: '[phase-02-network-capabilities, task 008] The container is docker-exec-able the instant PID 1 starts, during 03-init-firewall''s poll loop, before the firewall is confirmed applied. A docker exec that races the boot window can attach to an unfirewalled shell (empirically confirmed). This window is inherent to Phase 1''s wait-based handshake design (exists in the success path too, ~1-2s typically, bounded by AI_SANDBOX_FIREWALL_WAIT_TIMEOUT default 60s) and unchanged by task 008 (S6_BEHAVIOUR_IF_STAGE2_FAILS=2 only governs what happens after 03-init-firewall returns, not the window before it does). Matters most for `ai-sandbox enter`, whose start_shell (src/utils.sh) execs in right after `up -d` without blocking on the firewall marker. Recommended fix: gate start_shell/enter''s exec on the firewall completion marker, or tie a container healthcheck to 03-init-firewall and have the launcher --wait on it.'
+    - title: Leading-dash allow-egress hostname unguarded
+      id: sakY
+      date: "2026-07-11"
+      tag: allow-egress-flag
+      text: '[phase-review, phase-03-allow-egress-flag, correctness-002] is_valid_egress_hostname()''s regex (^[A-Za-z0-9.-]+$) permits a host-part beginning with ''-'' (e.g. "--dport"), which is then passed to `getent ahostsv4 "${_ae_host}"` unguarded in docker/init-firewall.sh. Fails closed today (getent errors, entry warn-and-skipped, no privilege widening), but worth tightening: either reject a leading ''-'' in is_valid_egress_hostname(), or invoke getent with an explicit `--` end-of-options marker (verify glibc getent on the actual base image supports it first).'
