@@ -373,74 +373,142 @@ Describe 'ai-sandbox.sh'
   Describe 'should_force_proxy_label_fallback()'
     # Regression coverage for phase-01/004 (scoping task 003's EFFECTIVE_PROXY
     # label fallback down to only the teardown/preserve commands where the
-    # orphaned-sidecar bug actually manifests). The third phase-1 gate review
-    # found task 003's fallback applied unconditionally to every per-instance
-    # CMD, including start/enter, which meant an explicit, user-confirmed
-    # --profile change removing the docker capability was silently reverted --
-    # violating docs/architecture.md's "Matches" subsection ("explicit
-    # invocation always wins" invariant). Only stop/delete/clean/fix-ssh may
-    # trigger the fallback; every other reachable CMD value must not.
-    It 'returns true for CMD=stop'
+    # orphaned-sidecar bug actually manifests) as refined by phase-01/005
+    # (gating on CONFIG_FLAGS_PROVIDED in addition to CMD). The third phase-1
+    # gate review found task 003's fallback applied unconditionally to every
+    # per-instance CMD, including start/enter, which meant an explicit,
+    # user-confirmed --profile change removing the docker capability was
+    # silently reverted -- violating docs/architecture.md's "Matches"
+    # subsection ("explicit invocation always wins" invariant). The fourth
+    # phase-1 gate review then found task 004's CMD-only gating was itself
+    # the wrong axis: whether an invocation is "explicit" is decided by
+    # CONFIG_FLAGS_PROVIDED, not by which CMD was typed -- a bare start/enter
+    # with no --profile this run (CONFIG_FLAGS_PROVIDED=false) is a
+    # restore/resume, not an explicit override, and must still get the
+    # fallback if the persisted profile has drifted; conversely an explicit
+    # `fix-ssh --profile <non-docker>` (CONFIG_FLAGS_PROVIDED=true) must be
+    # allowed to actually drop the capability.
+    #
+    # stop/delete/clean apply the fallback unconditionally, regardless of
+    # CONFIG_FLAGS_PROVIDED. fix-ssh/start/enter/up apply it only when
+    # CONFIG_FLAGS_PROVIDED is not "true". Every other CMD never applies it,
+    # regardless of CONFIG_FLAGS_PROVIDED.
+    It 'returns true for CMD=stop regardless of CONFIG_FLAGS_PROVIDED (unset)'
       When call should_force_proxy_label_fallback stop
       The status should be success
     End
 
-    It 'returns true for CMD=delete'
+    It 'returns true for CMD=stop with CONFIG_FLAGS_PROVIDED=true'
+      When call should_force_proxy_label_fallback stop true
+      The status should be success
+    End
+
+    It 'returns true for CMD=stop with CONFIG_FLAGS_PROVIDED=false'
+      When call should_force_proxy_label_fallback stop false
+      The status should be success
+    End
+
+    It 'returns true for CMD=delete regardless of CONFIG_FLAGS_PROVIDED (unset)'
       When call should_force_proxy_label_fallback delete
       The status should be success
     End
 
-    It 'returns true for CMD=clean'
+    It 'returns true for CMD=delete with CONFIG_FLAGS_PROVIDED=true'
+      When call should_force_proxy_label_fallback delete true
+      The status should be success
+    End
+
+    It 'returns true for CMD=clean regardless of CONFIG_FLAGS_PROVIDED (unset)'
       When call should_force_proxy_label_fallback clean
       The status should be success
     End
 
-    It 'returns true for CMD=fix-ssh'
+    It 'returns true for CMD=clean with CONFIG_FLAGS_PROVIDED=true'
+      When call should_force_proxy_label_fallback clean true
+      The status should be success
+    End
+
+    It 'returns true for CMD=fix-ssh when CONFIG_FLAGS_PROVIDED is unset (bare restore/resume)'
       When call should_force_proxy_label_fallback fix-ssh
       The status should be success
     End
 
-    It 'returns false for CMD=start (explicit profile change must take effect)'
+    It 'returns true for CMD=fix-ssh with CONFIG_FLAGS_PROVIDED=false'
+      When call should_force_proxy_label_fallback fix-ssh false
+      The status should be success
+    End
+
+    It 'returns false for CMD=fix-ssh with CONFIG_FLAGS_PROVIDED=true (explicit --profile must take effect)'
+      When call should_force_proxy_label_fallback fix-ssh true
+      The status should be failure
+    End
+
+    It 'returns true for CMD=start when CONFIG_FLAGS_PROVIDED is unset (bare restore/resume, e.g. profile drift)'
       When call should_force_proxy_label_fallback start
+      The status should be success
+    End
+
+    It 'returns true for CMD=start with CONFIG_FLAGS_PROVIDED=false'
+      When call should_force_proxy_label_fallback start false
+      The status should be success
+    End
+
+    It 'returns false for CMD=start with CONFIG_FLAGS_PROVIDED=true (explicit profile change must take effect)'
+      When call should_force_proxy_label_fallback start true
       The status should be failure
     End
 
-    It 'returns false for CMD=enter (explicit profile change must take effect)'
+    It 'returns true for CMD=enter when CONFIG_FLAGS_PROVIDED is unset (bare restore/resume)'
       When call should_force_proxy_label_fallback enter
+      The status should be success
+    End
+
+    It 'returns false for CMD=enter with CONFIG_FLAGS_PROVIDED=true (explicit profile change must take effect)'
+      When call should_force_proxy_label_fallback enter true
       The status should be failure
     End
 
-    It 'returns false for CMD=up'
+    It 'returns true for CMD=up when CONFIG_FLAGS_PROVIDED is unset (bare restore/resume)'
       When call should_force_proxy_label_fallback up
+      The status should be success
+    End
+
+    It 'returns false for CMD=up with CONFIG_FLAGS_PROVIDED=true'
+      When call should_force_proxy_label_fallback up true
       The status should be failure
     End
 
-    It 'returns false for CMD=create (no prior container to read a label from)'
+    It 'returns false for CMD=create (no prior container to read a label from) regardless of CONFIG_FLAGS_PROVIDED'
       When call should_force_proxy_label_fallback create
       The status should be failure
     End
 
-    It 'returns false for CMD=detail (do_status() never consumes EFFECTIVE_PROXY)'
+    It 'returns false for CMD=create with CONFIG_FLAGS_PROVIDED=false'
+      When call should_force_proxy_label_fallback create false
+      The status should be failure
+    End
+
+    It 'returns false for CMD=detail (do_status() never consumes EFFECTIVE_PROXY) regardless of CONFIG_FLAGS_PROVIDED'
       When call should_force_proxy_label_fallback detail
       The status should be failure
     End
 
-    It 'returns false for CMD=build'
-      When call should_force_proxy_label_fallback build
+    It 'returns false for CMD=build regardless of CONFIG_FLAGS_PROVIDED'
+      When call should_force_proxy_label_fallback build false
       The status should be failure
     End
 
-    It 'returns false for CMD=user-exec'
+    It 'returns false for CMD=user-exec regardless of CONFIG_FLAGS_PROVIDED'
       When call should_force_proxy_label_fallback user-exec
       The status should be failure
     End
 
-    It 'returns false for CMD=root-exec'
+    It 'returns false for CMD=root-exec regardless of CONFIG_FLAGS_PROVIDED'
       When call should_force_proxy_label_fallback root-exec
       The status should be failure
     End
 
-    It 'returns false for CMD=attach'
+    It 'returns false for CMD=attach regardless of CONFIG_FLAGS_PROVIDED'
       When call should_force_proxy_label_fallback attach
       The status should be failure
     End
