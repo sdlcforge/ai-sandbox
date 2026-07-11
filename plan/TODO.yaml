@@ -55,6 +55,16 @@ phases:
             commit:
                 - 716d157
             merge: a16c5c1ad79efb4f93f79e82a54c6b42f0ac8a70
+        - number: 5
+          slug: gate-label-fallback-on-explicit-invocation
+          title: Gate The Proxy-Label Fallback On Explicit-Invocation, Not CMD Alone
+          path: phase-01-fix-orphaned-sidecar-teardown/005-gate-label-fallback-on-explicit-invocation.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
     - number: 2
       slug: doc-updates
       title: Documentation Updates
