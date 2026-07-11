@@ -59,7 +59,7 @@ phases:
           slug: gate-label-fallback-on-explicit-invocation
           title: Gate The Proxy-Label Fallback On Explicit-Invocation, Not CMD Alone
           path: phase-01-fix-orphaned-sidecar-teardown/005-gate-label-fallback-on-explicit-invocation.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: 'Refined task 004''s CMD-only gating of the EFFECTIVE_PROXY label fallback into a CMD × CONFIG_FLAGS_PROVIDED gate: stop/delete/clean still force the fallback unconditionally, but fix-ssh/start/enter/up now only do so when CONFIG_FLAGS_PROVIDED != "true". This closes two round-4 gaps: bare start/enter against a drifted docker-granting profile no longer silently loses the capability, and an explicit fix-ssh --profile <non-docker> can now actually drop the capability instead of being silently overridden. Both fixes were proven with new live-Docker integration tests, each A/B-verified against task 004''s merge commit a16c5c1 (fails pre-fix, passes post-fix). All previously-passing suites (tasks 001/003/004) remain green. Per Requirement 6, arch-review-003 and efficiency-001/002/003 were intentionally left untouched — confirmed already tracked in plan/followups.yaml.'
           git:
