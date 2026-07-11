@@ -1,0 +1,78 @@
+#!/command/with-contenv bash
+# shellcheck shell=bash
+# Blocks container init until the firewall-init sidecar has applied the
+# default-deny egress firewall into this container's (shared) network
+# namespace. This container no longer holds CAP_NET_ADMIN (security-001: see
+# docker/docker-compose.yaml) so it cannot run init-firewall.sh itself -- the
+# sidecar does, holding the capability the agent cannot reach, then writes a
+# completion marker to the shared firewall-handshake volume. We wait for that
+# marker here, numbered 03 so it still gates 04-write-credentials,
+# 05-install-claude, and 10-plugin-setup (all of which may need network) behind
+# a confirmed-in-place allow-list, exactly as the old in-container firewall
+# stage did.
+set -u
+
+MARKER_DIR="${AI_SANDBOX_FIREWALL_MARKER_DIR:-/var/lib/ai-sandbox-firewall}"
+MARKER="${MARKER_DIR}/applied"
+# Per-boot token file this stage writes (see below); the sidecar reads it and
+# echoes the same value back into MARKER once the firewall is verified
+# applied. Single-sourced name -- docker/init-firewall-sidecar.sh reads the
+# same path.
+TOKEN_FILE="${MARKER_DIR}/expected-token"
+# Seconds to wait for the sidecar before giving up. Applying the rules involves
+# a handful of DNS lookups (GitHub/Anthropic/marketplace/network.allow hosts),
+# so allow generous headroom; the common case completes in a second or two.
+TIMEOUT="${AI_SANDBOX_FIREWALL_WAIT_TIMEOUT:-60}"
+
+# The handshake volume persists across container restarts, so a marker from a
+# PREVIOUS lifecycle may still be present when this stage starts polling. Under
+# the pre-007 existence-only handshake that was the producer's problem to
+# clear (006-fix-marker-handshake-race); under this nonce/token handshake
+# (007-nonce-based-firewall-handshake) staleness is no longer a clearing
+# problem at all -- it's a content-comparison problem, and content comparison
+# is correct regardless of which side reaches its checkpoint first. This stage
+# generates a fresh, unique token for THIS boot and writes it to TOKEN_FILE as
+# its very first action, before entering the poll loop below. The sidecar
+# waits for that token, applies and verifies the firewall, then writes this
+# same token value back as MARKER's content. Below, the poll loop only
+# accepts a MARKER whose *content* equals the token generated here -- so a
+# leftover MARKER from a previous lifecycle (carrying a different, stale
+# token) can never be misread as "already applied": it simply fails the
+# comparison and polling continues until the current lifecycle's sidecar
+# writes the matching value. This holds no matter which container reaches its
+# checkpoint first, eliminating the marker-handshake race structurally
+# instead of by ordering assumptions. The marker directory is the shared
+# handshake volume's mountpoint (already present via the volume mount);
+# mkdir -p is defensive. chmod 700 makes the write-restriction (only this
+# root-run stage and the root-run sidecar ever touch this directory) a
+# stated invariant rather than an artifact of default umask (security-005).
+mkdir -p "${MARKER_DIR}"
+chmod 700 "${MARKER_DIR}"
+
+# Fresh per-boot token. /proc/sys/kernel/random/uuid is a simple,
+# dependency-free source of per-boot uniqueness already available in the base
+# image (no new package required). Written via a temp file + atomic rename
+# (same directory, same filesystem) rather than a direct `>` redirect, so the
+# sidecar can never observe a torn/truncated read of TOKEN_FILE -- it either
+# sees no file yet, or the complete token, never a partial write.
+token="$(cat /proc/sys/kernel/random/uuid)"
+token_tmp="$(mktemp "${MARKER_DIR}/.expected-token.XXXXXX")"
+echo "${token}" > "${token_tmp}"
+mv -f "${token_tmp}" "${TOKEN_FILE}"
+
+waited=0
+while true; do
+  if [ -e "${MARKER}" ] && [ "$(cat "${MARKER}" 2>/dev/null)" = "${token}" ]; then
+    break
+  fi
+  if [ "${waited}" -ge "${TIMEOUT}" ]; then
+    echo "error: firewall-init sidecar did not signal completion within ${TIMEOUT}s;" >&2
+    echo "       refusing to start the sandbox without a confirmed egress firewall" >&2
+    exit 1
+  fi
+  sleep 1
+  waited=$((waited + 1))
+done
+
+echo "egress firewall confirmed applied by firewall-init sidecar (marker: ${MARKER})"
+exit 0

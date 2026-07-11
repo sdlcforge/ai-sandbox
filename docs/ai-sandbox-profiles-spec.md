@@ -33,7 +33,9 @@ metadata:
 mode: mirror
 
 # Optional list of capabilities to include in the image.
-# Currently supported: "docker", "chromium".
+# Currently supported: "docker", "chromium", "web-search", "host-access",
+# "lan-access". The last three are runtime-only (no build-time effect) --
+# see "Capabilities reference" below.
 # Absent or empty means a lean image with no Docker CLI, no proxy sidecar,
 # and no Chromium. Order does not matter.
 capabilities: [docker]
@@ -122,6 +124,9 @@ An optional list of named capabilities to include when building the image. Absen
 
 - `docker` — installs the Docker CLI inside the container and attaches the `tecnativa/docker-socket-proxy` sidecar, exposed as `DOCKER_HOST=tcp://docker-socket-proxy:2375`. Replaces the former `--docker` / `--no-docker` CLI flags.
 - `chromium` — installs Chromium and the X11 forwarding layer. Replaces the former `--no-chromium` CLI flag.
+- `web-search` — allow-lists egress to any public (non-private) IPv4 host on port 443. Runtime-only; see [Capabilities reference](#capabilities-reference) below.
+- `host-access` — allow-lists egress to any TCP port currently listening on the host, via `host.docker.internal`. Runtime-only.
+- `lan-access` — allow-lists egress to any IP address and TCP port on the host's LAN (local subnet). Runtime-only.
 
 Future ai-sandbox-defined capabilities can be added to this list without schema changes.
 
@@ -198,12 +203,14 @@ Environment variable names the profile may use. Their absence is not an error. D
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `allow` | list of strings | Hostnames or CIDRs to add to the iptables allow-list. Extends the default (GitHub + Anthropic). V1 is additive only — there is no mechanism to remove defaults. |
+| `allow` | list of strings | Hostnames or CIDRs to add to the iptables allow-list. Extends the default (GitHub + Anthropic). V1 is additive only — there is no mechanism to remove defaults. Every entry — hostname or CIDR — is allow-listed on **port 443 only**; there is no per-entry port override and no all-ports carve-out for CIDR entries. `docker/init-firewall.sh` applies `iptables -d <entry> --dport 443 -j ACCEPT` verbatim for each entry, which accepts both hostnames and CIDRs natively. Marketplace hosts (from `marketplaces:` / `--add-marketplace`) get the same port-443-only treatment. |
 | `preset` | string | Reserved for a future "default no network" direction (`default` or `none`). Field is parsed and stored but has no effect in V1. Do not set this field in V1 profiles. |
 
 ## Capabilities reference
 
 Capabilities are named features that extend the base image. They are declared in the `capabilities` list field of a profile and are implemented by assembling per-capability Dockerfile fragments at build time. The base image layer (`docker/capabilities/base.dockerfile`) is always included; each declared capability appends its own fragment (`docker/capabilities/<capability>.dockerfile`). An empty or absent `capabilities` list produces a lean image containing only the base layer — no Docker CLI, no socket proxy, no Chromium.
+
+`web-search`, `host-access`, and `lan-access` are the first capabilities with no build-time effect: each one only extends the container's runtime egress-firewall allow-list (see `docker/init-firewall.sh`'s capability-dispatch block), so their Dockerfile fragments are intentionally empty (no-op) rather than absent — the fragment still has to exist to satisfy `docker/scripts/assemble-dockerfile.sh`'s validation that every named capability has a matching fragment file.
 
 ### `docker`
 
@@ -228,6 +235,36 @@ Capabilities are named features that extend the base image. They are declared in
 **Previously controlled by:** `--no-chromium` CLI flag (removed; Chromium is now opt-in).
 
 **Dockerfile fragment:** `docker/capabilities/chromium.dockerfile`
+
+### `web-search`
+
+**What it installs:** Nothing — this capability has no build-time effect (see the note above).
+
+**What it enables:** Egress to any public (non-private) IPv4 destination on port 443. RFC 1918 private ranges, loopback, link-local, CGNAT, multicast, and other reserved ranges are excluded via dedicated `iptables` `RETURN` rules ahead of the `ACCEPT`, so this capability does not also grant LAN or host access.
+
+**Absence:** When `web-search` is not in `capabilities`, egress remains restricted to the default allow-list (GitHub, Anthropic, plus any other active capability/`network.allow`/`--allow-egress` entries).
+
+**Dockerfile fragment:** `docker/capabilities/web-search.dockerfile` (no-op)
+
+### `host-access`
+
+**What it installs:** Nothing — this capability has no build-time effect (see the note above).
+
+**What it enables:** Egress to any TCP port currently listening on the host, reached via `host.docker.internal`. The listening-port set is enumerated host-side (`lsof -iTCP -sTCP:LISTEN`, macOS only) once, at container-start time; a host service started after the container is already running is not covered until the container is recreated.
+
+**Absence:** When `host-access` is not in `capabilities`, the container cannot reach any host-side listening port beyond what the default allow-list or another active capability already permits.
+
+**Dockerfile fragment:** `docker/capabilities/host-access.dockerfile` (no-op)
+
+### `lan-access`
+
+**What it installs:** Nothing — this capability has no build-time effect (see the note above).
+
+**What it enables:** Egress to any IP address and TCP port on the host's LAN (local subnet). The LAN CIDR is detected host-side (`route get default` + `ipconfig`, macOS only) once, at container-start time; detection failure (no default route, VPN-only interface, unrecognized netmask, non-macOS host) fails soft — the capability becomes a no-op rather than an error.
+
+**Absence:** When `lan-access` is not in `capabilities`, the container cannot reach LAN hosts beyond what the default allow-list or another active capability already permits.
+
+**Dockerfile fragment:** `docker/capabilities/lan-access.dockerfile` (no-op)
 
 ## Profile composition
 
@@ -303,6 +340,9 @@ ai-sandbox ships the following profiles in its install tree. They are always ava
 | `base` | Go, Node.js (nvm), Bun, zsh + Oh My Zsh, git-delta, jq, build-essential. Extracted from the current Dockerfile. This is the fully-featured default runtime. |
 | `docker` | Sets `capabilities: [docker]`. Compose with `base` or any other profile to add Docker CLI and socket-proxy access inside the container. |
 | `chromium` | Sets `capabilities: [chromium]`. Adds Chromium browser and X11 forwarding layer. |
+| `web-search` | Sets `capabilities: [web-search]`. Allow-lists egress to any public (non-private) IPv4 host on port 443. |
+| `host-access` | Sets `capabilities: [host-access]`. Allow-lists egress to any TCP port currently listening on the host, via `host.docker.internal`. |
+| `lan-access` | Sets `capabilities: [lan-access]`. Allow-lists egress to any IP address and TCP port on the host's LAN. |
 | `mirror` | Sets `mode: mirror`. No other effect. Compose with any other profile to explicitly select mirror mode. |
 | `static` | Sets `mode: static`. No other effect. Compose with any other profile to select self-contained mode for CI/CD use. |
 

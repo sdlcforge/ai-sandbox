@@ -1,0 +1,7 @@
+metadata:
+  name: web-search
+  version: "1.0.0"
+  description: "Allow egress to any public (non-private) IPv4 host on port 443"
+
+capabilities:
+  - web-search

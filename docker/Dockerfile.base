@@ -128,9 +128,14 @@ RUN ${HOST_HOME}/.bun/bin/bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE
       ln -s ${HOST_HOME}/.bun/install/global/node_modules/@anthropic-ai/claude-code/cli.js ${HOST_HOME}/.bun/bin/claude; }
 
 # === LAYER 11: Firewall setup (root) ===
-COPY init-firewall.sh /usr/local/bin/
+# init-firewall.sh applies the egress allow-list + default-deny;
+# init-firewall-sidecar.sh is the firewall-init sidecar's entrypoint, which
+# runs init-firewall.sh once into the shared network namespace and writes a
+# completion marker (see the firewall-init service in docker-compose.yaml).
+# Both are baked into the image so the sidecar can reuse the ai-sandbox image.
+COPY init-firewall.sh init-firewall-sidecar.sh /usr/local/bin/
 USER root
-RUN chmod +x /usr/local/bin/init-firewall.sh && \
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/init-firewall-sidecar.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 
@@ -190,6 +195,25 @@ RUN mkdir -p /var/lib/ai-sandbox-rw && \
 # s6-overlay environment configuration
 ENV S6_CMD_USE_TERMINAL=1
 ENV S6_KILL_FINISH_MAXTIME=10000
+# SECURITY (fail-closed egress firewall): halt the container if ANY cont-init.d
+# script exits nonzero -- specifically 03-init-firewall's `exit 1` when the
+# firewall-init sidecar fails to apply (or verify) the default-deny egress
+# policy within its wait timeout. s6-overlay's DEFAULT for an *unset* value is
+# fail-OPEN: its cont-init runner (etc/s6-rc/scripts/cont-init) evaluates
+# `b=0${S6_BEHAVIOUR_IF_STAGE2_FAILS}` and only halts (`exit 1` from the
+# legacy-cont-init oneshot, which fails the s6-rc boot transition and brings
+# the container down) when that value is >= 2 -- so unset (b=0) and even =1
+# (warn-but-continue) let the container finish booting to an idle, exec-able
+# state with an unrestricted default-ACCEPT OUTPUT policy. Setting =2 here is
+# what actually makes Phase 1's "wait-then-fail-loud" 03-init-firewall stage
+# fail *closed*: the whole lockdown-egress design depends on this value. Baked
+# into the image (not the compose environment) on purpose -- it is a constant
+# security invariant of the image, not per-invocation config, so it cannot be
+# dropped by a compose-file edit; it is inert on the firewall-init sidecar,
+# which bypasses s6-overlay (entrypoint: [] in docker-compose.yaml) and never
+# runs /init. See docker/rootfs/etc/cont-init.d/03-init-firewall and
+# plan/phase-02-network-capabilities/008-set-s6-stage2-fail-behavior.md.
+ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2
 
 # === LAYER 15: Build-config labels ===
 # Capability-specific labels (chromium-enabled, docker-enabled) are removed

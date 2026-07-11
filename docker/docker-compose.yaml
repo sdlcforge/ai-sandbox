@@ -31,6 +31,18 @@ services:
         GIT_USER_NAME: ${GIT_USER_NAME}
         GIT_USER_EMAIL: ${GIT_USER_EMAIL}
     container_name: ai-sandbox-${SANDBOX_NAME}
+    # SECURITY (security-001): this container deliberately does NOT hold
+    # CAP_NET_ADMIN. It carries a broad `${HOST_USER} ALL=(ALL) NOPASSWD: ALL`
+    # sudo grant (docker/Dockerfile.base), so if it also held NET_ADMIN any
+    # in-container command -- including a prompt-injected agent action -- could
+    # `sudo iptables -F` and instantly disable the whole default-deny firewall.
+    # Instead the capability lives on the short-lived `firewall-init` sidecar
+    # below, which shares this container's network namespace, applies the
+    # iptables rules into it once, and exits. This mirrors the docker-socket-
+    # proxy pattern (docker-compose.proxy.yaml): the privilege is held by a
+    # container the agent cannot reach, not by the container it runs in. The
+    # firewall thus cannot be flushed from inside this container by any process,
+    # sudo or otherwise -- the capability simply isn't present in its namespace.
     stdin_open: true
     tty: true
     labels:
@@ -56,6 +68,11 @@ services:
       ai.sandbox.marketplaces: "${AI_SANDBOX_MARKETPLACES:-}"
       ai.sandbox.plugins: "${AI_SANDBOX_PLUGINS:-}"
       ai.sandbox.enable-all-plugins: "${AI_SANDBOX_ENABLE_ALL_PLUGINS:-false}"
+      # --allow-egress specs (see AI_SANDBOX_ALLOW_EGRESS above). CLI-only --
+      # no profile-level equivalent to merge, unlike marketplaces/plugins/
+      # enable-all -- so this is simply the CLI_ALLOW_EGRESS array itself.
+      # Read by running_config_matches() the same way as the labels above.
+      ai.sandbox.allow-egress: "${AI_SANDBOX_ALLOW_EGRESS:-}"
       # Multi-instance management labels. ai.sandbox.managed marks containers
       # created by this tool (for `list`). ai.sandbox.instance records the
       # instance name for filtering. ai.sandbox.profiles records the comma-
@@ -64,11 +81,11 @@ services:
       ai.sandbox.managed: "true"
       ai.sandbox.instance: "${SANDBOX_NAME}"
       ai.sandbox.profiles: "${SANDBOX_PROFILES:-}"
-      # Canonical config-input record: base64-encoded JSON capturing all seven
+      # Canonical config-input record: base64-encoded JSON capturing all eight
       # config-changing CLI inputs (profiles, mode, no-isolate-config,
-      # clean-slate, marketplaces, plugins, enable-all-plugins). Sole source
-      # restore_saved_config() reads to rehydrate a bare start/enter; see
-      # plan/notes/config-persistence-design.md.
+      # clean-slate, marketplaces, plugins, enable-all-plugins, allow-egress).
+      # Sole source restore_saved_config() reads to rehydrate a bare
+      # start/enter; see plan/notes/config-persistence-design.md.
       ai.sandbox.config: "${AI_SANDBOX_CONFIG_B64:-}"
     volumes:
       # Map host directories to same absolute paths in container.
@@ -82,6 +99,11 @@ services:
       # SSH agent socket: host path is bind-mounted to a stable in-container path
       # (decouples container env from host path changes).
       - ${SSH_AUTH_SOCK}:/run/ai-sandbox/ssh-auth.sock
+      # Firewall handshake channel shared with the firewall-init sidecar. The
+      # sidecar writes a completion marker here after applying the egress rules;
+      # this container's 03-init-firewall cont-init stage blocks on it before
+      # letting any later init stage or agent process send traffic.
+      - firewall-handshake:/var/lib/ai-sandbox-firewall
     environment:
       # credentials
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
@@ -94,9 +116,127 @@ services:
       - AI_SANDBOX_MARKETPLACES=${AI_SANDBOX_MARKETPLACES:-}
       - AI_SANDBOX_PLUGINS=${AI_SANDBOX_PLUGINS:-}
       - AI_SANDBOX_ENABLE_ALL_PLUGINS=${AI_SANDBOX_ENABLE_ALL_PLUGINS:-false}
+      # --allow-egress specs (see the ai.sandbox.allow-egress label above and
+      # AI_SANDBOX_ALLOW_EGRESS in src/index.sh). docker/init-firewall.sh is
+      # what actually reads this to generate the corresponding egress ACCEPT
+      # rules, but it only ever runs inside the firewall-init sidecar (see
+      # that service's own copy of this var below) -- kept here too, purely
+      # for consistency with AI_SANDBOX_NETWORK_ALLOW/AI_SANDBOX_CAPABILITIES
+      # below, which follow the same "declared on both services" shape.
+      - AI_SANDBOX_ALLOW_EGRESS=${AI_SANDBOX_ALLOW_EGRESS:-}
+      # Profile `network.allow` entries (hostnames/CIDRs); read by
+      # docker/init-firewall.sh at container init to extend the egress
+      # allow-list. See AI_SANDBOX_NETWORK_ALLOW in src/index.sh.
+      - AI_SANDBOX_NETWORK_ALLOW=${AI_SANDBOX_NETWORK_ALLOW:-}
+      # Host's LAN CIDR (e.g. "192.168.1.0/24"), detected host-side by
+      # src/utils.sh's compute_lan_cidr() only when the lan-access capability
+      # is active; empty when not detected/not applicable. Read by
+      # docker/init-firewall.sh's lan-access capability-dispatch case.
+      - AI_SANDBOX_LAN_CIDR=${AI_SANDBOX_LAN_CIDR:-}
+      # Resolved profile capabilities (space-separated, e.g. "docker
+      # web-search"). PROFILE_CAPABILITIES is otherwise host-side-only --
+      # used only by profile_has_capability() (src/utils.sh) to drive
+      # build/compose-file assembly (see
+      # plan/notes/investigation-findings.md). Network-behavior-affecting
+      # capabilities (web-search, host-access, lan-access) need the
+      # *running* firewall stage to know which are active too, so this
+      # passes the already-exported PROFILE_CAPABILITIES (src/index.sh)
+      # through verbatim; docker/init-firewall.sh filters it for the
+      # capability tokens it recognizes.
+      - AI_SANDBOX_CAPABILITIES=${PROFILE_CAPABILITIES:-}
+      # Space-separated list of TCP ports observed LISTENing on the host at
+      # launch time (src/index.sh, host-access capability only -- empty
+      # otherwise). Read by docker/init-firewall.sh's host-access case to
+      # allow-list egress to those ports on host.docker.internal. Same
+      # host-side-computed / container-passthrough shape as
+      # AI_SANDBOX_MARKETPLACES/AI_SANDBOX_NETWORK_ALLOW above.
+      - AI_SANDBOX_HOST_LISTEN_PORTS=${AI_SANDBOX_HOST_LISTEN_PORTS:-}
+      # Directory (on the shared firewall-handshake volume) where the
+      # firewall-init sidecar writes its completion marker and where
+      # 03-init-firewall waits for it. Single-sourced here for both services.
+      - AI_SANDBOX_FIREWALL_MARKER_DIR=/var/lib/ai-sandbox-firewall
     dns:
       - 8.8.8.8
       - 8.8.4.4
     extra_hosts:
       - "host.docker.internal:host-gateway"
-  
+
+  # Privilege-isolation sidecar for the default-deny egress firewall.
+  #
+  # SECURITY (security-001): the firewall's CAP_NET_ADMIN grant lives here, not
+  # on the ai-sandbox container (which holds broad NOPASSWD sudo). This sidecar
+  # shares ai-sandbox's network namespace, applies the iptables rules into it
+  # once via /usr/local/bin/init-firewall-sidecar.sh, records a completion
+  # marker on the shared firewall-handshake volume, and exits. See the security
+  # comment on the ai-sandbox service above and README's "Docker access"
+  # section for the mirrored docker-socket-proxy pattern.
+  firewall-init:
+    image: ${AI_SANDBOX_IMAGE_TAG:-ai-sandbox:full}
+    # Share ai-sandbox's network namespace so the rules applied here govern
+    # ai-sandbox's egress. This also orders startup after ai-sandbox (its
+    # namespace must exist first) and forbids this service from declaring its
+    # own dns/networks/ports -- it inherits all of ai-sandbox's, so hostnames
+    # like docker-socket-proxy (docker-compose.proxy.yaml) resolve identically.
+    network_mode: "service:ai-sandbox"
+    cap_add:
+      - NET_ADMIN
+    # Run the wrapper as root regardless of the image variant's final USER (the
+    # chromium fragment, for instance, ends on USER ${HOST_USER}); iptables
+    # needs a root EUID in addition to CAP_NET_ADMIN.
+    user: root
+    # One-shot: apply rules and exit. The ai-sandbox netns retains the applied
+    # rules for its lifetime, so no persistent privileged container is needed.
+    restart: "no"
+    environment:
+      # init-firewall.sh (run by the wrapper) reads these to extend the
+      # allow-list; they must reach the sidecar now, not ai-sandbox. Kept in
+      # sync with ai-sandbox's environment block above.
+      - AI_SANDBOX_MARKETPLACES=${AI_SANDBOX_MARKETPLACES:-}
+      - AI_SANDBOX_NETWORK_ALLOW=${AI_SANDBOX_NETWORK_ALLOW:-}
+      # --allow-egress specs -- init-firewall.sh's dynamic rule-generation
+      # block (plan/phase-03-allow-egress-flag/002-wire-allow-egress-into-firewall.md)
+      # reads this directly; this is the copy that actually matters, since
+      # init-firewall.sh only ever runs here, in the sidecar (same rationale
+      # as AI_SANDBOX_NETWORK_ALLOW/AI_SANDBOX_CAPABILITIES below).
+      - AI_SANDBOX_ALLOW_EGRESS=${AI_SANDBOX_ALLOW_EGRESS:-}
+      # Same capability-dispatch rationale as ai-sandbox's environment block
+      # above -- init-firewall.sh itself runs here, in the sidecar, so this
+      # is the copy that actually matters for capability-driven rule
+      # branches.
+      - AI_SANDBOX_CAPABILITIES=${PROFILE_CAPABILITIES:-}
+      # init-firewall.sh's host-access case reads this directly -- see the
+      # ai-sandbox environment block above for what it carries.
+      - AI_SANDBOX_HOST_LISTEN_PORTS=${AI_SANDBOX_HOST_LISTEN_PORTS:-}
+      - AI_SANDBOX_LAN_CIDR=${AI_SANDBOX_LAN_CIDR:-}
+      - AI_SANDBOX_FIREWALL_MARKER_DIR=/var/lib/ai-sandbox-firewall
+    volumes:
+      - firewall-handshake:/var/lib/ai-sandbox-firewall
+    # Bypass the image's s6-overlay init (/init); this container's only job is
+    # to run the firewall wrapper once and exit with its status.
+    entrypoint: []
+    command:
+      - /usr/local/bin/init-firewall-sidecar.sh
+
+volumes:
+  # Handshake channel between the firewall-init sidecar and ai-sandbox's
+  # 03-init-firewall wait stage. Compose scopes it per project (per sandbox
+  # instance). Persisting it across restarts is safe under a content-based
+  # (nonce/token) handshake (007-nonce-based-firewall-handshake): each boot,
+  # 03-init-firewall writes a fresh per-lifecycle token to expected-token as
+  # its very first action; the sidecar waits for that token, applies and
+  # verifies the firewall, then echoes the same token value back as the
+  # content of the completion marker(s) (applied, applied-ipv6).
+  # 03-init-firewall's poll loop only accepts a marker whose *content* equals
+  # the token it generated this boot -- so a leftover marker from a previous
+  # lifecycle (carrying a different, stale token) can never be misread as
+  # "already applied", regardless of which container reaches its checkpoint
+  # first. This replaced an earlier existence-only handshake (006) where
+  # only the producer ever cleared/wrote the marker: that design was correct
+  # against the race it targeted but traded it for the mirror-image race on
+  # a restart (a leftover marker satisfying the consumer's poll before the
+  # producer got a chance to clear it, letting ai-sandbox start unprotected).
+  # Content comparison closes both directions structurally, with no ordering
+  # assumption between the two containers (see
+  # docker/rootfs/etc/cont-init.d/03-init-firewall and
+  # docker/init-firewall-sidecar.sh).
+  firewall-handshake:

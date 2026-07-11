@@ -32,6 +32,63 @@ Describe 'bin/profile-installer.js'
       The output should include 'PROFILE_CAPABILITIES=docker'
     End
 
+    It 'composes base + web-search to PROFILE_CAPABILITIES=web-search'
+      When run run_installer base web-search
+      The status should be success
+      The output should include 'PROFILE_CAPABILITIES=web-search'
+    End
+
+    It 'emits web-search in the JSON capabilities list with no schema errors'
+      validate_web_search_json() {
+        node "$installer" --output json base web-search \
+          | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
+            process.stdout.write(String(d.capabilities.includes('web-search')));
+          "
+      }
+      When call validate_web_search_json
+      The status should be success
+      The output should equal 'true'
+    End
+
+    It 'composes base + host-access to PROFILE_CAPABILITIES=host-access'
+      When run run_installer base host-access
+      The status should be success
+      The output should include 'PROFILE_CAPABILITIES=host-access'
+    End
+
+    It 'emits host-access in the JSON capabilities list with no schema errors'
+      validate_host_access_json() {
+        node "$installer" --output json base host-access \
+          | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
+            process.stdout.write(String(d.capabilities.includes('host-access')));
+          "
+      }
+      When call validate_host_access_json
+      The status should be success
+      The output should equal 'true'
+    End
+
+    It 'composes base + lan-access to PROFILE_CAPABILITIES=lan-access'
+      When run run_installer base lan-access
+      The status should be success
+      The output should include 'PROFILE_CAPABILITIES=lan-access'
+    End
+
+    It 'emits lan-access in the JSON capabilities list with no schema errors'
+      validate_lan_access_json() {
+        node "$installer" --output json base lan-access \
+          | node -e "
+            const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
+            process.stdout.write(String(d.capabilities.includes('lan-access')));
+          "
+      }
+      When call validate_lan_access_json
+      The status should be success
+      The output should equal 'true'
+    End
+
     It 'errors on conflicting mode scalars (mirror + static)'
       When run run_installer mirror static
       The status should be failure
@@ -84,6 +141,17 @@ Describe 'bin/profile-installer.js'
       When call hash_twice
       The status should be success
       The output should include 'PROFILE_COMPOSITION_HASH='
+    End
+
+    It 'produces a distinct hash when web-search is added to a composition'
+      hash_differs() {
+        h1=$(node "$installer" --output env base | grep PROFILE_COMPOSITION_HASH)
+        h2=$(node "$installer" --output env base web-search | grep PROFILE_COMPOSITION_HASH)
+        [ "$h1" != "$h2" ] && printf 'DISTINCT'
+      }
+      When call hash_differs
+      The status should be success
+      The output should equal 'DISTINCT'
     End
   End
 
@@ -151,6 +219,48 @@ Describe 'bin/profile-installer.js'
       When call run_from_fixtures
       The status should be success
       The output should equal '1'
+    End
+  End
+
+  Describe 'network.allow field'
+    # Run installer from test/fixtures so fixture profiles are found via ./profiles/.
+    fixtures="${SHELLSPEC_PROJECT_ROOT}/test/fixtures"
+
+    It 'parses and emits network.allow entries (hostname and CIDR) in JSON output as network_allow'
+      run_from_fixtures() {
+        cd "$fixtures" && node "$installer" --output json na-single
+      }
+      When call run_from_fixtures
+      The status should be success
+      The output should include '"network_allow"'
+      The output should include 'api.example.com'
+      The output should include '10.0.0.0/8'
+    End
+
+    It 'defaults network_allow to [] when the profile has no network.allow'
+      run_from_fixtures() {
+        cd "$fixtures" && node "$installer" --output json eap-absent
+      }
+      When call run_from_fixtures
+      The status should be success
+      The output should include '"network_allow":[]'
+    End
+
+    It 'derives AI_SANDBOX_NETWORK_ALLOW from network.allow-bearing PROFILE_JSON via the same jq filter src/index.sh uses'
+      # Mirrors src/index.sh's extraction:
+      #   AI_SANDBOX_NETWORK_ALLOW="$(printf '%s\n' "${PROFILE_JSON}" \
+      #     | jq -r '(.network_allow // []) | join("|")')"
+      # src/index.sh itself runs top-level (after the __SOURCED__ short-circuit
+      # test harnesses use), so this test exercises the identical jq filter
+      # against the real profile-installer.js JSON output rather than trying
+      # to source the whole CLI pipeline.
+      derive_network_allow() {
+        cd "$fixtures" && node "$installer" --output json na-single \
+          | jq -r '(.network_allow // []) | join("|")'
+      }
+      When call derive_network_allow
+      The status should be success
+      The output should equal 'api.example.com|10.0.0.0/8'
     End
   End
 

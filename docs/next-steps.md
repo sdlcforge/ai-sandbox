@@ -41,6 +41,39 @@ container is still running. On host-side `claude` startup:
 This makes exclusion symmetric without requiring port coordination or IPC.
 Defer until the documented invariant proves insufficient in practice.
 
+## Boot-window race between `enter`/`docker exec` and the firewall handshake
+
+### Problem
+
+`03-init-firewall` (a `cont-init.d` stage) blocks the rest of the
+[cont-init.d sequence](architecture.md#egress-firewall-default-deny-enforced-by-a-privilege-isolated-sidecar)
+on the `firewall-init` sidecar's completion marker, but s6-svscan makes the
+container `docker exec`-able the moment PID 1 starts — before and during
+that wait. `start_shell()` in `src/utils.sh` (used by both `ai-sandbox
+enter` and `create --enter`) execs into the container immediately after `up
+-d`, with no wait on the firewall marker itself; only the cont-init.d chain
+is gated on it. This leaves a narrow window (~1-2s on a normal successful
+start, empirically confirmed) where a racing `enter`/`docker exec` can
+attach to the container before the egress firewall is confirmed applied.
+
+### Current mitigation
+
+None. The window is bounded (a normal start applies the firewall in ~1-2s;
+a failing start is bounded by `AI_SANDBOX_FIREWALL_WAIT_TIMEOUT`, default
+60s, after which the container halts per
+[`S6_BEHAVIOUR_IF_STAGE2_FAILS=2`](architecture.md#egress-firewall-default-deny-enforced-by-a-privilege-isolated-sidecar))
+but it is not currently closed. First flagged as a residual finding in
+`plan/phase-02-network-capabilities/008-set-s6-stage2-fail-behavior.md`'s
+Status section, out of scope for that task.
+
+### Proposed solution
+
+Gate `start_shell`/`enter`'s `docker exec` on the firewall completion
+marker (poll the same `firewall-handshake` volume `03-init-firewall`
+waits on, or tie a container healthcheck to `03-init-firewall` and have
+the launcher wait on that) before attaching, mirroring the wait the
+cont-init.d chain already performs.
+
 ## Architecture mismatch in plugin binaries
 
 ### Problem

@@ -45,6 +45,13 @@
 #   CLI_PLUGINS   — array of --enable-plugin names
 #   CLI_ENABLE_ALL — "true" if --enable-all was passed
 #   CLEAN_SLATE   — "true" if --clean was passed (no host ~/.claude or plugin mounts)
+#   CLI_ALLOW_EGRESS — array of --allow-egress specs
+#                   (<host-or-ip-or-cidr>:<port>), syntactically validated at
+#                   parse time (see the --allow-egress case below, which calls
+#                   src/utils.sh's is_valid_egress_host()/is_valid_egress_port()
+#                   directly for per-failure-mode error messages). CLI-only --
+#                   there is no profile-level equivalent to merge, unlike
+#                   CLI_MARKETPLACES/CLI_PLUGINS.
 # Also exports AI_SANDBOX_SKIP_PLUGIN_CHECK when --force is passed.
 
 # Validate a sandbox name against Docker Compose's project-name constraint.
@@ -153,6 +160,7 @@ function parse_options() {
     CLI_PLUGINS=()
     CLI_ENABLE_ALL=false
     CLEAN_SLATE=false
+    CLI_ALLOW_EGRESS=()
 
     # Global command words — first non-flag arg matching one of these is a global command.
     # "create" and "list" are no longer free-standing global words: they are
@@ -226,7 +234,7 @@ function parse_options() {
         export SANDBOX_NAME SANDBOX_NAME_KIND SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
                NO_ISOLATE_CONFIG CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
                STATUS_JSON STATUS_TEST_CHECK QUIET \
-               CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE
+               CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE CLI_ALLOW_EGRESS
         if [ -z "${QUIET}" ]; then
             QUIET=1
         fi
@@ -489,6 +497,40 @@ function parse_options() {
                 CLI_ENABLE_ALL=true
                 CONFIG_FLAGS_PROVIDED=true
                 ;;
+            --allow-egress)
+                i=$(( i + 1 ))
+                if [ "${i}" -ge "${#all_remaining[@]}" ]; then
+                    echo "Error: --allow-egress requires a spec (<host-or-ip-or-cidr>:<port>)" 1>&2
+                    exit 1
+                fi
+                _spec="${all_remaining[${i}]}"
+                # Reject anything but exactly one ':' up front -- this also
+                # rejects an unbracketed IPv6 literal (out of scope; see the
+                # task doc's Assumptions) before it ever reaches the
+                # host/port split below.
+                _colon_count="$(grep -o ':' <<< "${_spec}" | wc -l | tr -d ' ')"
+                if [ "${_colon_count}" -ne 1 ]; then
+                    echo "Error: --allow-egress spec must contain exactly one ':' separating host from port (got '${_spec}')" 1>&2
+                    exit 1
+                fi
+                _egress_host="${_spec%%:*}"
+                _egress_port="${_spec##*:}"
+                # is_valid_egress_port()/is_valid_egress_host() (src/utils.sh)
+                # are the single source of truth for these checks -- also
+                # reused by restore_saved_config()'s defense-in-depth
+                # re-validation of a restored ai.sandbox.config label, so both
+                # sites apply byte-for-byte the same rules.
+                if ! is_valid_egress_port "${_egress_port}"; then
+                    echo "Error: --allow-egress port must be an integer 1-65535 (got '${_egress_port}' in '${_spec}')" 1>&2
+                    exit 1
+                fi
+                if ! is_valid_egress_host "${_egress_host}"; then
+                    echo "Error: --allow-egress host part must be an IPv4 address, IPv4 CIDR, or hostname (got '${_egress_host}' in '${_spec}')" 1>&2
+                    exit 1
+                fi
+                CLI_ALLOW_EGRESS+=("${_spec}")
+                CONFIG_FLAGS_PROVIDED=true
+                ;;
             --clean)
                 CLEAN_SLATE=true
                 CONFIG_FLAGS_PROVIDED=true
@@ -589,12 +631,12 @@ function parse_options() {
         fi
     fi
 
-    # Note: CLI_MARKETPLACES and CLI_PLUGINS are bash arrays; bash cannot export
-    # arrays across process boundaries. They are consumed within the same shell
-    # session by index.sh before any subprocess boundary is crossed — same
-    # pattern as PROFILES.
+    # Note: CLI_MARKETPLACES, CLI_PLUGINS, and CLI_ALLOW_EGRESS are bash
+    # arrays; bash cannot export arrays across process boundaries. They are
+    # consumed within the same shell session by index.sh before any
+    # subprocess boundary is crossed — same pattern as PROFILES.
     export SANDBOX_NAME SANDBOX_NAME_KIND SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
            NO_ISOLATE_CONFIG CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
            STATUS_JSON STATUS_TEST_CHECK QUIET \
-           CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE
+           CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE CLI_ALLOW_EGRESS
 }

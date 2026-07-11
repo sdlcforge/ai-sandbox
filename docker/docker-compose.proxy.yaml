@@ -41,6 +41,17 @@ services:
       - docker-proxy
     depends_on:
       - docker-socket-proxy
+  firewall-init:
+    # The firewall-init sidecar runs init-firewall.sh, which adds a conditional
+    # ACCEPT rule for the docker-socket-proxy host when DOCKER_HOST is set. The
+    # sidecar shares ai-sandbox's network namespace, so it is already on the
+    # docker-proxy network (no `networks:` allowed on a network_mode:service
+    # container) and resolves `docker-socket-proxy` identically -- it just needs
+    # the same DOCKER_HOST value to know to emit the rule.
+    environment:
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
+    depends_on:
+      - docker-socket-proxy
 networks:
   docker-proxy:
     driver: bridge

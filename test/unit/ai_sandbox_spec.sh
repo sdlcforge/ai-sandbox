@@ -174,6 +174,153 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'netmask_to_prefix()'
+    It 'converts a /24 netmask'
+      When call netmask_to_prefix 255.255.255.0
+      The output should eq '24'
+      The status should be success
+    End
+
+    It 'converts a /16 netmask'
+      When call netmask_to_prefix 255.255.0.0
+      The output should eq '16'
+      The status should be success
+    End
+
+    It 'converts a /8 netmask'
+      When call netmask_to_prefix 255.0.0.0
+      The output should eq '8'
+      The status should be success
+    End
+
+    It 'converts a /32 netmask'
+      When call netmask_to_prefix 255.255.255.255
+      The output should eq '32'
+      The status should be success
+    End
+
+    It 'fails on a netmask with the wrong octet count'
+      When call netmask_to_prefix 255.255.255
+      The status should be failure
+      The output should eq ''
+    End
+
+    It 'fails on a netmask with a non-numeric octet'
+      When call netmask_to_prefix 255.255.abc.0
+      The status should be failure
+      The output should eq ''
+    End
+
+    It 'fails on a netmask with an out-of-range octet'
+      When call netmask_to_prefix 255.255.256.0
+      The status should be failure
+      The output should eq ''
+    End
+
+    It 'fails cleanly (no bash arithmetic error) on a leading-zero octet'
+      # A leading-zero numeral (e.g. "008") would be parsed as octal by bash
+      # arithmetic ($(( ))) and abort with "value too great for base" if not
+      # rejected before reaching it -- see is_octet(). Assert both a clean
+      # failure status and that no such error leaks to stderr.
+      When call netmask_to_prefix 255.255.008.0
+      The status should be failure
+      The output should eq ''
+      The stderr should eq ''
+    End
+  End
+
+  Describe 'network_address()'
+    It 'derives the network address for a /24 netmask'
+      When call network_address 192.168.1.42 255.255.255.0
+      The output should eq '192.168.1.0'
+      The status should be success
+    End
+
+    It 'derives the network address for a /16 netmask'
+      When call network_address 10.20.30.40 255.255.0.0
+      The output should eq '10.20.0.0'
+      The status should be success
+    End
+
+    It 'fails on a malformed IP address'
+      When call network_address '1.2.3' 255.255.255.0
+      The status should be failure
+      The output should eq ''
+    End
+
+    It 'fails on a malformed netmask'
+      When call network_address 192.168.1.42 'not-a-mask'
+      The status should be failure
+      The output should eq ''
+    End
+
+    It 'fails cleanly (no bash arithmetic error) on a leading-zero IP octet'
+      When call network_address 192.168.008.42 255.255.255.0
+      The status should be failure
+      The output should eq ''
+      The stderr should eq ''
+    End
+  End
+
+  Describe 'compute_lan_cidr()'
+    It 'returns the LAN CIDR when route/ipconfig detection succeeds'
+      uname() { printf 'Darwin\n'; }
+      route() { printf '  interface: en0\n'; }
+      ipconfig() {
+        case "$1" in
+          getifaddr) printf '192.168.1.42\n' ;;
+          getoption) printf '255.255.255.0\n' ;;
+        esac
+      }
+      When call compute_lan_cidr
+      The output should eq '192.168.1.0/24'
+      The status should be success
+    End
+
+    It 'fails soft (empty output, warning, success status) when there is no default route'
+      uname() { printf 'Darwin\n'; }
+      route() { return 1; }
+      ipconfig() { return 1; }
+      When call compute_lan_cidr
+      The output should eq ''
+      The stderr should include "could not determine the host's default-route interface"
+      The status should be success
+    End
+
+    It 'fails soft when ipconfig cannot resolve the interface (e.g. VPN-only interface)'
+      uname() { printf 'Darwin\n'; }
+      route() { printf '  interface: utun3\n'; }
+      ipconfig() { return 1; }
+      When call compute_lan_cidr
+      The output should eq ''
+      The stderr should include 'could not determine IP address/subnet mask'
+      The status should be success
+    End
+
+    It 'fails soft on an unrecognized subnet mask'
+      uname() { printf 'Darwin\n'; }
+      route() { printf '  interface: en0\n'; }
+      ipconfig() {
+        case "$1" in
+          getifaddr) printf '192.168.1.42\n' ;;
+          getoption) printf 'not-a-mask\n' ;;
+        esac
+      }
+      When call compute_lan_cidr
+      The output should eq ''
+      The stderr should include 'unrecognized subnet mask'
+      The status should be success
+    End
+
+    It 'fails soft with a platform-specific warning on non-macOS hosts'
+      uname() { printf 'Linux\n'; }
+      When call compute_lan_cidr
+      The output should eq ''
+      The stderr should include 'macOS-only'
+      The status should be success
+    End
+  End
+
   Describe 'ensure_image()'
     setup() {
       export TOOL_CACHE_DIR="$(mktemp -d)"
@@ -541,11 +688,12 @@ Describe 'ai-sandbox.sh'
       printf '%s' "$1" | base64 | tr -d '\n'
     }
 
-    It 'restores all seven config-input dimensions from a mocked ai.sandbox.config label (full round trip)'
+    It 'restores all eight config-input dimensions from a mocked ai.sandbox.config label (full round trip)'
       # Direct regression test for the design note's restore-side requirement:
       # a sandbox created with a full set of config-changing flags records the
       # complete input record in the single ai.sandbox.config label; a bare
-      # `enter` must reconstruct every one of the seven dimensions from it.
+      # `enter` must reconstruct every one of the eight dimensions from it
+      # (allow_egress is the eighth, added alongside the original seven).
       SANDBOX_NAME="test"
       CONFIG_FLAGS_PROVIDED=false
       PROFILES=()
@@ -555,7 +703,8 @@ Describe 'ai-sandbox.sh'
       CLI_MARKETPLACES=()
       CLI_PLUGINS=()
       CLI_ENABLE_ALL=false
-      config_b64="$(encode_config '{"version":1,"profiles":["base","docker"],"mode":"static","no_isolate_config":true,"clean_slate":true,"marketplaces":["https://registry.example.com/plugins"],"plugins":["claude-mem"],"enable_all_plugins":true}')"
+      CLI_ALLOW_EGRESS=()
+      config_b64="$(encode_config '{"version":1,"profiles":["base","docker"],"mode":"static","no_isolate_config":true,"clean_slate":true,"marketplaces":["https://registry.example.com/plugins"],"plugins":["claude-mem"],"enable_all_plugins":true,"allow_egress":["1.2.3.4:443"]}')"
       docker() {
         if [ "$1" = "inspect" ]; then
           if [[ "$*" == *"ai.sandbox.config"* ]]; then
@@ -572,6 +721,62 @@ Describe 'ai-sandbox.sh'
       The variable "CLI_MARKETPLACES[*]" should eq 'https://registry.example.com/plugins'
       The variable "CLI_PLUGINS[*]" should eq 'claude-mem'
       The variable CLI_ENABLE_ALL should eq true
+      The variable "CLI_ALLOW_EGRESS[*]" should eq '1.2.3.4:443'
+    End
+
+    It 'restores CLI_ALLOW_EGRESS from a mocked ai.sandbox.config label'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      CLI_ALLOW_EGRESS=()
+      config_b64="$(encode_config '{"version":1,"allow_egress":["1.2.3.4:443","10.0.0.0/8:8080","api.example.com:443"]}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable "CLI_ALLOW_EGRESS[*]" should eq '1.2.3.4:443 10.0.0.0/8:8080 api.example.com:443'
+    End
+
+    It 'drops a restored --allow-egress spec that fails validation, keeping well-formed entries (mirrors --allow-egress parse-time validation)'
+      # src/options.sh's --allow-egress parser rejects a spec that doesn't
+      # validate (see the parse_options() --allow-egress tests above). A
+      # restored value arrives via a persisted docker label rather than this
+      # run's CLI args, so it must be independently re-validated rather than
+      # trusted verbatim.
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      CLI_ALLOW_EGRESS=()
+      config_b64="$(encode_config '{"version":1,"allow_egress":["1.2.3.4:70000","10.0.0.0/8:8080"]}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable "CLI_ALLOW_EGRESS[*]" should eq '10.0.0.0/8:8080'
+      The stderr should include 'dropping restored --allow-egress spec'
+      The stderr should include '1.2.3.4:70000'
     End
 
     It 'restores NO_ISOLATE_CONFIG=true specifically (regression: previously silently dropped, causing a false-positive recreate prompt)'
@@ -825,13 +1030,17 @@ Describe 'ai-sandbox.sh'
   Describe 'running_config_matches()'
     # Builds the single sep-joined line the consolidated `docker inspect`
     # call in running_config_matches() now expects (followup 4DzF: 9
-    # separate single-field calls collapsed into 1 multi-field call). Field
-    # order matches the function's own `read`: image hash mode no_isolate
-    # proxy clean marketplaces plugins enable_all. Uses the same ASCII Unit
+    # separate single-field calls collapsed into 1 multi-field call, later
+    # extended to 10 fields for allow-egress). Field order matches the
+    # function's own `read`: image hash mode no_isolate proxy clean
+    # marketplaces plugins enable_all allow_egress. Uses the same ASCII Unit
     # Separator (0x1F) as the implementation, not tab/pipe -- see the
-    # implementation comment for why.
+    # implementation comment for why. Existing callers that still pass only 9
+    # positional args are unaffected: printf leaves an unset trailing %s
+    # empty, which read()s into an empty allow_egress field -- the same
+    # default AI_SANDBOX_ALLOW_EGRESS has when a test doesn't set it.
     mock_inspect_line() {
-      printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$@"
+      printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$@"
     }
 
     It 'returns 2 when no container is running'
@@ -1026,6 +1235,59 @@ Describe 'ai-sandbox.sh'
       }
       When call running_config_matches
       The status should eq 0
+    End
+
+    It 'returns success when the allow-egress label matches AI_SANDBOX_ALLOW_EGRESS'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      AI_SANDBOX_ALLOW_EGRESS="1.2.3.4:443|api.example.com:8080"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" \
+              "" "" "false" "1.2.3.4:443|api.example.com:8080"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 0
+    End
+
+    It 'returns failure when the allow-egress label disagrees with AI_SANDBOX_ALLOW_EGRESS (e.g. enter --allow-egress NEW on a container created without it)'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      AI_SANDBOX_ALLOW_EGRESS="1.2.3.4:443"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" "" "" "false" ""
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 1
     End
   End
 
@@ -1275,6 +1537,83 @@ Describe 'ai-sandbox.sh'
         --add-marketplace https://one.example.com \
         --add-marketplace file:///two
       The variable "CLI_MARKETPLACES[*]" should eq 'https://one.example.com file:///two'
+    End
+
+    It 'accepts --allow-egress with an IPv4:port spec'
+      When call parse_options instances create mybox --allow-egress 1.2.3.4:443
+      The variable "CLI_ALLOW_EGRESS[*]" should eq '1.2.3.4:443'
+      The variable CONFIG_FLAGS_PROVIDED should eq true
+    End
+
+    It 'accepts --allow-egress with an IPv4 CIDR:port spec'
+      When call parse_options instances create mybox --allow-egress 10.0.0.0/8:8080
+      The variable "CLI_ALLOW_EGRESS[*]" should eq '10.0.0.0/8:8080'
+    End
+
+    It 'accepts --allow-egress with a hostname:port spec'
+      When call parse_options instances create mybox --allow-egress api.example.com:443
+      The variable "CLI_ALLOW_EGRESS[*]" should eq 'api.example.com:443'
+    End
+
+    It 'errors when --allow-egress is given no spec'
+      When run parse_options instances create mybox --allow-egress
+      The status should be failure
+      The stderr should include '--allow-egress requires'
+    End
+
+    It 'rejects --allow-egress with no colon'
+      When run parse_options instances create mybox --allow-egress 1.2.3.4
+      The status should be failure
+      The stderr should include 'exactly one'
+    End
+
+    It 'rejects --allow-egress with more than one colon (e.g. an unbracketed IPv6 literal)'
+      When run parse_options instances create mybox --allow-egress ::1:443
+      The status should be failure
+      The stderr should include 'exactly one'
+    End
+
+    It 'rejects --allow-egress with an out-of-range port'
+      When run parse_options instances create mybox --allow-egress 1.2.3.4:70000
+      The status should be failure
+      The stderr should include 'port must be an integer 1-65535'
+    End
+
+    It 'rejects --allow-egress with a non-numeric port'
+      When run parse_options instances create mybox --allow-egress 1.2.3.4:abc
+      The status should be failure
+      The stderr should include 'port must be an integer 1-65535'
+    End
+
+    It 'rejects --allow-egress with a malformed host part'
+      When run parse_options instances create mybox --allow-egress 'bad host!:443'
+      The status should be failure
+      The stderr should include 'host part must be'
+    End
+
+    It 'rejects --allow-egress with an out-of-range IPv4 octet'
+      When run parse_options instances create mybox --allow-egress 999.1.1.1:443
+      The status should be failure
+      The stderr should include 'host part must be'
+    End
+
+    It 'rejects --allow-egress with a trailing-dot IPv4 literal (bash read -a silently drops the resulting empty trailing field)'
+      When run parse_options instances create mybox --allow-egress 1.2.3.4.:443
+      The status should be failure
+      The stderr should include 'host part must be'
+    End
+
+    It 'rejects --allow-egress with a trailing-dot IPv4 address in a CIDR'
+      When run parse_options instances create mybox --allow-egress 1.2.3.4./24:443
+      The status should be failure
+      The stderr should include 'host part must be'
+    End
+
+    It 'accumulates repeated --allow-egress specs in order'
+      When call parse_options instances create mybox \
+        --allow-egress 1.2.3.4:443 \
+        --allow-egress api.example.com:8080
+      The variable "CLI_ALLOW_EGRESS[*]" should eq '1.2.3.4:443 api.example.com:8080'
     End
 
     It 'accepts --enable-plugin and sets CLI_PLUGINS'

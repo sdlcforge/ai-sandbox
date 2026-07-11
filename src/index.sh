@@ -189,6 +189,18 @@ else
 fi
 _cli_enable_all_json=false
 [ "${CLI_ENABLE_ALL}" = "true" ] && _cli_enable_all_json=true
+# _cli_allow_egress_json is computed here too (alongside the other CLI->JSON
+# conversions) even though --allow-egress has no profile-level equivalent to
+# merge into PROFILE_JSON below -- it's CLI-only (task doc Requirement 4) --
+# purely so it's computed once and reused by both the config-persistence
+# block and the AI_SANDBOX_ALLOW_EGRESS derivation further down, rather than
+# recomputing the same array->JSON conversion twice (same rationale as
+# followup 85Na for marketplaces/plugins).
+if [ "${#CLI_ALLOW_EGRESS[@]}" -gt 0 ]; then
+  _cli_allow_egress_json="$(printf '%s\n' "${CLI_ALLOW_EGRESS[@]}" | jq -R . | jq -s .)"
+else
+  _cli_allow_egress_json='[]'
+fi
 if [ "${#CLI_MARKETPLACES[@]}" -gt 0 ] || [ "${#CLI_PLUGINS[@]}" -gt 0 ] || [ "${CLI_ENABLE_ALL}" = "true" ]; then
   PROFILE_JSON="$(printf '%s\n' "${PROFILE_JSON}" | jq \
       --argjson cm "${_cli_marketplaces_json}" \
@@ -201,20 +213,28 @@ fi
 export PROFILE_JSON
 
 # --- Phase: assemble the full config-input record for persistence ---
-# Capture all seven config-input dimensions (see
-# plan/notes/config-persistence-design.md) as a single JSON record, then
+# Capture all eight config-input dimensions (see
+# plan/notes/config-persistence-design.md; allow_egress is the eighth,
+# added alongside the original seven) as a single JSON record, then
 # base64-encode it single-line -- mirroring src/credentials.sh's
 # AI_SANDBOX_CREDENTIALS_JSON_B64 pattern -- for safe embedding in the
 # ai.sandbox.config Docker label (docker/docker-compose.yaml).
-# restore_saved_config() decodes this label to rehydrate all seven inputs on
-# every per-instance command except create (see should_restore_config(), src/utils.sh). Persist CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL (the
-# CLI deltas), not the profile-merged PROFILE_JSON set: profile-contributed
-# entries are reproduced for free by re-running profile-installer.js on
-# restore, so only the CLI additions need to round-trip through the label.
-# Reuses _cli_marketplaces_json/_cli_plugins_json/_cli_enable_all_json
-# computed by the CLI-merge block above (same CLI_MARKETPLACES/CLI_PLUGINS
-# arrays) instead of recomputing the same jq -R . | jq -s . conversion a
-# second time -- see followup 85Na.
+# restore_saved_config() decodes this label to rehydrate all eight inputs on
+# every per-instance command except create (see should_restore_config(),
+# src/utils.sh) -- broadened from the original bare-start/enter-only trigger,
+# since every other per-instance command also acts on an already-created
+# instance and needs its compose-file assembly to reflect that instance's
+# actual persisted composition. Persist CLI_MARKETPLACES/CLI_PLUGINS/
+# CLI_ENABLE_ALL/CLI_ALLOW_EGRESS (the CLI deltas), not the profile-merged
+# PROFILE_JSON set: profile-contributed entries are reproduced for free by
+# re-running profile-installer.js on restore, so only the CLI additions need
+# to round-trip through the label (allow_egress has no profile-level
+# equivalent at all, so its persisted value is simply the CLI array itself).
+# Reuses _cli_marketplaces_json/_cli_plugins_json/_cli_enable_all_json/
+# _cli_allow_egress_json computed by the CLI-merge block above (same
+# CLI_MARKETPLACES/CLI_PLUGINS/CLI_ALLOW_EGRESS arrays) instead of
+# recomputing the same jq -R . | jq -s . conversion a second time -- see
+# followup 85Na.
 if [ "${#PROFILES[@]}" -gt 0 ]; then
   _config_profiles_json="$(printf '%s\n' "${PROFILES[@]}" | jq -R . | jq -s .)"
 else
@@ -225,6 +245,10 @@ _config_no_isolate_json=false
 _config_clean_slate_json=false
 [ "${CLEAN_SLATE:-false}" = "true" ] && _config_clean_slate_json=true
 
+# version stays 1: allow_egress is an additive optional field, same
+# reasoning already applied elsewhere in this project's own schema
+# conventions (task doc Requirement 4/Assumptions) -- no code branches on
+# `version` today, so an additive field doesn't warrant a bump.
 AI_SANDBOX_CONFIG_JSON="$(jq -n \
     --argjson profiles "${_config_profiles_json}" \
     --arg mode "${MODE_OVERRIDE}" \
@@ -233,10 +257,12 @@ AI_SANDBOX_CONFIG_JSON="$(jq -n \
     --argjson marketplaces "${_cli_marketplaces_json}" \
     --argjson plugins "${_cli_plugins_json}" \
     --argjson enable_all_plugins "${_cli_enable_all_json}" \
+    --argjson allow_egress "${_cli_allow_egress_json}" \
     '{version: 1, profiles: $profiles, mode: $mode,
       no_isolate_config: $no_isolate_config, clean_slate: $clean_slate,
       marketplaces: $marketplaces, plugins: $plugins,
-      enable_all_plugins: $enable_all_plugins}')"
+      enable_all_plugins: $enable_all_plugins,
+      allow_egress: $allow_egress}')"
 # macOS base64 may line-wrap; tr -d '\n' guarantees a single-line label value.
 AI_SANDBOX_CONFIG_B64="$(printf '%s' "${AI_SANDBOX_CONFIG_JSON}" | base64 | tr -d '\n')"
 export AI_SANDBOX_CONFIG_B64
@@ -335,7 +361,37 @@ AI_SANDBOX_PLUGINS="$(printf '%s\n' "${PROFILE_JSON}" \
   | jq -r '(.plugins // []) | join("|")')"
 AI_SANDBOX_ENABLE_ALL_PLUGINS="$(printf '%s\n' "${PROFILE_JSON}" \
   | jq -r '.enable_all_plugins // false')"
-export AI_SANDBOX_MARKETPLACES AI_SANDBOX_PLUGINS AI_SANDBOX_ENABLE_ALL_PLUGINS
+# Profile `network.allow` entries (hostnames or CIDRs) -- extends the default
+# GitHub/Anthropic allow-list applied by docker/init-firewall.sh. Same '|'
+# join convention as AI_SANDBOX_MARKETPLACES above (see that comment).
+AI_SANDBOX_NETWORK_ALLOW="$(printf '%s\n' "${PROFILE_JSON}" \
+  | jq -r '(.network_allow // []) | join("|")')"
+# --allow-egress specs (task doc Requirement 4): CLI-only, no profile-level
+# merge equivalent (unlike marketplaces/plugins/enable-all above), so the
+# "effective" value running_config_matches() compares is simply the CLI
+# array itself. Reuses _cli_allow_egress_json computed by the CLI-merge
+# block above instead of recomputing the same array->JSON conversion a
+# second time (same rationale as followup 85Na for marketplaces/plugins).
+AI_SANDBOX_ALLOW_EGRESS="$(printf '%s\n' "${_cli_allow_egress_json}" \
+  | jq -r 'join("|")')"
+export AI_SANDBOX_MARKETPLACES AI_SANDBOX_PLUGINS AI_SANDBOX_ENABLE_ALL_PLUGINS \
+  AI_SANDBOX_NETWORK_ALLOW AI_SANDBOX_ALLOW_EGRESS
+
+# lan-access capability: host-side LAN CIDR detection (macOS `route get
+# default` + `ipconfig`, see src/utils.sh's compute_lan_cidr()), consumed by
+# docker/init-firewall.sh's lan-access capability-dispatch case to gate a
+# CIDR-wide TCP ACCEPT rule. Only computed when the capability is active
+# (avoids the route/ipconfig cost on every invocation, same rationale as
+# EFFECTIVE_PROXY/AI_SANDBOX_DOCKERFILE's capability-gated work above).
+# compute_lan_cidr() itself fails soft -- an undetectable LAN CIDR (no
+# default route, VPN-only interface, etc.) logs a warning and leaves this
+# empty rather than aborting; docker/init-firewall.sh treats an empty value
+# as "no rule to add".
+AI_SANDBOX_LAN_CIDR=""
+if profile_has_capability lan-access; then
+  AI_SANDBOX_LAN_CIDR="$(compute_lan_cidr)"
+fi
+export AI_SANDBOX_LAN_CIDR
 
 # Assemble the effective Dockerfile from the resolved capabilities and point the
 # compose build at it (docker-compose.yaml reads ${AI_SANDBOX_DOCKERFILE}).
@@ -445,6 +501,40 @@ export GIT_USER_EMAIL
 export DOCKER_DEFAULT_PLATFORM=linux/${HOST_ARCH}
 export TOOL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ai-sandbox"
 mkdir -p "${TOOL_CACHE_DIR}"
+
+# host-access capability: enumerate currently-LISTENing TCP ports on the host
+# so docker/init-firewall.sh's host-access case can allow-list them via
+# host.docker.internal (see plan/phase-02-network-capabilities/003-*.md).
+# Only computed when the capability is active, to avoid the lsof cost on
+# every invocation. Only this host-side *enumeration* step is macOS-specific
+# (lsof) -- documented Linux gap; the Linux equivalent would be `ss -ltnp` or
+# similar, not implemented in V1, consistent with this project's macOS-first
+# stance. host.docker.internal *resolution* itself is not macOS-exclusive
+# (Docker Engine 20.10+ on Linux also supports the host-gateway extra_hosts
+# value already present in docker-compose.yaml).
+if profile_has_capability host-access; then
+  if command -v lsof >/dev/null 2>&1; then
+    # `lsof` exits 1 (not just on a real error, but also on the legitimate
+    # "no matching processes" case -- e.g. a host with zero currently-
+    # LISTENing TCP sockets) -- `|| true` on lsof's own invocation keeps that
+    # from tripping `pipefail`/`set -e` and aborting the whole launcher; the
+    # awk/sed/sort/tr stages downstream handle empty input fine, correctly
+    # producing an empty AI_SANDBOX_HOST_LISTEN_PORTS.
+    AI_SANDBOX_HOST_LISTEN_PORTS=$( (lsof -iTCP -sTCP:LISTEN -n -P 2>/dev/null || true) \
+      | awk 'NR>1 {print $9}' | sed -E 's/.*:([0-9]+)$/\1/' | sort -un | tr '\n' ' ')
+  else
+    # lsof missing (e.g. a non-macOS host, or a broken PATH) -- degrade to no
+    # host ports allow-listed rather than letting a missing-binary error
+    # under `set -euo pipefail` abort the entire launcher. See the Linux-gap
+    # comment above: this capability's enumeration step is macOS-only by
+    # design, so an absent lsof is expected outside macOS, not a hard error.
+    echo "ai-sandbox: lsof not found; host-access capability will not allow-list any host ports (host-side port enumeration is macOS-only in V1)" >&2
+    AI_SANDBOX_HOST_LISTEN_PORTS=""
+  fi
+else
+  AI_SANDBOX_HOST_LISTEN_PORTS=""
+fi
+export AI_SANDBOX_HOST_LISTEN_PORTS
 
 # --- Phase: tool-version resolution + downloads (build-related commands) ---
 if [ "${CMD}" = "enter" ] || [ "${CMD}" = "start" ] || [ "${CMD}" = "up" ] || [ "${CMD}" = "build" ] || [ "${CMD}" = "create" ]; then

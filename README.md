@@ -85,7 +85,7 @@ The `base` standard profile (and the default pre-profile image) includes:
 - **Shell**: Zsh with Oh My Zsh
 - **Tools**: git, git-delta, jq, curl, build-essential
 - **Init system**: s6-overlay for process supervision
-- **Firewall**: iptables rules restricting outbound to GitHub + Anthropic
+- **Firewall**: default-deny outbound, explicit allow-list for GitHub + Anthropic (enforced by a privilege-isolated firewall-init sidecar — see [Network access](#network-access))
 - **Optional**: Chromium browser with X11 forwarding (via `--profile chromium`)
 
 ## Plugin support
@@ -302,6 +302,67 @@ and `POST=1` a hostile workload inside the sandbox can still escape via e.g.
 `docker run -v /:/host alpine chroot /host ...`. Enable the `docker` capability
 (`capabilities: [docker]` in a profile, or `--profile docker`) only when you
 actually need Docker access and trust the workload.
+
+## Network access
+
+By default the sandbox can only reach GitHub and the Anthropic API — every
+other destination is dropped. Three capabilities extend that allow-list for
+specific use cases, and a CLI flag extends it for anything else. All of these
+are runtime-only: they change which egress rules the firewall applies at
+container start, not what's baked into the image.
+
+```sh
+# Let the agent hit any public search/API endpoint over HTTPS
+ai-sandbox start --profile web-search
+
+# Let the agent reach services listening on the host (e.g. a local dev server)
+ai-sandbox start --profile host-access
+
+# Let the agent reach other devices on your LAN
+ai-sandbox start --profile lan-access
+
+# Allow one more specific destination without a named capability
+ai-sandbox start --allow-egress 10.0.0.5:8080 --allow-egress registry.example.com:443
+```
+
+- **`web-search`** (`capabilities: [web-search]`) — allow egress to any
+  public (non-private) IPv4 host on port 443. RFC 1918/link-local/loopback/
+  CGNAT/multicast/reserved ranges are excluded, so this does not also grant
+  LAN access.
+- **`host-access`** (`capabilities: [host-access]`) — allow egress to any TCP
+  port currently listening on the host, reached via `host.docker.internal`.
+  The listening-port set is snapshotted once, from the host, when the
+  container starts (macOS only — `lsof -iTCP -sTCP:LISTEN`); a host service
+  started afterward isn't reachable until the container is recreated.
+- **`lan-access`** (`capabilities: [lan-access]`) — allow egress to any IP
+  address and TCP port on the host's LAN (local subnet). The LAN CIDR is
+  detected once from the host at container-start time (macOS only); if
+  detection fails (no default route, VPN-only interface, unrecognized
+  netmask) the capability is a no-op rather than an error.
+- **`--allow-egress <host-or-ip-or-cidr>:<port>`** — repeatable CLI flag that
+  allow-lists one more host/IP/CIDR on one port, without needing a named
+  capability or profile. Hostname entries are DNS-resolved once at
+  container-init time and never refreshed (same one-shot-resolution behavior
+  the built-in GitHub/Anthropic rules already have). Participates in
+  [config persistence](docs/architecture.md#config-persistence-and-restore)
+  like every other config-changing flag.
+
+### Security caveat
+
+`host-access` and `lan-access` meaningfully broaden the attack surface
+available to a compromised agent: `host-access` reaches whatever is
+listening on your machine (a local database, an internal admin UI, a dev
+server with no auth because it "only listens on localhost"), and
+`lan-access` reaches every device and port on your local network. Enable
+either only when you need it and trust the workload; `web-search` is
+comparatively narrow (a single port, and no private-network destinations
+at all). `--allow-egress` is a single port too, but its CIDR form has **no
+minimum-prefix restriction** — the firewall accepts and applies whatever
+prefix width you give it, down to `0.0.0.0/0`, and unlike `web-search` it
+doesn't exclude private/reserved ranges. A CIDR that broad allow-lists
+every IPv4 destination on that port. Prefer a single host/IP or the
+narrowest CIDR that covers your actual destination; the flag will not
+narrow it for you.
 
 ## Current limitations and goals
 

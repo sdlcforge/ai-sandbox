@@ -224,17 +224,255 @@ function should_force_proxy_label_fallback() {
     esac
 }
 
+# Return 0 if $1 is a valid dotted-decimal octet (0-255, no leading zero),
+# 1 otherwise. Used by netmask_to_prefix()/network_address() below to
+# validate each octet before handing it to bash arithmetic ($(( ))).
+# Rejecting a leading zero isn't just canonical-form pedantry: bash
+# arithmetic parses a leading-zero numeral (e.g. "008") as octal, and an
+# invalid octal digit (8 or 9) aborts with "value too great for base" --
+# this guard keeps that string from ever reaching `$(( ))` in the first
+# place, so a malformed octet fails the clean "return 1" path uniformly
+# instead of also leaking a bash-internal error to stderr.
+function is_octet() {
+    local octet="$1"
+    case "${octet}" in
+        ''|*[!0-9]*) return 1 ;;
+        0) return 0 ;;
+        0*) return 1 ;;
+    esac
+    [ "${octet}" -le 255 ]
+}
+
+# Count the set bits across a dotted-decimal netmask's four octets to derive
+# its CIDR prefix length (e.g. "255.255.255.0" -> "24"). Echoes the prefix
+# length and returns 0 on success; returns 1 (nothing echoed) if $1 is not
+# exactly four dot-separated valid octets (see is_octet() above) -- callers
+# (see compute_lan_cidr() below) treat that as "detection failed", not a
+# crash. Bit-counted per octet rather than looked up from a fixed table so
+# any octet value 0-255 is handled uniformly (including non-contiguous
+# inputs; garbage in still yields a deterministic bit count rather than an
+# error).
+function netmask_to_prefix() {
+    local netmask="$1"
+    local -a octets
+    IFS='.' read -ra octets <<< "${netmask}"
+    [ "${#octets[@]}" -eq 4 ] || return 1
+    local octet n bits prefix=0
+    for octet in "${octets[@]}"; do
+        is_octet "${octet}" || return 1
+        n=${octet}
+        bits=0
+        while [ "${n}" -gt 0 ]; do
+            bits=$((bits + (n & 1)))
+            n=$((n >> 1))
+        done
+        prefix=$((prefix + bits))
+    done
+    printf '%s' "${prefix}"
+}
+
+# Bitwise-AND a dotted-decimal IP address with a dotted-decimal netmask,
+# octet by octet, to derive the network address (e.g. "192.168.1.42" +
+# "255.255.255.0" -> "192.168.1.0"). Echoes the network address and returns
+# 0 on success; returns 1 (nothing echoed) if either $1 or $2 is not exactly
+# four dot-separated valid octets (see is_octet() above).
+function network_address() {
+    local ip="$1" netmask="$2"
+    local -a ip_octets mask_octets
+    IFS='.' read -ra ip_octets <<< "${ip}"
+    IFS='.' read -ra mask_octets <<< "${netmask}"
+    [ "${#ip_octets[@]}" -eq 4 ] && [ "${#mask_octets[@]}" -eq 4 ] || return 1
+    local i octet_val mask_val
+    local -a result=()
+    for i in 0 1 2 3; do
+        octet_val="${ip_octets[$i]}"
+        mask_val="${mask_octets[$i]}"
+        is_octet "${octet_val}" || return 1
+        is_octet "${mask_val}" || return 1
+        result+=( "$(( octet_val & mask_val ))" )
+    done
+    printf '%s.%s.%s.%s' "${result[0]}" "${result[1]}" "${result[2]}" "${result[3]}"
+}
+
+# --- --allow-egress spec validation -------------------------------------
+# Shared by src/options.sh's --allow-egress flag parser (fresh CLI input,
+# per-failure-mode error messages) and restore_saved_config() below
+# (restored ai.sandbox.config docker-label input, generic warn-and-drop) so
+# both sites apply byte-for-byte the same rules. Factored into functions
+# rather than duplicated inline the way --add-marketplace's simple scheme
+# check is duplicated (see restore_saved_config()'s saved_marketplaces
+# handling) because this check is materially more involved (colon-count +
+# port-range + three-way host-format check) -- two independently
+# hand-maintained copies of that would risk silently drifting apart, and a
+# diverging restore-time check would let an invalid egress spec reach Task
+# 002's container-init-time firewall-rule application.
+
+# Return 0 if $1 is a syntactically valid dotted-decimal IPv4 address (four
+# dot-separated valid octets -- see is_octet() above), 1 otherwise.
+function is_valid_ipv4_literal() {
+    local addr="$1"
+    # Anchor-match the whole string against a strict 4-octet shape first.
+    # Bash's `read -a` silently drops a single trailing empty field (e.g.
+    # IFS='.' read -ra octets <<< "1.2.3.4." yields 4 elements, not 5), so a
+    # naive split-and-count on a string with a trailing dot would incorrectly
+    # pass. This regex anchor rejects that (and any other non-4-octet shape)
+    # up front before the per-octet range checks below ever run.
+    [[ "${addr}" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || return 1
+    local -a octets
+    IFS='.' read -ra octets <<< "${addr}"
+    [ "${#octets[@]}" -eq 4 ] || return 1
+    local octet
+    for octet in "${octets[@]}"; do
+        is_octet "${octet}" || return 1
+    done
+    return 0
+}
+
+# Return 0 if $1 is a syntactically valid IPv4 CIDR (a.b.c.d/n -- exactly one
+# '/', a valid IPv4 literal address part, and a prefix length 0-32), 1
+# otherwise.
+function is_valid_ipv4_cidr() {
+    local cidr="$1" slash_count addr prefix
+    slash_count="$(grep -o '/' <<< "${cidr}" | wc -l | tr -d ' ')"
+    [ "${slash_count}" -eq 1 ] || return 1
+    addr="${cidr%%/*}"
+    prefix="${cidr##*/}"
+    is_valid_ipv4_literal "${addr}" || return 1
+    [[ "${prefix}" =~ ^[0-9]{1,2}$ ]] || return 1
+    [ "${prefix}" -le 32 ]
+}
+
+# Return 0 if $1 matches the --allow-egress task doc's "basic hostname
+# regex" (letters, digits, hyphens, and dots only; non-empty; no spaces or
+# other characters). Deliberately shallow -- no RFC 1123 label structure, no
+# leading/trailing-dot rejection, no DNS resolution -- Task 002
+# (002-wire-allow-egress-into-firewall.md) is responsible for any deeper
+# validation, at container-init time.
+function is_valid_egress_hostname() {
+    local host="$1"
+    [[ "${host}" =~ ^[A-Za-z0-9.-]+$ ]]
+}
+
+# Return 0 if $1 is a valid --allow-egress host-part: an IPv4 literal, an
+# IPv4 CIDR, or a basic hostname (checked in that order -- a bare IPv4
+# literal also matches the loose hostname regex above, so IPv4/CIDR are
+# tried first to classify it correctly). A dotted-quad-shaped string (four
+# dot-separated all-digit groups, e.g. "999.1.1.1", optionally with one
+# trailing dot, e.g. "1.2.3.4.") that fails strict IPv4 validation is
+# rejected outright rather than falling through to the loose hostname regex,
+# which would otherwise silently accept an out-of-range octet -- or a
+# malformed trailing-dot literal, which the loose hostname charset check
+# alone can't distinguish from a genuine (if unusual) hostname -- as an
+# opaque "hostname". Both are almost certainly a typo'd IP literal, not a
+# genuine hostname.
+function is_valid_egress_host() {
+    local host="$1"
+    is_valid_ipv4_literal "${host}" && return 0
+    is_valid_ipv4_cidr "${host}" && return 0
+    if [[ "${host}" =~ ^[0-9]+(\.[0-9]+){3}\.?$ ]]; then
+        return 1
+    fi
+    is_valid_egress_hostname "${host}"
+}
+
+# Return 0 if $1 is a valid --allow-egress port -- an integer 1-65535. The
+# {1,5} digit bound keeps an absurdly long digit string from ever reaching
+# the `[ -le ]` numeric comparison below, where bash's test builtin would
+# abort with an "integer expected" error rather than a clean validation
+# failure (65535 is 5 digits, so 5 is the natural bound).
+function is_valid_egress_port() {
+    local port="$1"
+    [[ "${port}" =~ ^[0-9]{1,5}$ ]] || return 1
+    [ "${port}" -ge 1 ] && [ "${port}" -le 65535 ]
+}
+
+# Return 0 if $1 is a fully valid --allow-egress spec
+# (<host-or-ip-or-cidr>:<port>): exactly one ':' separating a valid host part
+# (is_valid_egress_host()) from a valid port part (is_valid_egress_port()).
+# Used by restore_saved_config() below to re-validate a restored spec as a
+# single pass/fail check (see the file header comment on this block).
+function is_valid_allow_egress_spec() {
+    local spec="$1" colon_count host port
+    colon_count="$(grep -o ':' <<< "${spec}" | wc -l | tr -d ' ')"
+    [ "${colon_count}" -eq 1 ] || return 1
+    host="${spec%%:*}"
+    port="${spec##*:}"
+    is_valid_egress_port "${port}" || return 1
+    is_valid_egress_host "${host}"
+}
+
+# Compute the host's primary LAN CIDR on macOS: the default-route
+# interface's IP/netmask (via `route get default` + `ipconfig`), converted
+# to network/prefixlen notation (e.g. "192.168.1.0/24"). Echoes the CIDR on
+# success. Only meant to be called when the lan-access capability is active
+# (see src/index.sh) -- avoids the route/ipconfig cost on every invocation,
+# same rationale as the sibling host-access capability's lsof avoidance.
+#
+# Fails soft by design (plan/phase-02-network-capabilities/005-*.md
+# Requirement 1): every failure path (no default route, VPN-only interface,
+# unresolvable IP/netmask, unrecognized netmask, non-macOS host) logs a
+# warning to stderr and echoes nothing, returning 0 -- a missing LAN CIDR
+# must not block container start. Callers treat an empty result as "no rule
+# to add", not an error.
+#
+# macOS-only: `route get default` / `ipconfig` have no portable Linux
+# equivalent (`ip route` / `ip addr` would be the Linux analog) -- flagged
+# explicitly here per Requirement 4 rather than silently producing an empty
+# result with no explanation on Linux.
+function compute_lan_cidr() {
+    if [ "$(uname)" != "Darwin" ]; then
+        echo "Warning: lan-access: host-side LAN CIDR detection (route get default / ipconfig) is macOS-only; AI_SANDBOX_LAN_CIDR left empty on this platform" >&2
+        return 0
+    fi
+
+    local iface ip_addr netmask prefix network
+    iface="$(route get default 2>/dev/null | awk '/interface:/{print $2}')" || true
+    if [ -z "${iface}" ]; then
+        echo "Warning: lan-access: could not determine the host's default-route interface (no default route? VPN-only?); AI_SANDBOX_LAN_CIDR left empty" >&2
+        return 0
+    fi
+
+    ip_addr="$(ipconfig getifaddr "${iface}" 2>/dev/null)" || true
+    netmask="$(ipconfig getoption "${iface}" subnet_mask 2>/dev/null)" || true
+    if [ -z "${ip_addr}" ] || [ -z "${netmask}" ]; then
+        echo "Warning: lan-access: could not determine IP address/subnet mask for interface '${iface}'; AI_SANDBOX_LAN_CIDR left empty" >&2
+        return 0
+    fi
+
+    prefix="$(netmask_to_prefix "${netmask}")" || true
+    if [ -z "${prefix}" ]; then
+        echo "Warning: lan-access: unrecognized subnet mask '${netmask}' for interface '${iface}'; AI_SANDBOX_LAN_CIDR left empty" >&2
+        return 0
+    fi
+
+    network="$(network_address "${ip_addr}" "${netmask}")" || true
+    if [ -z "${network}" ]; then
+        echo "Warning: lan-access: could not compute a network address from '${ip_addr}'/'${netmask}'; AI_SANDBOX_LAN_CIDR left empty" >&2
+        return 0
+    fi
+
+    printf '%s/%s\n' "${network}" "${prefix}"
+}
+
 # Restore PROFILES / MODE_OVERRIDE / NO_ISOLATE_CONFIG / CLEAN_SLATE /
-# CLI_MARKETPLACES / CLI_PLUGINS / CLI_ENABLE_ALL -- the complete seven-
-# dimension config-input record (see plan/notes/config-persistence-design.md)
-# -- from the single ai.sandbox.config label saved on the container at
-# `create` time, when the current invocation didn't pass any config-changing
-# flags itself. Called for every CMD except `create` (see
-# should_restore_config()); when CONFIG_FLAGS_PROVIDED is "true" (i.e.
+# CLI_MARKETPLACES / CLI_PLUGINS / CLI_ENABLE_ALL / CLI_ALLOW_EGRESS -- the
+# complete eight-dimension config-input record (see
+# plan/notes/config-persistence-design.md; allow_egress is the eighth
+# dimension, added alongside the original seven) -- from the single
+# ai.sandbox.config label saved on the container at `create` time, when the
+# current invocation didn't pass any config-changing flags itself. Called for
+# every CMD except `create` (see should_restore_config()) -- broadened from
+# the original bare-`start`/`enter`-only trigger, since every other
+# per-instance command (`stop`, `delete`, `clean`, `fix-ssh`, `build`,
+# `user-exec`, `root-exec`, `attach`, `detail`, `up`, and the docker-compose
+# passthrough) also acts on an already-created instance and needs its
+# compose-file assembly to reflect that instance's actual persisted
+# composition, not just whatever flags (usually none) this particular
+# invocation passed. When CONFIG_FLAGS_PROVIDED is "true" (i.e.
 # --profile/--mode/--no-isolate-config/--add-marketplace/--enable-plugin/
-# --enable-all/--clean was explicitly passed this run) or no container exists
-# yet, returns immediately without touching any of the seven globals, so the
-# explicit flags on the current invocation always win.
+# --enable-all/--clean/--allow-egress was explicitly passed this run) or no
+# container exists yet, returns immediately without touching any of the eight
+# globals, so the explicit flags on the current invocation always win.
 #
 # No fallback of any kind: only the single ai.sandbox.config label is read.
 # When the label is absent or empty -- including on any container created
@@ -242,12 +480,12 @@ function should_force_proxy_label_fallback() {
 # explicit product decision (design note Sec 2.5/2.6: no external users yet, a
 # single label-based config regime is preferred over supporting two), not a
 # gap to guard against.
-# shellcheck disable=SC2034 # PROFILES/MODE_OVERRIDE/NO_ISOLATE_CONFIG/CLEAN_SLATE/CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL are globals consumed downstream by src/index.sh (profile-resolution, EFFECTIVE_MODE, and CLI-merge phases), not local to this function
+# shellcheck disable=SC2034 # PROFILES/MODE_OVERRIDE/NO_ISOLATE_CONFIG/CLEAN_SLATE/CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL/CLI_ALLOW_EGRESS are globals consumed downstream by src/index.sh (profile-resolution, EFFECTIVE_MODE, and CLI-merge phases), not local to this function
 function restore_saved_config() {
     if [ "${CONFIG_FLAGS_PROVIDED}" != "true" ] && is_container_running_or_stopped; then
         local ctr_name saved_config_b64 saved_config_json
         local saved_profiles saved_mode saved_no_isolate saved_clean
-        local saved_marketplaces saved_plugins saved_enable_all
+        local saved_marketplaces saved_plugins saved_enable_all saved_allow_egress
         ctr_name="$(sandbox_container_name)"
         saved_config_b64="$(docker inspect -f \
             '{{index .Config.Labels "ai.sandbox.config"}}' \
@@ -258,10 +496,10 @@ function restore_saved_config() {
         # writable at container-create time by the host process itself, so
         # the practical risk here is low, but bound it anyway before
         # base64-decoding/jq-parsing. 16KB is generously larger than any real
-        # seven-field config record (profiles/mode/marketplaces/plugins are
-        # short strings/lists) could ever produce. An oversized value is
-        # treated the same as an absent label -- nothing to restore -- rather
-        # than erroring.
+        # eight-field config record (profiles/mode/marketplaces/plugins/
+        # allow_egress are short strings/lists) could ever produce. An
+        # oversized value is treated the same as an absent label -- nothing
+        # to restore -- rather than erroring.
         local max_config_b64_len=16384
         [ "${#saved_config_b64}" -le "${max_config_b64_len}" ] || return 0
 
@@ -286,6 +524,7 @@ function restore_saved_config() {
         saved_marketplaces="$(printf '%s' "${saved_config_json}" | jq -r '(.marketplaces // []) | join("|")' 2>/dev/null || true)"
         saved_plugins="$(printf '%s' "${saved_config_json}" | jq -r '(.plugins // []) | join("|")' 2>/dev/null || true)"
         saved_enable_all="$(printf '%s' "${saved_config_json}" | jq -r 'if .enable_all_plugins == null then "" else (.enable_all_plugins | tostring) end' 2>/dev/null || true)"
+        saved_allow_egress="$(printf '%s' "${saved_config_json}" | jq -r '(.allow_egress // []) | join("|")' 2>/dev/null || true)"
 
         if [ -n "${saved_profiles}" ]; then
             # Re-validate that each restored profile name still resolves via
@@ -367,6 +606,27 @@ function restore_saved_config() {
         if [ -n "${saved_enable_all}" ]; then
             CLI_ENABLE_ALL="${saved_enable_all}"
         fi
+        if [ -n "${saved_allow_egress}" ]; then
+            # Re-validate each restored spec against
+            # is_valid_allow_egress_spec() (same rationale as
+            # saved_marketplaces above: a restored value comes from a
+            # persisted docker label rather than this run's CLI args, so it
+            # must be independently checked before being trusted). Drop
+            # (with a warning) any entry that doesn't validate, rather than
+            # restoring it verbatim.
+            local _restored_ae _validated_allow_egress=() _ae
+            IFS='|' read -ra _restored_ae <<< "${saved_allow_egress}"
+            for _ae in "${_restored_ae[@]}"; do
+                if is_valid_allow_egress_spec "${_ae}"; then
+                    _validated_allow_egress+=("${_ae}")
+                else
+                    echo "Warning: dropping restored --allow-egress spec that failed validation: '${_ae}'" 1>&2
+                fi
+            done
+            if [ "${#_validated_allow_egress[@]}" -gt 0 ]; then
+                CLI_ALLOW_EGRESS=("${_validated_allow_egress[@]}")
+            fi
+        fi
     fi
 }
 
@@ -374,20 +634,25 @@ function restore_saved_config() {
 # current invocation's composition, 1 if they differ, 2 if no container is
 # running. Reads AI_SANDBOX_IMAGE_TAG / PROFILE_COMPOSITION_HASH / EFFECTIVE_MODE
 # / NO_ISOLATE_CONFIG / EFFECTIVE_PROXY / AI_SANDBOX_CLEAN_SLATE /
-# AI_SANDBOX_MARKETPLACES / AI_SANDBOX_PLUGINS / AI_SANDBOX_ENABLE_ALL_PLUGINS
-# from caller scope. The last three complete the derived-value comparison to
-# the full effective-config dimension set (design note
-# plan/notes/config-persistence-design.md Sec 2.3/2.6): an explicit invocation
-# that changes marketplaces/plugins/enable-all (e.g. `enter --add-marketplace
-# NEW` on a container created without it) must be detected as a config change
-# so it prompts a recreate rather than silently never applying. `:-` defaults
-# on both sides of each comparison mean a container missing these labels
+# AI_SANDBOX_MARKETPLACES / AI_SANDBOX_PLUGINS / AI_SANDBOX_ENABLE_ALL_PLUGINS /
+# AI_SANDBOX_ALLOW_EGRESS from caller scope. The last four complete the
+# derived-value comparison to the full effective-config dimension set (design
+# note plan/notes/config-persistence-design.md Sec 2.3/2.6): an explicit
+# invocation that changes marketplaces/plugins/enable-all/allow-egress (e.g.
+# `enter --add-marketplace NEW` or `enter --allow-egress 1.2.3.4:443` on a
+# container created without it) must be detected as a config change so it
+# prompts a recreate rather than silently never applying. `:-` defaults on
+# both sides of each comparison mean a container missing these labels
 # (created before this label existed) compares equal to an empty/default
-# current invocation rather than false-positiving.
+# current invocation rather than false-positiving. AI_SANDBOX_ALLOW_EGRESS is
+# simply the CLI_ALLOW_EGRESS array joined with '|' (src/index.sh) -- unlike
+# marketplaces/plugins/enable-all, there is no profile-level equivalent to
+# merge in, since --allow-egress is CLI-only (see the task doc's Requirement
+# 4).
 function running_config_matches() {
     is_container_running || return 2
     local cur_image cur_hash cur_mode cur_no_isolate cur_proxy cur_clean ctr_name
-    local cur_marketplaces cur_plugins cur_enable_all sep fmt line
+    local cur_marketplaces cur_plugins cur_enable_all cur_allow_egress sep fmt line
     ctr_name="$(sandbox_container_name)"
 
     # Single multi-field `docker inspect` call replaces what used to be 9
@@ -395,16 +660,17 @@ function running_config_matches() {
     # trip each) -- see followup 4DzF. Fields are joined with the ASCII Unit
     # Separator (0x1F), not a tab: bash `read` classifies tab as
     # IFS-whitespace and collapses/strips consecutive or leading/trailing
-    # empty fields (several of these labels, e.g. marketplaces/plugins, are
-    # legitimately empty) -- the same footgun restore_saved_config()'s
-    # comment above already calls out for this very label set. A pipe is out
-    # too: marketplace/plugin label values already use '|' as their own
-    # internal join delimiter (see AI_SANDBOX_MARKETPLACES in src/index.sh).
+    # empty fields (several of these labels, e.g. marketplaces/plugins/
+    # allow-egress, are legitimately empty) -- the same footgun
+    # restore_saved_config()'s comment above already calls out for this very
+    # label set. A pipe is out too: marketplace/plugin/allow-egress label
+    # values already use '|' as their own internal join delimiter (see
+    # AI_SANDBOX_MARKETPLACES in src/index.sh).
     sep=$'\x1f'
-    fmt="{{.Config.Image}}${sep}{{index .Config.Labels \"ai.sandbox.profile-hash\"}}${sep}{{index .Config.Labels \"ai.sandbox.mode\"}}${sep}{{index .Config.Labels \"ai.sandbox.no-isolate-config\"}}${sep}{{index .Config.Labels \"ai.sandbox.docker-proxy\"}}${sep}{{index .Config.Labels \"ai.sandbox.clean-slate\"}}${sep}{{index .Config.Labels \"ai.sandbox.marketplaces\"}}${sep}{{index .Config.Labels \"ai.sandbox.plugins\"}}${sep}{{index .Config.Labels \"ai.sandbox.enable-all-plugins\"}}"
+    fmt="{{.Config.Image}}${sep}{{index .Config.Labels \"ai.sandbox.profile-hash\"}}${sep}{{index .Config.Labels \"ai.sandbox.mode\"}}${sep}{{index .Config.Labels \"ai.sandbox.no-isolate-config\"}}${sep}{{index .Config.Labels \"ai.sandbox.docker-proxy\"}}${sep}{{index .Config.Labels \"ai.sandbox.clean-slate\"}}${sep}{{index .Config.Labels \"ai.sandbox.marketplaces\"}}${sep}{{index .Config.Labels \"ai.sandbox.plugins\"}}${sep}{{index .Config.Labels \"ai.sandbox.enable-all-plugins\"}}${sep}{{index .Config.Labels \"ai.sandbox.allow-egress\"}}"
     line="$(docker inspect -f "${fmt}" "${ctr_name}" 2>/dev/null || true)"
     IFS="${sep}" read -r cur_image cur_hash cur_mode cur_no_isolate cur_proxy \
-        cur_clean cur_marketplaces cur_plugins cur_enable_all <<< "${line}"
+        cur_clean cur_marketplaces cur_plugins cur_enable_all cur_allow_egress <<< "${line}"
 
     [ "${cur_image}" = "${AI_SANDBOX_IMAGE_TAG:-}" ] || return 1
     [ "${cur_hash}" = "${PROFILE_COMPOSITION_HASH:-}" ] || return 1
@@ -415,6 +681,7 @@ function running_config_matches() {
     [ "${cur_marketplaces:-}" = "${AI_SANDBOX_MARKETPLACES:-}" ] || return 1
     [ "${cur_plugins:-}" = "${AI_SANDBOX_PLUGINS:-}" ] || return 1
     [ "${cur_enable_all:-false}" = "${AI_SANDBOX_ENABLE_ALL_PLUGINS:-false}" ] || return 1
+    [ "${cur_allow_egress:-}" = "${AI_SANDBOX_ALLOW_EGRESS:-}" ] || return 1
     return 0
 }
 
@@ -649,13 +916,20 @@ function fix_ssh() {
         echo "verify SSH_AUTH_SOCK points at a live socket, then retry." >&2
         return 1
     fi
-    # 'ai-sandbox' here is the compose service name, not the container name.
-    # -p "${COMPOSE_PROJECT}" scopes the recreate to this instance's compose
-    # project, matching every other compose invocation in the codebase (e.g.
-    # start_shell() above, src/index.sh, src/create.sh) -- without it, this
-    # resolves against Compose's default project-name derivation instead of
-    # the named instance's actual project scope.
-    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} up -d --force-recreate --no-deps ai-sandbox
+    # 'ai-sandbox' / 'firewall-init' here are compose service names, not
+    # container names. -p "${COMPOSE_PROJECT}" scopes the recreate to this
+    # instance's compose project, matching every other compose invocation in
+    # the codebase (e.g. start_shell() above, src/index.sh, src/create.sh) --
+    # without it, this resolves against Compose's default project-name
+    # derivation instead of the named instance's actual project scope.
+    # firewall-init must be recreated alongside ai-sandbox: recreating
+    # ai-sandbox gives it a fresh network namespace, and its 03-init-firewall
+    # cont-init stage blocks until the firewall-init sidecar re-applies the
+    # egress rules into that new namespace (the sidecar is a one-shot that
+    # already exited, so it will not re-run on its own). --no-deps is kept so
+    # this does not also recreate the long-lived docker-socket-proxy sidecar
+    # under --profile docker.
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} up -d --force-recreate --no-deps ai-sandbox firewall-init
     qecho "Container recreated with SSH_AUTH_SOCK=${SSH_AUTH_SOCK}"
 }
 

@@ -1,0 +1,7 @@
+metadata:
+  name: lan-access
+  version: "1.0.0"
+  description: "Allow egress to any IP and TCP port on the host's LAN (local subnet)"
+
+capabilities:
+  - lan-access

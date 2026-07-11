@@ -1,177 +1,480 @@
 version: 1
 items:
-    - title: 'Pre-existing latent bug, not touched (out of '
-      id: bgCr
-      date: "2026-07-09"
-      tag: profiles-resource
-      text: '[phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md] Pre-existing latent bug, not touched (out of scope, unrelated to this task''s Requirements): src/profiles.sh''s profiles_create() -> _cp_entries_to_json() uses `local -n` (bash 4.3+ nameref syntax), which throws under macOS system bash 3.2 (bin/ai-sandbox.sh''s shebang target) — harmlessly swallowed in the smoke-tested empty-array case, but would silently produce empty skills/hooks/agents JSON for a profile that has real discoverable entries. Introduced in phase-02 task 001, which fixed two other bash-3.2 portability issues in this same file but missed this one.'
-    - title: docs/architecture.md step 1 still lists NO_CH
-      id: PVKp
-      date: "2026-07-09"
-      tag: docs-and-help
-      text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] docs/architecture.md step 1 still lists NO_CHROMIUM/NO_DOCKER/ENABLE_DOCKER_PROXY as globals populated by options.sh; these flags were removed in the restructure (now error with a redirect message). Predates and is unrelated to this task''s scoped surface (noun-dispatch/status-detail/attach-connect) — not caught by the task''s grep list. Worth a separate follow-up task.'
-    - title: 'src/help.sh''s per-instance commands list and '
-      id: cfdc
-      date: "2026-07-09"
-      tag: docs-and-help
-      text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] src/help.sh''s per-instance commands list and architecture.md''s step-11 dispatch-word enumeration both omit the ''up'' word (present in PER_INSTANCE_COMMANDS) — this gap predates the CLI restructure entirely (never documented before either) and was out of this task''s named scope.'
-    - title: sandbox-volumes tests fail on ~/.config drift
-      id: Jis0
-      date: "2026-07-10"
-      tag: fix-quiet-stdout-leak-and-status-failures
-      text: 'Discovered while fixing followups Trit/zSwd, out of scope for those. test/integration/container_spec.sh''s "sandbox-volumes reports clean status on an untouched overlay" (line 51) and "sandbox-volumes shows a diff for the drifted path" (line 68) fail because they mount and diff the real host ~/.config (mirror mode) and assume it''s pristine on a fresh container boot. On the dev machine this ran on, ~/.config legitimately contains drift-triggering content unrelated to any test action (e.g. iterm2/sockets/secrets being a live socket, dangling node_modules symlinks) — confirmed by running `sandbox-volumes diff "$HOME/.config"` against a brand-new container immediately after boot, before any test executes user-exec. Fixing this requires a design decision: should sandbox-volumes ignore certain classes of pre-existing drift, should this test target an isolated scratch $XDG_CONFIG_HOME instead of the real one, or should CI run against a throwaway home directory? Needs manager/user input before implementation.'
-    - title: Linux host/lan-access detection
-      id: uL4v
-      date: "2026-07-10"
-      tag: lockdown-egress
-      text: 'The lockdown-egress plan''s host-access and lan-access capabilities (plan/phase-02-network-capabilities/003-add-host-access-capability.md, 005-add-lan-access-capability.md) implement host-side detection (listening-port enumeration via lsof, LAN-CIDR detection via route get default/ipconfig) as macOS-only, consistent with the project''s macOS-first stance — this is a deliberate, flagged V1 scope limit, not an oversight. Follow-up: add Linux equivalents (ss/ip route or similar) for both detection steps so host-access/lan-access work when ai-sandbox runs on a Linux host. Also needs a cross-platform test structure before this can be validated: settle on an approach that is host-aware (run definitive tests against whatever host OS is actually running the suite) plus uses Docker to run the same suite against one or more Linux target images for verification from a macOS host (and vice versa in principle). Investigate existing frameworks/patterns for this kind of host-plus-containerized-target test matrix before hand-rolling one.'
-    - title: Anthropic API host untested/coincidental
-      id: 5bMD
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-review, phase-01-firewall-enforcement, correctness-001] docker/init-firewall.sh''s only working Anthropic-host ACCEPT rule is a bare `anthropic.com` hostname resolution; there''s no literal `api.anthropic.com` entry (the `.anthropic.com` leading-dot line is permanently non-resolving, tracked separately). Confirmed empirically that anthropic.com and api.anthropic.com currently share an IP, so the sandbox''s core "run Claude Code against the Anthropic API" use case works today only by DNS coincidence, untested. Add an explicit api.anthropic.com ACCEPT rule and a reachability assertion in test/integration/container_spec.sh''s Firewall rules block, alongside the existing github.com check.'
-    - title: claude-install fallback broken under deny
-      id: AK1Z
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-review, phase-01-firewall-enforcement, correctness-002] docker/rootfs/etc/cont-init.d/05-install-claude (pre-existing, unmodified) falls back to `bun install -g @anthropic-ai/claude-code` against registry.npmjs.org when the binary is missing at container start. registry.npmjs.org is not on the new default-deny allow-list, so this fallback now silently fails (caught, logged as warning, non-fatal) instead of always succeeding as before. Narrow real-world exposure since normal builds pre-install claude at Dockerfile build time, but a genuine undocumented behavior change. Decide: allow-list the npm/bun registry host, or explicitly document that this bootstrap path is now build-time-only.'
-    - title: No breadth validation on network.allow
-      id: RbKz
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-review, phase-01-firewall-enforcement, security-002] Neither bin/profile-installer.js''s network.allow schema check nor docker/init-firewall.sh''s marketplace/network.allow ACCEPT-rule loops validate CIDR breadth. A profile with network.allow: ["0.0.0.0/0"] silently and completely defeats the port-443 default-deny scoping. Defense-in-depth gap (profile author is same trust level as operator), not externally exploitable, but worth a lightweight sanity check/warning for overly-broad entries (e.g. reject or warn on prefix lengths shorter than /24).'
-    - title: Non-atomic firewall flush window
-      id: NlrG
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-review, phase-01-firewall-enforcement, security-004] docker/init-firewall.sh flushes the OUTPUT chain (iptables -F/-X) and only re-establishes the default-deny catch-all at the end via incremental `iptables -A` calls, leaving a brief unfiltered window between flush and final DROP rule. Narrow, early-boot-only exposure (suggestion/low confidence). If this matters for the threat model, replace incremental rule-building with a single atomic `iptables-restore` of the fully-assembled ruleset including the final DROP.'
-    - title: network_allow missing from persist triad
-      id: PmJ2
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-review, phase-01-firewall-enforcement, architecture-002] docs/architecture.md''s "Config persistence and restore" section documents a triad pattern (docker-compose environment: entry + ai.sandbox.<field> container label + running_config_matches() comparison dimension) for profile-derived env vars like AI_SANDBOX_MARKETPLACES. The new AI_SANDBOX_NETWORK_ALLOW (Task 003) matches the environment: half but has no ai.sandbox.network-allow label and isn''t compared in running_config_matches()/surfaced in `ai-sandbox detail`''s Configuration: output. Not currently exploitable (network.allow has no CLI-delta yet, fully covered by PROFILE_COMPOSITION_HASH), but plan/notes/investigation-findings.md commits Phase 3 (--allow-egress) to the same triad shape end-to-end, so this should be closed then (or explicitly documented as deferred) rather than left silently incomplete.'
-    - title: Full integration suite not run live
-      id: nJNu
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-01-firewall-enforcement, task 004] container_spec.sh (Firewall block), network_allow_spec.sh, and docker_proxy_spec.sh could not be run via their normal `make test.integration` path during this plan''s execution: `status --test-check` refuses while a host claude session is live (this orchestrating session itself), and starting the real container concurrently would risk the exact claude-mem corruption the project''s concurrency invariant forbids. Task 004''s sidecar mechanism was instead validated empirically by running the real scripts directly in a safe harness (verified capability absence, un-flushable firewall, correct allow/deny egress, both restart lifecycles). Before this plan is considered fully done, re-run the full `make test.integration` suite (container_spec.sh, network_allow_spec.sh, docker_proxy_spec.sh) on the built image in an environment with no live host claude session, to catch anything the harness-style validation couldn''t (e.g. real s6-overlay boot-order interactions).'
-    - title: Dead sudoers entry for init-firewall.sh
-      id: O49Y
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-01-firewall-enforcement, task 004] docker/Dockerfile.base''s `node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh` sudoers entry is now inert since Task 004 moved firewall application to the firewall-init sidecar — the ai-sandbox container no longer has NET_ADMIN, so that script can no longer succeed there. Left untouched by Task 004 per its own scope (no sudoers surgery). Cleanup candidate: remove the dead entry.'
-    - title: test/integration/docker_proxy_spec.sh and tes
-      id: AQag
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] test/integration/docker_proxy_spec.sh and test/integration/clean_container_spec.sh are currently broken, independent of this task: both invoke a CLI flag ordering (--profile docker start, --clean credtest start) that the current dispatch grammar rejects outright. Stale from an earlier CLI-grammar rewrite never propagated to these two spec files.'
-    - title: test/integration/lifecycle_spec.sh invokes th
-      id: ps6H
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] test/integration/lifecycle_spec.sh invokes the retired status command word (replaced by detail), so it falls through as an unknown per-name dispatch attempt instead of reporting status.'
-    - title: Recommend a follow-up task to modernize docke
-      id: Ia7w
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] Recommend a follow-up task to modernize docker_proxy_spec.sh/clean_container_spec.sh/lifecycle_spec.sh to the current CLI grammar so make test.integration can pass as a whole again.'
-    - title: The task doc's requirement 2 offered 'have fi
-      id: VqTZ
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] The task doc''s requirement 2 offered ''have fix_ssh() itself call ensure_clean_slate_credentials()'' as an alternative mechanism; as implemented it would not actually fix the bug since COMPOSE_FILES is already finalized by the time fix_ssh() runs. Worth correcting in the phase''s design notes if this option gets referenced again elsewhere.'
-    - title: 'Minor: running the integration suite leaves s'
-      id: MVL1
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] Minor: running the integration suite leaves stray .ai-sandbox.<instance>.log files in the repo root not covered by .gitignore''s /.ai-sandbox*.startup.log pattern — a latent gitignore gap in the existing test suite design, not introduced by this task.'
-    - title: Pre-existing, out-of-scope latent bug noticed
-      id: 1C2m
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md] Pre-existing, out-of-scope latent bug noticed during validation: do_create() (src/create.sh) is invoked as do_create || exit $? in src/index.sh; under bash''s documented set -e exception for compound commands used as the left side of ||, this suppresses errexit for the entire do_create() function body — so a real failure inside it (e.g. docker compose up -d failing due to a container-name conflict, which was hit once during validation from an unrelated concurrent sibling test run) is silently swallowed and do_create() still prints "Sandbox ''...'' created and started." This is unrelated to this task''s diff and was not touched; surfacing it for awareness since it could mask real creation failures.'
-    - title: Environmental/test-infrastructure observation
-      id: DvGv
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md] Environmental/test-infrastructure observation: the docker-capable integration suite shares a single, non-project-scoped, fixed container name (ai-sandbox-docker-proxy) across the whole suite and across any concurrently-running ai-sandbox worktree/branch on the same Docker daemon. During validation, a sibling task''s concurrent make test.integration run (a different worktree, 2026-07-10-lockdown-egress) transiently collided with the new test via that shared name; the window was waited out and retried successfully. Not a defect in this change, but worth the manager''s awareness for future parallel-dispatch runs against a shared Docker daemon.'
-    - title: Sidecar orphaned via new explicit-drop path
-      id: iLwl
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-review round 4, arch-review-003] Neither the start/enter recreate (src/index.sh) nor create (src/create.sh) `docker compose ... up -d` invocation passes --remove-orphans. This means the positive scenario task 004 fixed (explicit `start --profile <non-docker>` correctly dropping the docker capability) still leaves the docker-socket-proxy sidecar container running as an orphan after the recreate — confirmed by task 004''s own integration-test comment dismissing the "Found orphan containers" warning as out of scope. Not a correctness regression (the capability-drop itself works), but a cleanup-hygiene gap adjacent to this plan''s whole purpose. Recommend a follow-up task to add --remove-orphans to the start/enter/create up -d invocations, or otherwise tie orphan cleanup to the same should_force_proxy_label_fallback()-style command classification.'
-    - title: 'Round-4 efficiency: redundant inspect calls'
-      id: j7jf
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-review round 4, efficiency-001/002/003] (1) For stop/delete/clean/fix-ssh, a single invocation can now issue up to three separate docker inspect calls against the same container (existence check, ai.sandbox.config label via restore_saved_config(), ai.sandbox.docker-proxy label via is_docker_proxy_label_true()) where the codebase''s own running_config_matches() precedent (followup 4DzF) consolidates exactly this kind of same-container multi-label lookup into one multi-field `docker inspect -f` call. Recommend consolidating into a shared helper. (2) Minor: restore_saved_config()''s profile re-validation loop re-derives _profiles_project_root() per iteration (loop-invariant, negligible at typical list sizes but worth hoisting if profile lists ever grow). (3) Minor: docker_proxy_teardown_spec.sh''s ''stop'' and ''fix-ssh'' Describe blocks each run independent full create/delete cycles for a docker-capable instance despite having no structural need to be separate (fix-ssh could reuse the stopped instance from the stop scenario) — could merge to remove one docker-capable create/delete cycle from the suite''s critical path.'
-    - title: Pre-existing doc-orphans (unrelated)
-      id: ragj
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-review round 4, link-chain check] check-links.sh found three .md files not reachable from README.md: next-steps.md, profiles/README.md, test/fixtures/plugins/hello-world-marketplace/plugins/hello-world/skills/hello-world/SKILL.md. Confirmed pre-existing at this phase''s diff_base (7c02e87) and untouched by any of tasks 001-005 — unrelated to this plan''s scope, surfaced only because phase-review''s Phase 3 link-chain check runs against the whole repo. Recommend a small follow-up task to either link these from README.md (or an intermediate doc) or relocate/exclude them if they''re not meant to be part of the doc corpus.'
-    - title: 'Round-5: fix-ssh test could reuse instance'
-      id: zSn1
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-review round 5, efficiency-004 — non-blocking, deliberate choice not an oversight] test/integration/docker_proxy_fix_ssh_explicit_override_spec.sh (task 005) runs its own full docker-capable create/delete cycle for one fix-ssh --profile scenario, structurally identical to docker_proxy_explicit_profile_override_spec.sh''s (task 004) start --profile scenario one file over. Unlike that sibling test, fix-ssh doesn''t trigger resolve_and_download_tools() (src/index.sh), so it lacks the same technical justification for a separate live-Docker create/delete cycle. Task 005''s own Assumptions section explicitly permitted a mocked-docker alternative here. Recommend either merging this scenario into docker_proxy_explicit_profile_override_spec.sh''s existing instance (exercise fix-ssh --profile before deletion) or adding a unit-level mocked-docker equivalent, removing one docker-capable create/delete cycle from the suite''s serialized critical path.'
-    - title: Orphaned firewall-handshake volume
-      id: K4K8
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-review re-review, phase-01-firewall-enforcement, arch-review-001] The new firewall-handshake named Docker volume (docker/docker-compose.yaml) is never removed by `ai-sandbox delete`/`clean` (docker compose down with no -v/--volumes), leaving an orphaned per-instance volume behind for every deleted sandbox instance. Add -v/--volumes to the down calls in src/index.sh''s delete/clean branches, or explicitly docker volume rm the instance-scoped volume, mirroring the project''s existing "close what you open" cleanup convention.'
-    - title: Untested config-drift recreate + sidecar
-      id: Ssa5
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-review re-review, phase-01-firewall-enforcement, arch-review-002] Whether Compose reliably recreates the dependent firewall-init sidecar in lockstep whenever ai-sandbox is implicitly recreated via plain `docker compose up -d` on config drift (e.g. a new --add-marketplace value, per running_config_matches()) was never exercised — only the explicit --force-recreate --no-deps ai-sandbox firewall-init pair in fix_ssh() was validated. Low risk (marker''s clear-before-poll design fails loud on a timeout, never silently unprotected) but unverified. Add an integration test or manual verification: change a config-drift-triggering option on a running instance via plain enter/start and confirm the firewall re-applies (or confirm the fail-loud timeout path if it doesn''t).'
-    - title: Stale comment on firewall-handshake volume
-      id: ZiET
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-01-firewall-enforcement, task 006] docker/docker-compose.yaml''s firewall-handshake volume comment ("the wait stage clears any stale marker before polling") describes the pre-task-006 mechanism. Task 006 moved marker-clearing from the consumer (03-init-firewall) to the producer (init-firewall-sidecar.sh, at the start of its run) to fix a cross-container race. Update the comment to reflect the producer-clears-first invariant.'
-    - title: Token-file staleness on restart (fail-closed)
-      id: QuAe
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-01-firewall-enforcement, task 007] The nonce/token handshake''s expected-token file (written by 03-init-firewall) itself persists across restarts on the shared firewall-handshake volume, and the sidecar reads it on mere existence rather than a content sync to this exact boot. On a restart, if the sidecar reads the token before the current lifecycle''s 03-init-firewall overwrites a stale leftover value, the sidecar signs the completion marker with the wrong token. This is NOT a security regression (03-init-firewall''s content check correctly rejects the mismatched marker, same fail-closed timeout as always) but can cause a spurious full-timeout startup failure in a narrow restart-timing window. Implementer attempted a "wait for observed change" fix, empirically confirmed it closed this gap (6/6) but regressed Task 007''s own required inverted-race scenario (5/5 failed) — reverted rather than ship a broken fix. A proper fix needs a two-way ack protocol (sidecar acks the token it read; consumer only trusts a marker once the ack is confirmed) — larger design change, out of scope for a same-diff self-fix.'
-    - title: fix-ssh mis-resolves compose project name
-      id: weWD
-      date: "2026-07-10"
-      tag: firewall-enforcement
-      text: '[phase-01-firewall-enforcement, task 007, incidental discovery] `ai-sandbox <name> fix-ssh` against a named --clean instance resolves the Compose project/volume name incorrectly on recreate (created `docker_firewall-handshake` instead of `ai-sandbox-<name>_firewall-handshake`), hit a container-name conflict, and misreported success. Not touched by task 007''s diff (pre-existing, unrelated to the firewall work). Needs investigation and fix.'
-    - title: profiles/README.md missing new profiles
-      id: MUou
-      date: "2026-07-11"
-      tag: network-capabilities
-      text: '[phase-02-network-capabilities, task 001] profiles/README.md''s "Available profiles" table lists docker/chromium/mirror/static but not the new web-search profile (and will need host-access/lan-access added too as those land). This file is separate from docs/ai-sandbox-profiles-spec.md and isn''t explicitly in Phase 4''s doc-updates task scope (README.md, docs/architecture.md, docs/ai-sandbox-profiles-spec.md). Update profiles/README.md''s table for all three new network-capability profiles.'
-    - title: LAN/host values missing from config-persist
-      id: yS0R
-      date: "2026-07-11"
-      tag: network-capabilities
-      text: '[phase-review, phase-02-network-capabilities, arch-review-002] AI_SANDBOX_LAN_CIDR and AI_SANDBOX_HOST_LISTEN_PORTS are recomputed from live host state on every invocation and interpolated into docker-compose.yaml''s environment blocks, but neither participates in running_config_matches()''s comparison set (the codebase''s sole gate for prompting before docker compose up -d recreates a running container) or gets an ai.sandbox.* label, unlike the established AI_SANDBOX_MARKETPLACES/PLUGINS precedent. Two unresolved readings, needs empirical verification: (a) if Compose recreates on env-var-only drift, an ordinary host-state change (switching WiFi networks, a background process opening a port) between two `ai-sandbox <name> start` calls could silently recreate a --profile lan-access/host-access container with no consent prompt - contradicts the project''s own "no silent recreate without consent" principle (see docs/architecture.md SSH section); (b) if Compose does NOT recreate on plain env-var drift, then Tasks 003/005''s own stated remediation ("start again to refresh") doesn''t actually work, and there''s no documented way to refresh these values short of delete+recreate. Needs a decision before Phase 3 (--allow-egress) extends the same env-passthrough pattern further: either extend running_config_matches()/labels to cover these two values (routing through the existing consent gate), or add a warn_if_ssh_mount_stale-style staleness warning with a working documented remediation path.'
-    - title: web-search missing some IANA ranges
-      id: cMtS
-      date: "2026-07-11"
-      tag: network-capabilities
-      text: '[phase-review, phase-02-network-capabilities, security-003] The AI_SANDBOX_WEB_SEARCH iptables chain''s RFC-reserved/private exclusion list covers all security-relevant ranges (RFC1918, loopback, link-local incl. cloud-metadata, CGNAT, multicast, reserved) matching Task 001''s explicit spec, but omits a few non-private IANA special-purpose ranges: 192.0.0.0/24 (IETF Protocol Assignments), 192.0.2.0/24 / 198.51.100.0/24 / 203.0.113.0/24 (TEST-NET-1/2/3), 198.18.0.0/15 (benchmarking), 192.88.99.0/24 (deprecated 6to4 relay). No security benefit (none are LAN/host-facing) but worth closing for completeness against the IANA registry.'
-    - title: Boot-window docker exec can race firewall
-      id: Qk6L
-      date: "2026-07-11"
-      tag: network-capabilities
-      text: '[phase-02-network-capabilities, task 008] The container is docker-exec-able the instant PID 1 starts, during 03-init-firewall''s poll loop, before the firewall is confirmed applied. A docker exec that races the boot window can attach to an unfirewalled shell (empirically confirmed). This window is inherent to Phase 1''s wait-based handshake design (exists in the success path too, ~1-2s typically, bounded by AI_SANDBOX_FIREWALL_WAIT_TIMEOUT default 60s) and unchanged by task 008 (S6_BEHAVIOUR_IF_STAGE2_FAILS=2 only governs what happens after 03-init-firewall returns, not the window before it does). Matters most for `ai-sandbox enter`, whose start_shell (src/utils.sh) execs in right after `up -d` without blocking on the firewall marker. Recommended fix: gate start_shell/enter''s exec on the firewall completion marker, or tie a container healthcheck to 03-init-firewall and have the launcher --wait on it.'
-    - title: Leading-dash allow-egress hostname unguarded
-      id: sakY
-      date: "2026-07-11"
-      tag: allow-egress-flag
-      text: '[phase-review, phase-03-allow-egress-flag, correctness-002] is_valid_egress_hostname()''s regex (^[A-Za-z0-9.-]+$) permits a host-part beginning with ''-'' (e.g. "--dport"), which is then passed to `getent ahostsv4 "${_ae_host}"` unguarded in docker/init-firewall.sh. Fails closed today (getent errors, entry warn-and-skipped, no privilege widening), but worth tightening: either reject a leading ''-'' in is_valid_egress_hostname(), or invoke getent with an explicit `--` end-of-options marker (verify glibc getent on the actual base image supports it first).'
-    - title: allow-egress CIDR has no breadth floor
-      id: eDtU
-      date: "2026-07-11"
-      tag: allow-egress-flag
-      text: '[phase-review, phase-03-allow-egress-flag, security-001] is_valid_ipv4_cidr() accepts any prefix 0-32 with no lower bound, so --allow-egress 0.0.0.0/0:443 opens the port to the entire IPv4 space in one invocation, undermining the flag''s "single host/CIDR" framing. This is explicitly sanctioned by the task''s own Requirement 1 (no bound specified) and exercised by tests, so it''s a deliberate design choice, not a bug - but worth a manager/product decision to ratify: either document explicitly that CIDR breadth is the operator''s own responsibility, warn to stderr below a reasonable prefix floor (e.g. /16 or /24), or require explicit confirmation for very wide prefixes.'
-    - title: Label join delimiter confusion (allow-egress)
-      id: YjnD
-      date: "2026-07-11"
-      tag: allow-egress-flag
-      text: '[phase-review, phase-03-allow-egress-flag, security-002] restore_saved_config() rehydrates CLI_ALLOW_EGRESS by jq-joining the ai.sandbox.config label''s allow_egress JSON array with "|" then splitting on "|" before per-entry validation. A directly-tampered label (requires the same access needed to write the label field at all, so no privilege is actually gained) with a JSON array element embedding a literal "|" can produce a different set of validated entries than the JSON array''s actual elements, since the join/split round-trip isn''t count-preserving. Low severity (attacker could get the identical result by just writing the entry directly), but this delimiter-confusion pattern is shared with the pre-existing saved_marketplaces/saved_plugins handling it was modeled on, so any fix belongs at the shared-pattern level (e.g. re-split and compare element counts, or a NUL-delimited join) not allow-egress-specific.'
+- title: 'Pre-existing latent bug, not touched (out of '
+  id: bgCr
+  date: '2026-07-09'
+  tag: profiles-resource
+  text: '[phase-02-profiles-resource/002-complete-name-resolution-and-verb-gating.md] Pre-existing latent
+    bug, not touched (out of scope, unrelated to this task''s Requirements): src/profiles.sh''s profiles_create()
+    -> _cp_entries_to_json() uses `local -n` (bash 4.3+ nameref syntax), which throws under macOS system
+    bash 3.2 (bin/ai-sandbox.sh''s shebang target) — harmlessly swallowed in the smoke-tested empty-array
+    case, but would silently produce empty skills/hooks/agents JSON for a profile that has real discoverable
+    entries. Introduced in phase-02 task 001, which fixed two other bash-3.2 portability issues in this
+    same file but missed this one.'
+- title: docs/architecture.md step 1 still lists NO_CH
+  id: PVKp
+  date: '2026-07-09'
+  tag: docs-and-help
+  text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] docs/architecture.md step 1
+    still lists NO_CHROMIUM/NO_DOCKER/ENABLE_DOCKER_PROXY as globals populated by options.sh; these flags
+    were removed in the restructure (now error with a redirect message). Predates and is unrelated to
+    this task''s scoped surface (noun-dispatch/status-detail/attach-connect) — not caught by the task''s
+    grep list. Worth a separate follow-up task.'
+- title: 'src/help.sh''s per-instance commands list and '
+  id: cfdc
+  date: '2026-07-09'
+  tag: docs-and-help
+  text: '[phase-03-docs-and-help/002-update-architecture-and-help-text.md] src/help.sh''s per-instance
+    commands list and architecture.md''s step-11 dispatch-word enumeration both omit the ''up'' word (present
+    in PER_INSTANCE_COMMANDS) — this gap predates the CLI restructure entirely (never documented before
+    either) and was out of this task''s named scope.'
+- title: sandbox-volumes tests fail on ~/.config drift
+  id: Jis0
+  date: '2026-07-10'
+  tag: fix-quiet-stdout-leak-and-status-failures
+  text: 'Discovered while fixing followups Trit/zSwd, out of scope for those. test/integration/container_spec.sh''s
+    "sandbox-volumes reports clean status on an untouched overlay" (line 51) and "sandbox-volumes shows
+    a diff for the drifted path" (line 68) fail because they mount and diff the real host ~/.config (mirror
+    mode) and assume it''s pristine on a fresh container boot. On the dev machine this ran on, ~/.config
+    legitimately contains drift-triggering content unrelated to any test action (e.g. iterm2/sockets/secrets
+    being a live socket, dangling node_modules symlinks) — confirmed by running `sandbox-volumes diff
+    "$HOME/.config"` against a brand-new container immediately after boot, before any test executes user-exec.
+    Fixing this requires a design decision: should sandbox-volumes ignore certain classes of pre-existing
+    drift, should this test target an isolated scratch $XDG_CONFIG_HOME instead of the real one, or should
+    CI run against a throwaway home directory? Needs manager/user input before implementation.'
+- title: Linux host/lan-access detection
+  id: uL4v
+  date: '2026-07-10'
+  tag: lockdown-egress
+  text: 'The lockdown-egress plan''s host-access and lan-access capabilities (plan/phase-02-network-capabilities/003-add-host-access-capability.md,
+    005-add-lan-access-capability.md) implement host-side detection (listening-port enumeration via lsof,
+    LAN-CIDR detection via route get default/ipconfig) as macOS-only, consistent with the project''s macOS-first
+    stance — this is a deliberate, flagged V1 scope limit, not an oversight. Follow-up: add Linux equivalents
+    (ss/ip route or similar) for both detection steps so host-access/lan-access work when ai-sandbox runs
+    on a Linux host. Also needs a cross-platform test structure before this can be validated: settle on
+    an approach that is host-aware (run definitive tests against whatever host OS is actually running
+    the suite) plus uses Docker to run the same suite against one or more Linux target images for verification
+    from a macOS host (and vice versa in principle). Investigate existing frameworks/patterns for this
+    kind of host-plus-containerized-target test matrix before hand-rolling one.'
+- title: Anthropic API host untested/coincidental
+  id: 5bMD
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-review, phase-01-firewall-enforcement, correctness-001] docker/init-firewall.sh''s only
+    working Anthropic-host ACCEPT rule is a bare `anthropic.com` hostname resolution; there''s no literal
+    `api.anthropic.com` entry (the `.anthropic.com` leading-dot line is permanently non-resolving, tracked
+    separately). Confirmed empirically that anthropic.com and api.anthropic.com currently share an IP,
+    so the sandbox''s core "run Claude Code against the Anthropic API" use case works today only by DNS
+    coincidence, untested. Add an explicit api.anthropic.com ACCEPT rule and a reachability assertion
+    in test/integration/container_spec.sh''s Firewall rules block, alongside the existing github.com check.'
+- title: claude-install fallback broken under deny
+  id: AK1Z
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-review, phase-01-firewall-enforcement, correctness-002] docker/rootfs/etc/cont-init.d/05-install-claude
+    (pre-existing, unmodified) falls back to `bun install -g @anthropic-ai/claude-code` against registry.npmjs.org
+    when the binary is missing at container start. registry.npmjs.org is not on the new default-deny allow-list,
+    so this fallback now silently fails (caught, logged as warning, non-fatal) instead of always succeeding
+    as before. Narrow real-world exposure since normal builds pre-install claude at Dockerfile build time,
+    but a genuine undocumented behavior change. Decide: allow-list the npm/bun registry host, or explicitly
+    document that this bootstrap path is now build-time-only.'
+- title: No breadth validation on network.allow
+  id: RbKz
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-review, phase-01-firewall-enforcement, security-002] Neither bin/profile-installer.js''s
+    network.allow schema check nor docker/init-firewall.sh''s marketplace/network.allow ACCEPT-rule loops
+    validate CIDR breadth. A profile with network.allow: ["0.0.0.0/0"] silently and completely defeats
+    the port-443 default-deny scoping. Defense-in-depth gap (profile author is same trust level as operator),
+    not externally exploitable, but worth a lightweight sanity check/warning for overly-broad entries
+    (e.g. reject or warn on prefix lengths shorter than /24).'
+- title: Non-atomic firewall flush window
+  id: NlrG
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-review, phase-01-firewall-enforcement, security-004] docker/init-firewall.sh flushes the
+    OUTPUT chain (iptables -F/-X) and only re-establishes the default-deny catch-all at the end via incremental
+    `iptables -A` calls, leaving a brief unfiltered window between flush and final DROP rule. Narrow,
+    early-boot-only exposure (suggestion/low confidence). If this matters for the threat model, replace
+    incremental rule-building with a single atomic `iptables-restore` of the fully-assembled ruleset including
+    the final DROP.'
+- title: network_allow missing from persist triad
+  id: PmJ2
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-review, phase-01-firewall-enforcement, architecture-002] docs/architecture.md''s "Config
+    persistence and restore" section documents a triad pattern (docker-compose environment: entry + ai.sandbox.<field>
+    container label + running_config_matches() comparison dimension) for profile-derived env vars like
+    AI_SANDBOX_MARKETPLACES. The new AI_SANDBOX_NETWORK_ALLOW (Task 003) matches the environment: half
+    but has no ai.sandbox.network-allow label and isn''t compared in running_config_matches()/surfaced
+    in `ai-sandbox detail`''s Configuration: output. Not currently exploitable (network.allow has no CLI-delta
+    yet, fully covered by PROFILE_COMPOSITION_HASH), but plan/notes/investigation-findings.md commits
+    Phase 3 (--allow-egress) to the same triad shape end-to-end, so this should be closed then (or explicitly
+    documented as deferred) rather than left silently incomplete.'
+- title: Full integration suite not run live
+  id: nJNu
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-01-firewall-enforcement, task 004] container_spec.sh (Firewall block), network_allow_spec.sh,
+    and docker_proxy_spec.sh could not be run via their normal `make test.integration` path during this
+    plan''s execution: `status --test-check` refuses while a host claude session is live (this orchestrating
+    session itself), and starting the real container concurrently would risk the exact claude-mem corruption
+    the project''s concurrency invariant forbids. Task 004''s sidecar mechanism was instead validated
+    empirically by running the real scripts directly in a safe harness (verified capability absence, un-flushable
+    firewall, correct allow/deny egress, both restart lifecycles). Before this plan is considered fully
+    done, re-run the full `make test.integration` suite (container_spec.sh, network_allow_spec.sh, docker_proxy_spec.sh)
+    on the built image in an environment with no live host claude session, to catch anything the harness-style
+    validation couldn''t (e.g. real s6-overlay boot-order interactions).'
+- title: Dead sudoers entry for init-firewall.sh
+  id: O49Y
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-01-firewall-enforcement, task 004] docker/Dockerfile.base''s `node ALL=(root) NOPASSWD:
+    /usr/local/bin/init-firewall.sh` sudoers entry is now inert since Task 004 moved firewall application
+    to the firewall-init sidecar — the ai-sandbox container no longer has NET_ADMIN, so that script can
+    no longer succeed there. Left untouched by Task 004 per its own scope (no sudoers surgery). Cleanup
+    candidate: remove the dead entry.'
+- title: test/integration/docker_proxy_spec.sh and tes
+  id: AQag
+  date: '2026-07-10'
+  tag: fix-orphaned-sidecar-teardown
+  text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] test/integration/docker_proxy_spec.sh
+    and test/integration/clean_container_spec.sh are currently broken, independent of this task: both
+    invoke a CLI flag ordering (--profile docker start, --clean credtest start) that the current dispatch
+    grammar rejects outright. Stale from an earlier CLI-grammar rewrite never propagated to these two
+    spec files.'
+- title: test/integration/lifecycle_spec.sh invokes th
+  id: ps6H
+  date: '2026-07-10'
+  tag: fix-orphaned-sidecar-teardown
+  text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] test/integration/lifecycle_spec.sh
+    invokes the retired status command word (replaced by detail), so it falls through as an unknown per-name
+    dispatch attempt instead of reporting status.'
+- title: Recommend a follow-up task to modernize docke
+  id: Ia7w
+  date: '2026-07-10'
+  tag: fix-orphaned-sidecar-teardown
+  text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] Recommend
+    a follow-up task to modernize docker_proxy_spec.sh/clean_container_spec.sh/lifecycle_spec.sh to the
+    current CLI grammar so make test.integration can pass as a whole again.'
+- title: The task doc's requirement 2 offered 'have fi
+  id: VqTZ
+  date: '2026-07-10'
+  tag: fix-orphaned-sidecar-teardown
+  text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] The task doc''s requirement
+    2 offered ''have fix_ssh() itself call ensure_clean_slate_credentials()'' as an alternative mechanism;
+    as implemented it would not actually fix the bug since COMPOSE_FILES is already finalized by the time
+    fix_ssh() runs. Worth correcting in the phase''s design notes if this option gets referenced again
+    elsewhere.'
+- title: 'Minor: running the integration suite leaves s'
+  id: MVL1
+  date: '2026-07-10'
+  tag: fix-orphaned-sidecar-teardown
+  text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] Minor: running the integration
+    suite leaves stray .ai-sandbox.<instance>.log files in the repo root not covered by .gitignore''s
+    /.ai-sandbox*.startup.log pattern — a latent gitignore gap in the existing test suite design, not
+    introduced by this task.'
+- title: Pre-existing, out-of-scope latent bug noticed
+  id: 1C2m
+  date: '2026-07-10'
+  tag: fix-orphaned-sidecar-teardown
+  text: '[phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md] Pre-existing, out-of-scope
+    latent bug noticed during validation: do_create() (src/create.sh) is invoked as do_create || exit
+    $? in src/index.sh; under bash''s documented set -e exception for compound commands used as the left
+    side of ||, this suppresses errexit for the entire do_create() function body — so a real failure inside
+    it (e.g. docker compose up -d failing due to a container-name conflict, which was hit once during
+    validation from an unrelated concurrent sibling test run) is silently swallowed and do_create() still
+    prints "Sandbox ''...'' created and started." This is unrelated to this task''s diff and was not touched;
+    surfacing it for awareness since it could mask real creation failures.'
+- title: Environmental/test-infrastructure observation
+  id: DvGv
+  date: '2026-07-10'
+  tag: fix-orphaned-sidecar-teardown
+  text: '[phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md] Environmental/test-infrastructure
+    observation: the docker-capable integration suite shares a single, non-project-scoped, fixed container
+    name (ai-sandbox-docker-proxy) across the whole suite and across any concurrently-running ai-sandbox
+    worktree/branch on the same Docker daemon. During validation, a sibling task''s concurrent make test.integration
+    run (a different worktree, 2026-07-10-lockdown-egress) transiently collided with the new test via
+    that shared name; the window was waited out and retried successfully. Not a defect in this change,
+    but worth the manager''s awareness for future parallel-dispatch runs against a shared Docker daemon.'
+- title: Sidecar orphaned via new explicit-drop path
+  id: iLwl
+  date: '2026-07-10'
+  tag: fix-orphaned-sidecar-teardown
+  text: '[phase-review round 4, arch-review-003] Neither the start/enter recreate (src/index.sh) nor create
+    (src/create.sh) `docker compose ... up -d` invocation passes --remove-orphans. This means the positive
+    scenario task 004 fixed (explicit `start --profile <non-docker>` correctly dropping the docker capability)
+    still leaves the docker-socket-proxy sidecar container running as an orphan after the recreate — confirmed
+    by task 004''s own integration-test comment dismissing the "Found orphan containers" warning as out
+    of scope. Not a correctness regression (the capability-drop itself works), but a cleanup-hygiene gap
+    adjacent to this plan''s whole purpose. Recommend a follow-up task to add --remove-orphans to the
+    start/enter/create up -d invocations, or otherwise tie orphan cleanup to the same should_force_proxy_label_fallback()-style
+    command classification.'
+- title: 'Round-4 efficiency: redundant inspect calls'
+  id: j7jf
+  date: '2026-07-10'
+  tag: fix-orphaned-sidecar-teardown
+  text: '[phase-review round 4, efficiency-001/002/003] (1) For stop/delete/clean/fix-ssh, a single invocation
+    can now issue up to three separate docker inspect calls against the same container (existence check,
+    ai.sandbox.config label via restore_saved_config(), ai.sandbox.docker-proxy label via is_docker_proxy_label_true())
+    where the codebase''s own running_config_matches() precedent (followup 4DzF) consolidates exactly
+    this kind of same-container multi-label lookup into one multi-field `docker inspect -f` call. Recommend
+    consolidating into a shared helper. (2) Minor: restore_saved_config()''s profile re-validation loop
+    re-derives _profiles_project_root() per iteration (loop-invariant, negligible at typical list sizes
+    but worth hoisting if profile lists ever grow). (3) Minor: docker_proxy_teardown_spec.sh''s ''stop''
+    and ''fix-ssh'' Describe blocks each run independent full create/delete cycles for a docker-capable
+    instance despite having no structural need to be separate (fix-ssh could reuse the stopped instance
+    from the stop scenario) — could merge to remove one docker-capable create/delete cycle from the suite''s
+    critical path.'
+- title: Pre-existing doc-orphans (unrelated)
+  id: ragj
+  date: '2026-07-10'
+  tag: fix-orphaned-sidecar-teardown
+  text: '[phase-review round 4, link-chain check] check-links.sh found three .md files not reachable from
+    README.md: next-steps.md, profiles/README.md, test/fixtures/plugins/hello-world-marketplace/plugins/hello-world/skills/hello-world/SKILL.md.
+    Confirmed pre-existing at this phase''s diff_base (7c02e87) and untouched by any of tasks 001-005
+    — unrelated to this plan''s scope, surfaced only because phase-review''s Phase 3 link-chain check
+    runs against the whole repo. Recommend a small follow-up task to either link these from README.md
+    (or an intermediate doc) or relocate/exclude them if they''re not meant to be part of the doc corpus.'
+- title: 'Round-5: fix-ssh test could reuse instance'
+  id: zSn1
+  date: '2026-07-10'
+  tag: fix-orphaned-sidecar-teardown
+  text: '[phase-review round 5, efficiency-004 — non-blocking, deliberate choice not an oversight] test/integration/docker_proxy_fix_ssh_explicit_override_spec.sh
+    (task 005) runs its own full docker-capable create/delete cycle for one fix-ssh --profile scenario,
+    structurally identical to docker_proxy_explicit_profile_override_spec.sh''s (task 004) start --profile
+    scenario one file over. Unlike that sibling test, fix-ssh doesn''t trigger resolve_and_download_tools()
+    (src/index.sh), so it lacks the same technical justification for a separate live-Docker create/delete
+    cycle. Task 005''s own Assumptions section explicitly permitted a mocked-docker alternative here.
+    Recommend either merging this scenario into docker_proxy_explicit_profile_override_spec.sh''s existing
+    instance (exercise fix-ssh --profile before deletion) or adding a unit-level mocked-docker equivalent,
+    removing one docker-capable create/delete cycle from the suite''s serialized critical path.'
+- title: Orphaned firewall-handshake volume
+  id: K4K8
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-review re-review, phase-01-firewall-enforcement, arch-review-001] The new firewall-handshake
+    named Docker volume (docker/docker-compose.yaml) is never removed by `ai-sandbox delete`/`clean` (docker
+    compose down with no -v/--volumes), leaving an orphaned per-instance volume behind for every deleted
+    sandbox instance. Add -v/--volumes to the down calls in src/index.sh''s delete/clean branches, or
+    explicitly docker volume rm the instance-scoped volume, mirroring the project''s existing "close what
+    you open" cleanup convention.'
+- title: Untested config-drift recreate + sidecar
+  id: Ssa5
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-review re-review, phase-01-firewall-enforcement, arch-review-002] Whether Compose reliably
+    recreates the dependent firewall-init sidecar in lockstep whenever ai-sandbox is implicitly recreated
+    via plain `docker compose up -d` on config drift (e.g. a new --add-marketplace value, per running_config_matches())
+    was never exercised — only the explicit --force-recreate --no-deps ai-sandbox firewall-init pair in
+    fix_ssh() was validated. Low risk (marker''s clear-before-poll design fails loud on a timeout, never
+    silently unprotected) but unverified. Add an integration test or manual verification: change a config-drift-triggering
+    option on a running instance via plain enter/start and confirm the firewall re-applies (or confirm
+    the fail-loud timeout path if it doesn''t).'
+- title: Stale comment on firewall-handshake volume
+  id: ZiET
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-01-firewall-enforcement, task 006] docker/docker-compose.yaml''s firewall-handshake volume
+    comment ("the wait stage clears any stale marker before polling") describes the pre-task-006 mechanism.
+    Task 006 moved marker-clearing from the consumer (03-init-firewall) to the producer (init-firewall-sidecar.sh,
+    at the start of its run) to fix a cross-container race. Update the comment to reflect the producer-clears-first
+    invariant.'
+- title: Token-file staleness on restart (fail-closed)
+  id: QuAe
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-01-firewall-enforcement, task 007] The nonce/token handshake''s expected-token file (written
+    by 03-init-firewall) itself persists across restarts on the shared firewall-handshake volume, and
+    the sidecar reads it on mere existence rather than a content sync to this exact boot. On a restart,
+    if the sidecar reads the token before the current lifecycle''s 03-init-firewall overwrites a stale
+    leftover value, the sidecar signs the completion marker with the wrong token. This is NOT a security
+    regression (03-init-firewall''s content check correctly rejects the mismatched marker, same fail-closed
+    timeout as always) but can cause a spurious full-timeout startup failure in a narrow restart-timing
+    window. Implementer attempted a "wait for observed change" fix, empirically confirmed it closed this
+    gap (6/6) but regressed Task 007''s own required inverted-race scenario (5/5 failed) — reverted rather
+    than ship a broken fix. A proper fix needs a two-way ack protocol (sidecar acks the token it read;
+    consumer only trusts a marker once the ack is confirmed) — larger design change, out of scope for
+    a same-diff self-fix.'
+- title: --quiet leaks docker-check output to stdout
+  id: Trit
+  date: '2026-07-10'
+  tag: fix-dockerfile-path-drift
+  text: Discovered while fixing followup J9mV (Dockerfile PATH drift), confirmed pre-existing on baseline
+    via git stash A/B test — unrelated to that fix, out of scope for it. Under --quiet, several user-exec/root-exec
+    invocations still print "Checking docker is running... confirmed." to stdout (src/utils.sh:42 area
+    — qecho -n "Checking docker is running... " followed by an apparently un-guarded echo/print of "confirmed.").
+    This pollutes stdout for tests using exact-match assertions (`The output should eq ...`), causing
+    10 failures in test/integration/container_spec.sh (sandbox-volumes status, Bun, User UID, Firewall
+    rules, SSH agent forwarding, DEVCONTAINER env, Config isolation) plus similar failures observed in
+    lifecycle_spec.sh, clean_container_spec.sh, and docker_proxy_spec.sh during a full `make test.integration`
+    run. Needs investigation of the docker-running check path to properly gate the "confirmed." output
+    behind QUIET.
+- title: 'Integration suite: BeforeAll/status failures'
+  id: zSwd
+  date: '2026-07-10'
+  tag: fix-dockerfile-path-drift
+  text: 'Discovered while fixing followup J9mV, out of scope for that task — not investigated further.
+    A full `make test.integration` run shows BeforeAll hook errors in clean_container_spec.sh and docker_proxy_spec.sh,
+    and several lifecycle_spec.sh failures referencing "Error: ''status'' is not a known instance or profile".
+    These look like separate, pre-existing test/CLI issues — possibly related to or compounding the same
+    --quiet stdout-pollution bug (see sibling followup "--quiet leaks docker-check output to stdout"),
+    or a separate `status` subcommand naming/resolution issue. Needs triage to determine root cause(s)
+    and whether it''s one bug or several.'
+- title: 'Design note: only the disallowed-host probe i'
+  id: Qp8z
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-01-firewall-enforcement/001-author-failing-egress-test.md] Design note: only the disallowed-host
+    probe in the new firewall test is gated by AI_SANDBOX_SKIP_EGRESS_NET; the new allowed-host-reachable
+    probe is also network-dependent but has no opt-out, unlike the existing SSH-auth test''s pattern.
+    Worth reconsidering if a genuinely network-isolated CI runner is ever used. (test/integration/container_spec.sh)'
+- title: Security-relevant judgment call, already appl
+  id: wyGy
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-01-firewall-enforcement/002-wire-firewall-init-and-net-admin.md] Security-relevant judgment
+    call, already applied in this task''s diff: github.com is now allow-listed by its published 140.82.112.0/20
+    CIDR (~4096 addresses) instead of a single DNS-resolved IP, because empirical testing showed the single-IP
+    approach failed 15-83% of the time against GitHub''s DNS round-robin. Still far narrower than open
+    internet and matches common practice (e.g. GitHub Actions self-hosted runner allowlisting), but flagged
+    for explicit awareness since it wasn''t literally specified by the task Requirements. (docker/init-firewall.sh)'
+- title: Cleanup candidate, not fixed (judgment-heavy,
+  id: tZrJ
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-01-firewall-enforcement/002-wire-firewall-init-and-net-admin.md] Cleanup candidate, not
+    fixed (judgment-heavy, out of this task''s scope): eight per-host allow-list entries in docker/init-firewall.sh
+    are permanently non-functional dead code (leading-dot wildcard syntax iptables doesn''t support that
+    way, non-resolving bare githubusercontent.com/githubassets.com records) — script no longer aborts
+    on them (fixed to best-effort) but they grant no actual access. Needs a follow-up to determine real
+    subdomain coverage. (docker/init-firewall.sh)'
+- title: Pre-existing, unrelated bug confirmed on base
+  id: wYbg
+  date: '2026-07-10'
+  tag: firewall-enforcement
+  text: '[phase-01-firewall-enforcement/002-wire-firewall-init-and-net-admin.md] Pre-existing, unrelated
+    bug confirmed on baseline via git stash: test/integration/docker_proxy_spec.sh cannot run via its
+    documented invocation (`--profile docker start` fails) due to a src/options.sh arg-order bug — validated
+    this task''s docker-proxy-sidecar interaction manually instead. Needs a follow-up fix or invocation-order
+    workaround so docker_proxy_spec.sh runs again under routine make test.integration.'
+- title: profiles/README.md missing new profiles
+  id: MUou
+  date: '2026-07-11'
+  tag: network-capabilities
+  text: '[phase-02-network-capabilities, task 001] profiles/README.md''s "Available profiles" table lists
+    docker/chromium/mirror/static but not the new web-search profile (and will need host-access/lan-access
+    added too as those land). This file is separate from docs/ai-sandbox-profiles-spec.md and isn''t explicitly
+    in Phase 4''s doc-updates task scope (README.md, docs/architecture.md, docs/ai-sandbox-profiles-spec.md).
+    Update profiles/README.md''s table for all three new network-capability profiles.'
+- title: LAN/host values missing from config-persist
+  id: yS0R
+  date: '2026-07-11'
+  tag: network-capabilities
+  text: '[phase-review, phase-02-network-capabilities, arch-review-002] AI_SANDBOX_LAN_CIDR and AI_SANDBOX_HOST_LISTEN_PORTS
+    are recomputed from live host state on every invocation and interpolated into docker-compose.yaml''s
+    environment blocks, but neither participates in running_config_matches()''s comparison set (the codebase''s
+    sole gate for prompting before docker compose up -d recreates a running container) or gets an ai.sandbox.*
+    label, unlike the established AI_SANDBOX_MARKETPLACES/PLUGINS precedent. Two unresolved readings,
+    needs empirical verification: (a) if Compose recreates on env-var-only drift, an ordinary host-state
+    change (switching WiFi networks, a background process opening a port) between two `ai-sandbox <name>
+    start` calls could silently recreate a --profile lan-access/host-access container with no consent
+    prompt - contradicts the project''s own "no silent recreate without consent" principle (see docs/architecture.md
+    SSH section); (b) if Compose does NOT recreate on plain env-var drift, then Tasks 003/005''s own stated
+    remediation ("start again to refresh") doesn''t actually work, and there''s no documented way to refresh
+    these values short of delete+recreate. Needs a decision before Phase 3 (--allow-egress) extends the
+    same env-passthrough pattern further: either extend running_config_matches()/labels to cover these
+    two values (routing through the existing consent gate), or add a warn_if_ssh_mount_stale-style staleness
+    warning with a working documented remediation path.'
+- title: web-search missing some IANA ranges
+  id: cMtS
+  date: '2026-07-11'
+  tag: network-capabilities
+  text: '[phase-review, phase-02-network-capabilities, security-003] The AI_SANDBOX_WEB_SEARCH iptables
+    chain''s RFC-reserved/private exclusion list covers all security-relevant ranges (RFC1918, loopback,
+    link-local incl. cloud-metadata, CGNAT, multicast, reserved) matching Task 001''s explicit spec, but
+    omits a few non-private IANA special-purpose ranges: 192.0.0.0/24 (IETF Protocol Assignments), 192.0.2.0/24
+    / 198.51.100.0/24 / 203.0.113.0/24 (TEST-NET-1/2/3), 198.18.0.0/15 (benchmarking), 192.88.99.0/24
+    (deprecated 6to4 relay). No security benefit (none are LAN/host-facing) but worth closing for completeness
+    against the IANA registry.'
+- title: Boot-window docker exec can race firewall
+  id: Qk6L
+  date: '2026-07-11'
+  tag: network-capabilities
+  text: '[phase-02-network-capabilities, task 008] The container is docker-exec-able the instant PID 1
+    starts, during 03-init-firewall''s poll loop, before the firewall is confirmed applied. A docker exec
+    that races the boot window can attach to an unfirewalled shell (empirically confirmed). This window
+    is inherent to Phase 1''s wait-based handshake design (exists in the success path too, ~1-2s typically,
+    bounded by AI_SANDBOX_FIREWALL_WAIT_TIMEOUT default 60s) and unchanged by task 008 (S6_BEHAVIOUR_IF_STAGE2_FAILS=2
+    only governs what happens after 03-init-firewall returns, not the window before it does). Matters
+    most for `ai-sandbox enter`, whose start_shell (src/utils.sh) execs in right after `up -d` without
+    blocking on the firewall marker. Recommended fix: gate start_shell/enter''s exec on the firewall completion
+    marker, or tie a container healthcheck to 03-init-firewall and have the launcher --wait on it.'
+- title: Leading-dash allow-egress hostname unguarded
+  id: sakY
+  date: '2026-07-11'
+  tag: allow-egress-flag
+  text: '[phase-review, phase-03-allow-egress-flag, correctness-002] is_valid_egress_hostname()''s regex
+    (^[A-Za-z0-9.-]+$) permits a host-part beginning with ''-'' (e.g. "--dport"), which is then passed
+    to `getent ahostsv4 "${_ae_host}"` unguarded in docker/init-firewall.sh. Fails closed today (getent
+    errors, entry warn-and-skipped, no privilege widening), but worth tightening: either reject a leading
+    ''-'' in is_valid_egress_hostname(), or invoke getent with an explicit `--` end-of-options marker
+    (verify glibc getent on the actual base image supports it first).'
+- title: allow-egress CIDR has no breadth floor
+  id: eDtU
+  date: '2026-07-11'
+  tag: allow-egress-flag
+  text: '[phase-review, phase-03-allow-egress-flag, security-001] is_valid_ipv4_cidr() accepts any prefix
+    0-32 with no lower bound, so --allow-egress 0.0.0.0/0:443 opens the port to the entire IPv4 space
+    in one invocation, undermining the flag''s "single host/CIDR" framing. This is explicitly sanctioned
+    by the task''s own Requirement 1 (no bound specified) and exercised by tests, so it''s a deliberate
+    design choice, not a bug - but worth a manager/product decision to ratify: either document explicitly
+    that CIDR breadth is the operator''s own responsibility, warn to stderr below a reasonable prefix
+    floor (e.g. /16 or /24), or require explicit confirmation for very wide prefixes.'
+- title: Label join delimiter confusion (allow-egress)
+  id: YjnD
+  date: '2026-07-11'
+  tag: allow-egress-flag
+  text: '[phase-review, phase-03-allow-egress-flag, security-002] restore_saved_config() rehydrates CLI_ALLOW_EGRESS
+    by jq-joining the ai.sandbox.config label''s allow_egress JSON array with "|" then splitting on "|"
+    before per-entry validation. A directly-tampered label (requires the same access needed to write the
+    label field at all, so no privilege is actually gained) with a JSON array element embedding a literal
+    "|" can produce a different set of validated entries than the JSON array''s actual elements, since
+    the join/split round-trip isn''t count-preserving. Low severity (attacker could get the identical
+    result by just writing the entry directly), but this delimiter-confusion pattern is shared with the
+    pre-existing saved_marketplaces/saved_plugins handling it was modeled on, so any fix belongs at the
+    shared-pattern level (e.g. re-split and compare element counts, or a NUL-delimited join) not allow-egress-specific.'
+- title: CRITICAL, previously-unknown finding discover
+  id: FCGy
+  date: '2026-07-11'
+  tag: network-capabilities
+  text: '[phase-02-network-capabilities/007-fix-capability-ifs-word-splitting.md] CRITICAL, previously-unknown
+    finding discovered during this task''s fail-open verification (out of this task''s file scope to fix):
+    S6_BEHAVIOUR_IF_STAGE2_FAILS is unset everywhere in this project. Empirically confirmed via a real
+    s6-overlay v3.2.0.2 container repro that with it unset, a cont-init.d script exiting nonzero -- including
+    docker/rootfs/etc/cont-init.d/03-init-firewall''s own exit 1 after its 60s wait for the firewall-init
+    sidecar times out -- does NOT halt the container; all later cont-init.d stages still run and the container
+    reports started successfully. This means the ''wait-then-fail-loud'' mechanism the Phase 1 code comments
+    describe does not actually function as documented under this project''s current, unmodified configuration:
+    ANY future failure of the firewall-init sidecar (not just the IFS bug this task fixes) would let ai-sandbox
+    start with an unrestricted default-ACCEPT OUTPUT policy. This undermines the fail-closed guarantee
+    the entire Phase 1 security fix depends on. Confirmed the fix direction empirically: with S6_BEHAVIOUR_IF_STAGE2_FAILS=2
+    explicitly set, the container DOES correctly halt -- but only after every cont-init.d script in the
+    directory has already run to completion (pass/fail is decided once, at the end, not per-script), so
+    pairing this setting alone may still leave a window unless combined with earlier-ordered guarding.
+    Needs a dedicated, high-priority follow-up task.'
+- title: Stale comment in src/status.sh (~line 48) say
+  id: WjsY
+  date: '2026-07-11'
+  tag: allow-egress-flag
+  text: '[phase-03-allow-egress-flag/001-add-allow-egress-flag-parsing.md] Stale comment in src/status.sh
+    (~line 48) says "seven-field config record", should say "eight-field" now that allow_egress exists.
+    Not fixed (out of this task''s file scope) - purely a comment, no functional impact.'
+- title: 'Full make test.integration run not completed '
+  id: Icw2
+  date: '2026-07-11'
+  tag: allow-egress-flag
+  text: '[phase-03-allow-egress-flag/003-test-allow-egress-flag.md] Full make test.integration run not
+    completed in-session (stopped after establishing no regression via isolated spec pass + unit suite);
+    recommend a fresh full run before final plan close-out, though expected to only show the already-tracked
+    pre-existing unrelated failures.'

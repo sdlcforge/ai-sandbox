@@ -1,0 +1,7 @@
+metadata:
+  name: host-access
+  version: "1.0.0"
+  description: "Allow egress to any TCP port currently listening on the host, via host.docker.internal"
+
+capabilities:
+  - host-access

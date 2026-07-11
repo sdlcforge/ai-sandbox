@@ -8,8 +8,14 @@ code, and the non-obvious design decisions that shape it.
 A single bash CLI (`bin/ai-sandbox.sh`) that orchestrates `docker compose` to run
 an Ubuntu container configured to look, from the inside, like an extension of the
 user's macOS workstation — same user, same SSH agent, same git config, same
-`~/.claude` state. The container's outbound network is clamped via `iptables` to
-the handful of hosts an agent actually needs (GitHub, Anthropic API).
+`~/.claude` state. The container's outbound network is **default-deny**,
+restricted via `iptables`/`ip6tables` to an explicit allow-list — GitHub and
+the Anthropic API by default, extended by any active network capability
+(`web-search`, `host-access`, `lan-access`) or `--allow-egress` entry. The
+policy is applied and enforced by a privilege-isolated `firewall-init`
+sidecar rather than by the `ai-sandbox` container itself; see
+[Egress firewall: default-deny, enforced by a privilege-isolated sidecar](#egress-firewall-default-deny-enforced-by-a-privilege-isolated-sidecar)
+below.
 
 The product surface is small; the interesting engineering is in *what the host
 launcher does before and around* `docker compose up`.
@@ -205,6 +211,132 @@ four of those CMDs, on `CONFIG_FLAGS_PROVIDED`:
 See [Config persistence and restore](#config-persistence-and-restore) below
 for the full label/restore contract.
 
+### Egress firewall: default-deny, enforced by a privilege-isolated sidecar
+
+The outbound firewall was, for most of this project's life, present but
+inert: `docker/init-firewall.sh` existed and was baked into the image, but
+nothing ever invoked it, the container was never granted `CAP_NET_ADMIN`, and
+even a manual run would only ever have appended `ACCEPT` rules without a
+default-deny policy — so egress was completely open regardless. Fixing that
+required two things: actually applying a default-deny policy, and applying it
+from somewhere the sandboxed agent cannot undo.
+
+**Why the firewall isn't applied by `ai-sandbox` itself.** The `ai-sandbox`
+container carries a broad `${HOST_USER} ALL=(ALL) NOPASSWD: ALL` sudo grant
+(needed for `sandbox-volumes` and other host-identity mirroring). If that
+container also held `CAP_NET_ADMIN`, any in-container command — including a
+prompt-injected agent action — could run `sudo iptables -F` and instantly
+disable the whole allow-list. So `ai-sandbox` deliberately never holds
+`CAP_NET_ADMIN`; the capability instead lives on a dedicated, short-lived
+`firewall-init` sidecar service (`docker/docker-compose.yaml`) that shares
+`ai-sandbox`'s network namespace (`network_mode: service:ai-sandbox`),
+applies `docker/init-firewall.sh` into that shared namespace exactly once via
+`docker/init-firewall-sidecar.sh`, verifies the rules actually landed, and
+exits. This mirrors the [Docker access](#docker-access-proxy-not-socket-or-dind)
+sidecar pattern immediately above: the privilege is held by a container the
+agent cannot reach, not by the container it runs in.
+
+**Handshake between the two containers.** `ai-sandbox`'s
+`03-init-firewall` cont-init stage blocks every later init stage
+(credential writes, plugin setup) until the sidecar confirms the firewall is
+applied. The two sides coordinate over a shared `firewall-handshake` volume
+using a per-boot nonce: `03-init-firewall` generates a fresh token as its
+very first action and writes it to a well-known path; the sidecar waits for
+that token, applies and verifies the rules (including a second, independent
+verification of the mirrored IPv6 policy — see below), then echoes the same
+token back as the content of its completion marker. `03-init-firewall`
+accepts a marker only when its content matches the token it generated *this*
+boot. Content comparison — not marker existence or clearing — is what makes
+the handshake race-free across restarts: a leftover marker from a previous
+container lifecycle carries a different, stale token and can never be
+mistaken for current-lifecycle completion, regardless of which container
+reaches its checkpoint first.
+
+This handshake gates the `cont-init.d` chain, not attachment: the container
+is `docker exec`-able the moment s6-svscan starts, and `ai-sandbox enter`
+attaches immediately after `up -d` without waiting on the firewall marker,
+so a racing `enter` can briefly land in the container before the firewall
+is confirmed applied — a [known boot-window
+race](next-steps.md#boot-window-race-between-enterdocker-exec-and-the-firewall-handshake)
+with a proposed fix.
+
+**Halting on firewall failure.** A `03-init-firewall` timeout or failure
+exits nonzero, but s6-overlay's default (unset) behavior for a failed
+`cont-init.d` script is to run every remaining stage anyway and still report
+the container as started — it does *not* halt boot. `docker/Dockerfile.base`
+sets `ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2`, the minimum value that actually
+makes a `cont-init.d` failure halt the container, so a firewall-init failure
+now stops the container from starting unprotected instead of silently
+booting with no egress restriction. The setting is baked into the image
+layer (not the Compose `environment:` block) so it can't be silently dropped
+by a compose-file edit, and it's inert on the `firewall-init` sidecar itself,
+which sets `entrypoint: []` and never runs `/init`.
+
+**Rule shape.** `docker/init-firewall.sh` flushes existing rules, adds
+explicit `ACCEPT` entries — loopback, the configured DNS resolvers, GitHub
+(matched by its stable, long-published CIDR rather than a single resolved IP,
+since GitHub sits behind heavily weighted DNS round-robin and a one-shot
+hostname resolution would allow-list only whichever backend happened to
+answer first), Anthropic, the `docker` capability's socket-proxy sidecar when
+active, and `network.allow`/marketplace hosts — then ends with a logged
+catch-all `DROP` on `OUTPUT`. A mirrored `ip6tables` policy (loopback plus a
+logged catch-all `DROP`, deliberately with no other `ACCEPT` entries — no
+currently allow-listed host is confirmed IPv6-reachable, and this project is
+Docker-Desktop/macOS-focused where IPv6 egress isn't part of the supported
+surface) closes the equivalent IPv6 gap, guarded so a host without
+`ip6tables` at all simply skips it rather than failing. Only `OUTPUT` is
+restricted; `INPUT`/`FORWARD` keep their default `ACCEPT` policy, since
+return traffic on already-established outbound connections isn't gated by
+the `OUTPUT` restriction either way.
+
+### Capability-driven dynamic firewall rules
+
+`web-search`, `host-access`, and `lan-access` (declared via the `capabilities`
+profile field, same as `docker`/`chromium`) are the first capabilities that
+change container *runtime* behavior rather than *build-time* image contents —
+each one only adds `iptables` rules at container-init time, on top of the
+default-deny policy above.
+
+**Why a no-op Dockerfile fragment.** `docker/scripts/assemble-dockerfile.sh`
+validates that every capability named in a profile's resolved `capabilities`
+list has a matching `docker/capabilities/<name>.dockerfile` fragment, and
+errors otherwise. Since these three capabilities have nothing to add to the
+image, their fragments (`docker/capabilities/web-search.dockerfile`,
+`host-access.dockerfile`, `lan-access.dockerfile`) are intentionally empty —
+satisfying the existing build-time validation contract without inventing a
+separate "buildless capability" concept alongside it.
+
+**Env-var passthrough pattern.** The resolved capability list
+(`PROFILE_CAPABILITIES`, computed host-side by `profile-installer.js`) is
+exported to both the `ai-sandbox` and `firewall-init` services as
+`AI_SANDBOX_CAPABILITIES`; `docker/init-firewall.sh` reads it at init time and
+branches into a per-capability rule block for each recognized token (a plain
+`case` over a whole-token split, not substring matching — consistent with
+`src/plugin-conflicts.sh`'s matching discipline). `host-access` and
+`lan-access` need additional host-computed input that has no other channel
+into the container: `AI_SANDBOX_HOST_LISTEN_PORTS` (a `lsof -iTCP
+-sTCP:LISTEN` snapshot, macOS-only, host-access only) and `AI_SANDBOX_LAN_CIDR`
+(host-side LAN detection via `route get default` + `ipconfig`, macOS-only,
+lan-access only, empty when detection fails). Both follow the same
+host-computed / container-passthrough shape the pre-existing
+`AI_SANDBOX_MARKETPLACES`/`AI_SANDBOX_NETWORK_ALLOW` variables already use.
+`AI_SANDBOX_ALLOW_EGRESS` (the `--allow-egress` flag's specs, `|`-joined)
+reuses the identical passthrough shape. All of these variables are declared
+on *both* the `ai-sandbox` and `firewall-init` services in
+`docker/docker-compose.yaml`, but only the `firewall-init` copies are load-
+bearing — `docker/init-firewall.sh` only ever runs inside that sidecar.
+
+**Resolve-once, no TTL.** Name-form entries — `network.allow`/marketplace
+hostnames and `--allow-egress` hostnames — are DNS-resolved once at
+container-init time (via `getent ahostsv4`, using the container's own
+configured resolvers so the allow-listed IPs match what the container's
+traffic will actually use) and never refreshed. This is consistent with the
+pre-existing, undocumented behavior of the hardcoded GitHub/Anthropic
+hostname rules, not a new limitation this layer introduces — but it also
+isn't solved here: a DNS answer that changes after container-init (including
+a hostile DNS-rebinding attempt) leaves the allow-listed IP stale until the
+container is recreated. Flagged as a follow-up rather than addressed in V1.
+
 ### `~/.config` is copy-on-write by default
 
 Writes under `~/.config` from inside the container are kept **container-local
@@ -309,18 +441,22 @@ git@github.com` looking for `successfully authenticated`.
 `docker/docker-compose.yaml` writes a single canonical label,
 `ai.sandbox.config`, capturing every config-changing CLI input as
 base64-encoded JSON: `profiles`, `mode`, `no_isolate_config`, `clean_slate`,
-`marketplaces`, `plugins`, `enable_all_plugins`, plus a `version` field
-(currently always `1`, present for future extensibility — no code branches on
-it today). `src/index.sh` assembles this JSON after the CLI-merge phase (once
-`PROFILES`/`MODE_OVERRIDE`/`NO_ISOLATE_CONFIG`/`CLEAN_SLATE`/
-`CLI_MARKETPLACES`/`CLI_PLUGINS`/`CLI_ENABLE_ALL` are all final) and exports
-it as `AI_SANDBOX_CONFIG_B64`, mirroring the `AI_SANDBOX_CREDENTIALS_JSON_B64`
-pattern already used for clean-slate credentials (`src/credentials.sh`).
-Marketplaces and plugins are persisted as the **CLI deltas**
-(`CLI_MARKETPLACES`/`CLI_PLUGINS`), not the profile-merged effective set —
-the profile-contributed entries are reproduced for free by re-running
-`profile-installer.js` on restore, so only the CLI additions need to
-round-trip through the label.
+`marketplaces`, `plugins`, `enable_all_plugins`, `allow_egress`, plus a
+`version` field (currently always `1`, present for future extensibility — no
+code branches on it today; `allow_egress` was added as an additive eighth
+field without bumping `version`). `src/index.sh` assembles this JSON after
+the CLI-merge phase (once `PROFILES`/`MODE_OVERRIDE`/`NO_ISOLATE_CONFIG`/
+`CLEAN_SLATE`/`CLI_MARKETPLACES`/`CLI_PLUGINS`/`CLI_ENABLE_ALL`/
+`CLI_ALLOW_EGRESS` are all final) and exports it as `AI_SANDBOX_CONFIG_B64`,
+mirroring the `AI_SANDBOX_CREDENTIALS_JSON_B64` pattern already used for
+clean-slate credentials (`src/credentials.sh`). Marketplaces, plugins, and
+allow-egress specs are persisted as the **CLI deltas**
+(`CLI_MARKETPLACES`/`CLI_PLUGINS`/`CLI_ALLOW_EGRESS`), not a profile-merged
+effective set — for marketplaces/plugins, the profile-contributed entries are
+reproduced for free by re-running `profile-installer.js` on restore, so only
+the CLI additions need to round-trip through the label; `--allow-egress` has
+no profile-level equivalent at all (it's CLI-only), so its persisted value
+*is* the full effective value.
 
 **Input vs. derived.** The launcher re-derives the entire effective
 configuration from these inputs on every invocation — `profile-installer.js`
@@ -347,7 +483,7 @@ passed this invocation (the existing `CONFIG_FLAGS_PROVIDED != true` gate)
 and a container (running or stopped) already exists for `SANDBOX_NAME`.
 
 When triggered, this reads only the `ai.sandbox.config` label, base64-decodes
-and extracts each field via `jq`, and rehydrates all seven input globals.
+and extracts each field via `jq`, and rehydrates all eight input globals.
 Each field is only assigned when present, so a missing or empty label is a
 natural no-op. **There is no fallback of any kind** — a container with no
 `ai.sandbox.config` label (including any container created before this label
@@ -359,24 +495,37 @@ fallback in parallel), not a gap to be closed later. Restored marketplace
 entries are re-validated against the `https://`/`file://` scheme constraint
 before being trusted — a persisted label is not the same trust boundary as
 freshly-typed `--add-marketplace` input — dropping (with a warning) any entry
-that doesn't match rather than restoring it verbatim.
+that doesn't match rather than restoring it verbatim. Restored
+`--allow-egress` specs are re-validated the same way, against the same
+host/port/CIDR checks `src/options.sh`'s `--allow-egress` parser applies to
+freshly-typed input. `src/options.sh` calls
+`is_valid_egress_host()`/`is_valid_egress_port()` (`src/utils.sh`) directly,
+for per-failure-mode error messages; `restore_saved_config()`
+(`src/utils.sh`) calls `is_valid_allow_egress_spec()`, a convenience wrapper
+around those same two predicates — both routes enforce byte-for-byte
+identical rules — a diverging restore-time check here would let an invalid
+egress spec reach Task 002's container-init-time firewall-rule application.
 
 **Matches (`running_config_matches`, `src/utils.sh`).** Compares the running
 container's labels against the current invocation's freshly-resolved
 effective values across the full derived-config dimension set: image tag,
 `ai.sandbox.profile-hash`, `ai.sandbox.mode`, `ai.sandbox.no-isolate-config`,
-`ai.sandbox.docker-proxy`, `ai.sandbox.clean-slate`, and three additional
+`ai.sandbox.docker-proxy`, `ai.sandbox.clean-slate`, and four additional
 derived labels — `ai.sandbox.marketplaces`, `ai.sandbox.plugins`,
-`ai.sandbox.enable-all-plugins` — populated from the effective
-`AI_SANDBOX_MARKETPLACES`/`AI_SANDBOX_PLUGINS`/`AI_SANDBOX_ENABLE_ALL_PLUGINS`
-env vars (the same values the container's `10-plugin-setup` init consumes).
-An explicit invocation that changes any of these (e.g. `enter
---add-marketplace NEW` on a container created without it) is now correctly
-detected as a config change and triggers the stop-and-recreate prompt instead
-of silently never applying. This is the "explicit invocation always wins"
-invariant: whatever this invocation itself explicitly asked for takes effect,
-even over what's already persisted. The `EFFECTIVE_PROXY` label fallback
-described under [Docker access: proxy, not socket or DinD](#docker-access-proxy-not-socket-or-dind)
+`ai.sandbox.enable-all-plugins`, `ai.sandbox.allow-egress` — populated from
+the effective `AI_SANDBOX_MARKETPLACES`/`AI_SANDBOX_PLUGINS`/
+`AI_SANDBOX_ENABLE_ALL_PLUGINS`/`AI_SANDBOX_ALLOW_EGRESS` env vars (the first
+three are the same values the container's `10-plugin-setup` init consumes;
+`AI_SANDBOX_ALLOW_EGRESS` is simply `CLI_ALLOW_EGRESS` joined with `|`, since
+`--allow-egress` is CLI-only with no profile-level value to merge in). An
+explicit invocation that changes any of these (e.g. `enter --add-marketplace
+NEW` or `enter --allow-egress 1.2.3.4:443` on a container created without it)
+is now correctly detected as a config change and triggers the
+stop-and-recreate prompt instead of silently never applying. This is the
+"explicit invocation always wins" invariant: whatever this invocation itself
+explicitly asked for takes effect, even over what's already persisted. The
+`EFFECTIVE_PROXY` label fallback described under
+[Docker access: proxy, not socket or DinD](#docker-access-proxy-not-socket-or-dind)
 above is a worked example of the same invariant applied in the opposite
 direction — it deliberately stops short of overriding an explicit
 `--profile`/`--mode`/etc. flag on `fix-ssh`/`start`/`enter`/`up`
