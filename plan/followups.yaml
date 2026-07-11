@@ -120,3 +120,8 @@ items:
       date: "2026-07-10"
       tag: firewall-enforcement
       text: '[phase-review re-review, phase-01-firewall-enforcement, arch-review-001] The new firewall-handshake named Docker volume (docker/docker-compose.yaml) is never removed by `ai-sandbox delete`/`clean` (docker compose down with no -v/--volumes), leaving an orphaned per-instance volume behind for every deleted sandbox instance. Add -v/--volumes to the down calls in src/index.sh''s delete/clean branches, or explicitly docker volume rm the instance-scoped volume, mirroring the project''s existing "close what you open" cleanup convention.'
+    - title: Untested config-drift recreate + sidecar
+      id: Ssa5
+      date: "2026-07-10"
+      tag: firewall-enforcement
+      text: '[phase-review re-review, phase-01-firewall-enforcement, arch-review-002] Whether Compose reliably recreates the dependent firewall-init sidecar in lockstep whenever ai-sandbox is implicitly recreated via plain `docker compose up -d` on config drift (e.g. a new --add-marketplace value, per running_config_matches()) was never exercised — only the explicit --force-recreate --no-deps ai-sandbox firewall-init pair in fix_ssh() was validated. Low risk (marker''s clear-before-poll design fails loud on a timeout, never silently unprotected) but unverified. Add an integration test or manual verification: change a config-drift-triggering option on a running instance via plain enter/start and confirm the firewall re-applies (or confirm the fail-loud timeout path if it doesn''t).'
