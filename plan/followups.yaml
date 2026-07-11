@@ -35,3 +35,8 @@ items:
       date: "2026-07-10"
       tag: firewall-enforcement
       text: '[phase-review, phase-01-firewall-enforcement, correctness-002] docker/rootfs/etc/cont-init.d/05-install-claude (pre-existing, unmodified) falls back to `bun install -g @anthropic-ai/claude-code` against registry.npmjs.org when the binary is missing at container start. registry.npmjs.org is not on the new default-deny allow-list, so this fallback now silently fails (caught, logged as warning, non-fatal) instead of always succeeding as before. Narrow real-world exposure since normal builds pre-install claude at Dockerfile build time, but a genuine undocumented behavior change. Decide: allow-list the npm/bun registry host, or explicitly document that this bootstrap path is now build-time-only.'
+    - title: No breadth validation on network.allow
+      id: RbKz
+      date: "2026-07-10"
+      tag: firewall-enforcement
+      text: '[phase-review, phase-01-firewall-enforcement, security-002] Neither bin/profile-installer.js''s network.allow schema check nor docker/init-firewall.sh''s marketplace/network.allow ACCEPT-rule loops validate CIDR breadth. A profile with network.allow: ["0.0.0.0/0"] silently and completely defeats the port-443 default-deny scoping. Defense-in-depth gap (profile author is same trust level as operator), not externally exploitable, but worth a lightweight sanity check/warning for overly-broad entries (e.g. reject or warn on prefix lengths shorter than /24).'
