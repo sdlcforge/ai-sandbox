@@ -50,11 +50,6 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] Minor: running the integration suite leaves stray .ai-sandbox.<instance>.log files in the repo root not covered by .gitignore''s /.ai-sandbox*.startup.log pattern — a latent gitignore gap in the existing test suite design, not introduced by this task.'
-    - title: 'gitignore gap: .ai-sandbox.<name>.log files f'
-      id: 68bH
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-01-fix-orphaned-sidecar-teardown/003-fix-capability-loss-on-profile-drop.md] gitignore gap: .ai-sandbox.<name>.log files from integration test create_* helpers aren''t covered by .gitignore''s narrower pattern — same latent gap noted by task 002, not touched here either.'
     - title: Pre-existing, out-of-scope latent bug noticed
       id: 1C2m
       date: "2026-07-10"
