@@ -55,3 +55,8 @@ items:
       date: "2026-07-10"
       tag: firewall-enforcement
       text: '[phase-01-firewall-enforcement, task 004] container_spec.sh (Firewall block), network_allow_spec.sh, and docker_proxy_spec.sh could not be run via their normal `make test.integration` path during this plan''s execution: `status --test-check` refuses while a host claude session is live (this orchestrating session itself), and starting the real container concurrently would risk the exact claude-mem corruption the project''s concurrency invariant forbids. Task 004''s sidecar mechanism was instead validated empirically by running the real scripts directly in a safe harness (verified capability absence, un-flushable firewall, correct allow/deny egress, both restart lifecycles). Before this plan is considered fully done, re-run the full `make test.integration` suite (container_spec.sh, network_allow_spec.sh, docker_proxy_spec.sh) on the built image in an environment with no live host claude session, to catch anything the harness-style validation couldn''t (e.g. real s6-overlay boot-order interactions).'
+    - title: Dead sudoers entry for init-firewall.sh
+      id: O49Y
+      date: "2026-07-10"
+      tag: firewall-enforcement
+      text: '[phase-01-firewall-enforcement, task 004] docker/Dockerfile.base''s `node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh` sudoers entry is now inert since Task 004 moved firewall application to the firewall-init sidecar — the ai-sandbox container no longer has NET_ADMIN, so that script can no longer succeed there. Left untouched by Task 004 per its own scope (no sudoers surgery). Cleanup candidate: remove the dead entry.'
