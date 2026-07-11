@@ -50,11 +50,6 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] Minor: running the integration suite leaves stray .ai-sandbox.<instance>.log files in the repo root not covered by .gitignore''s /.ai-sandbox*.startup.log pattern — a latent gitignore gap in the existing test suite design, not introduced by this task.'
-    - title: Full make test.integration shows 25 pre-exist
-      id: n58c
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-01-fix-orphaned-sidecar-teardown/003-fix-capability-loss-on-profile-drop.md] Full make test.integration shows 25 pre-existing failures/2 errors/2 warnings in lifecycle_spec.sh, container_spec.sh, clean_container_spec.sh, docker_proxy_spec.sh — confirmed identical against a baseline at task 002''s merge commit, so pre-existing and unrelated to this task, not a regression.'
     - title: 'gitignore gap: .ai-sandbox.<name>.log files f'
       id: 68bH
       date: "2026-07-10"
