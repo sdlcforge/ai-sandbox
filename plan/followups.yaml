@@ -40,3 +40,8 @@ items:
       date: "2026-07-10"
       tag: firewall-enforcement
       text: '[phase-review, phase-01-firewall-enforcement, security-002] Neither bin/profile-installer.js''s network.allow schema check nor docker/init-firewall.sh''s marketplace/network.allow ACCEPT-rule loops validate CIDR breadth. A profile with network.allow: ["0.0.0.0/0"] silently and completely defeats the port-443 default-deny scoping. Defense-in-depth gap (profile author is same trust level as operator), not externally exploitable, but worth a lightweight sanity check/warning for overly-broad entries (e.g. reject or warn on prefix lengths shorter than /24).'
+    - title: Non-atomic firewall flush window
+      id: NlrG
+      date: "2026-07-10"
+      tag: firewall-enforcement
+      text: '[phase-review, phase-01-firewall-enforcement, security-004] docker/init-firewall.sh flushes the OUTPUT chain (iptables -F/-X) and only re-establishes the default-deny catch-all at the end via incremental `iptables -A` calls, leaving a brief unfiltered window between flush and final DROP rule. Narrow, early-boot-only exposure (suggestion/low confidence). If this matters for the threat model, replace incremental rule-building with a single atomic `iptables-restore` of the fully-assembled ruleset including the final DROP.'
