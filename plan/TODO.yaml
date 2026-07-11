@@ -62,7 +62,7 @@ phases:
           done: false
           tier: sonnet-high
           git:
-            branch: null
+            branch: phase-01-task-05-gate-label-fallback-on-explici
             commit: []
             merge: null
     - number: 2
