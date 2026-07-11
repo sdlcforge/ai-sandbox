@@ -206,8 +206,8 @@ export PROFILE_JSON
 # base64-encode it single-line -- mirroring src/credentials.sh's
 # AI_SANDBOX_CREDENTIALS_JSON_B64 pattern -- for safe embedding in the
 # ai.sandbox.config Docker label (docker/docker-compose.yaml).
-# restore_saved_config() decodes this label to rehydrate all seven inputs on a
-# bare start/enter. Persist CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL (the
+# restore_saved_config() decodes this label to rehydrate all seven inputs on
+# every per-instance command except create (see should_restore_config(), src/utils.sh). Persist CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL (the
 # CLI deltas), not the profile-merged PROFILE_JSON set: profile-contributed
 # entries are reproduced for free by re-running profile-installer.js on
 # restore, so only the CLI additions need to round-trip through the label.
