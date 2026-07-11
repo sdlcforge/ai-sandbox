@@ -107,6 +107,27 @@ function is_container_running() {
     [ "${state}" = "running" ]
 }
 
+# Return 0 if the current SANDBOX_NAME's container has a persisted
+# ai.sandbox.docker-proxy label (docker/docker-compose.yaml) of "true", 1
+# otherwise (label absent/false, or no container exists yet). Single-field
+# docker inspect -- the inspect itself fails when no container exists for
+# SANDBOX_NAME, and that failure is treated as "false" via `|| return 1`, so
+# this is naturally scoped to "a container already exists" (mirroring
+# is_container_running_or_stopped()'s guard semantics) without a second,
+# separate existence-check round trip.
+#
+# Used as an authoritative fallback for EFFECTIVE_PROXY (src/index.sh) when
+# this invocation's profile resolution would otherwise say the docker
+# capability is absent, even though the instance was actually created with
+# it -- see that call site's comment for the full rationale.
+function is_docker_proxy_label_true() {
+    local label
+    label="$(docker inspect -f \
+        '{{index .Config.Labels "ai.sandbox.docker-proxy"}}' \
+        "$(sandbox_container_name)" 2>/dev/null)" || return 1
+    [ "${label}" = "true" ]
+}
+
 # Return 0 if the named capability is present in PROFILE_CAPABILITIES (a
 # space-separated list), 1 otherwise. Matches whole tokens, not substrings.
 # $1 — capability name to test for.
@@ -118,16 +139,102 @@ function profile_has_capability() {
     return 1
 }
 
+# Return 0 (true) if src/index.sh's restore call site should attempt
+# restore_saved_config() for the given CMD, 1 (false) otherwise.
+#
+# Every per-instance CMD value reachable at that call site --
+# PER_INSTANCE_COMMANDS (src/options.sh) minus `create`, plus any arbitrary
+# word forwarded to the docker-compose passthrough branch (src/index.sh's
+# final dispatch `else`) -- operates on an already-created instance, so its
+# compose-file assembly (and in particular EFFECTIVE_PROXY / the docker
+# capability, which gates whether docker-compose.proxy.yaml's sidecar and
+# network are included) must reflect that instance's actual persisted
+# composition rather than just whatever --profile flags (usually none) this
+# particular invocation passed. Without this, running e.g. `delete`/`clean`/
+# `stop`/`fix-ssh` with no --profile flag on a docker-capable instance
+# silently drops the docker capability for that invocation's compose-file
+# list, leaving the docker-socket-proxy sidecar container/network orphaned
+# (stop) or only partially torn down (delete/clean), or the recreated
+# container missing DOCKER_HOST (fix-ssh).
+#
+# restore_saved_config()'s own internal guard (CONFIG_FLAGS_PROVIDED /
+# is_container_running_or_stopped) already makes it safe to call
+# unconditionally for all of those CMD values, so this predicate only needs
+# to exclude `create`: it deliberately provisions fresh state and already
+# rejects name collisions in do_create() (src/create.sh) before a restored
+# value would ever be consulted -- calling restore_saved_config() ahead of
+# that check would be a harmless but pointless `docker inspect`.
+# $1 -- the CMD value to test.
+function should_restore_config() {
+    [ "${1:-}" != "create" ]
+}
+
+# Return 0 (true) if src/index.sh's EFFECTIVE_PROXY label-fallback block
+# (the container's persisted ai.sandbox.docker-proxy label overriding this
+# invocation's profile-resolved EFFECTIVE_PROXY from false to true) should
+# apply for the given CMD and CONFIG_FLAGS_PROVIDED, 1 (false) otherwise.
+#
+# The orphaned-sidecar bug that fallback protects against (phase-01/003) only
+# ever manifests on the four commands that can act on an *existing* instance
+# without necessarily re-specifying its original composition: stop/delete/
+# clean (whose `docker compose ... stop`/`down` calls silently drop the proxy
+# sidecar/network from their compose-file list when EFFECTIVE_PROXY
+# incorrectly resolves false) and fix-ssh (whose --force-recreate would drop
+# DOCKER_HOST from the recreated container). stop/delete/clean apply the
+# fallback unconditionally: these commands tear down (or pause) whatever
+# composition *actually exists*, so there is no legitimate "explicit
+# invocation" story for them to override the instance's persisted label.
+#
+# fix-ssh/start/enter/up, by contrast, can recompose the container (fix-ssh
+# and start/enter force-recreate it; up drives the compose file list
+# directly), so whether *this invocation* is the one deciding composition
+# turns on CONFIG_FLAGS_PROVIDED (src/options.sh), not on which of these four
+# CMD values was typed: when CONFIG_FLAGS_PROVIDED is "true" (this run itself
+# passed a composition-changing flag such as --profile/--mode/etc.), that
+# explicit, confirmed choice must win -- including deliberately dropping the
+# docker capability (docs/architecture.md's "Matches" subsection, "explicit
+# invocation always wins") -- so the fallback must NOT apply, or an explicit
+# `start --profile <non-docker>` / `fix-ssh --profile <non-docker>` on a
+# docker-capable instance would have the label fallback silently re-grant
+# network access to the docker-socket-proxy sidecar (a documented
+# container-escape vector, docker/docker-compose.proxy.yaml) against the
+# user's explicit intent. When CONFIG_FLAGS_PROVIDED is not "true" (a bare
+# restore/resume -- restore_saved_config() decided composition, not the
+# user), the fallback DOES apply: otherwise a bare `start`/`enter` against an
+# instance whose persisted docker-granting profile has since become
+# unresolvable would silently lose the capability again (the same
+# orphaned-sidecar bug class, reintroduced for this path).
+#
+# Every other per-instance CMD -- create/detail/build/user-exec/root-exec/
+# attach -- must NOT apply the fallback regardless of CONFIG_FLAGS_PROVIDED:
+# create is excluded because it provisions fresh state (no prior container to
+# read a label from -- is_docker_proxy_label_true() would always return false
+# there anyway, via its own container-existence guard); detail is excluded
+# because do_status() never consumes EFFECTIVE_PROXY; the rest never touch
+# composition. Neither exclusion changes behavior; both just skip a provably-
+# wasted docker inspect call.
+# $1 -- the CMD value to test.
+# $2 -- this invocation's CONFIG_FLAGS_PROVIDED value ("true" or "false");
+#       only consulted for fix-ssh/start/enter/up.
+function should_force_proxy_label_fallback() {
+    case "${1:-}" in
+        stop|delete|clean) return 0 ;;
+        fix-ssh|start|enter|up) [ "${2:-}" != "true" ] ;;
+        *) return 1 ;;
+    esac
+}
+
 # Restore PROFILES / MODE_OVERRIDE / NO_ISOLATE_CONFIG / CLEAN_SLATE /
 # CLI_MARKETPLACES / CLI_PLUGINS / CLI_ENABLE_ALL -- the complete seven-
 # dimension config-input record (see plan/notes/config-persistence-design.md)
 # -- from the single ai.sandbox.config label saved on the container at
 # `create` time, when the current invocation didn't pass any config-changing
-# flags itself. Called for `start`/`enter`; when CONFIG_FLAGS_PROVIDED is
-# "true" (i.e. --profile/--mode/--no-isolate-config/--add-marketplace/
-# --enable-plugin/--enable-all/--clean was explicitly passed this run) or no
-# container exists yet, returns immediately without touching any of the seven
-# globals, so the explicit flags on the current invocation always win.
+# flags itself. Called for every CMD except `create` (see
+# should_restore_config()); when CONFIG_FLAGS_PROVIDED is "true" (i.e.
+# --profile/--mode/--no-isolate-config/--add-marketplace/--enable-plugin/
+# --enable-all/--clean was explicitly passed this run) or no container exists
+# yet, returns immediately without touching any of the seven globals, so the
+# explicit flags on the current invocation always win.
 #
 # No fallback of any kind: only the single ai.sandbox.config label is read.
 # When the label is absent or empty -- including on any container created
@@ -181,7 +288,45 @@ function restore_saved_config() {
         saved_enable_all="$(printf '%s' "${saved_config_json}" | jq -r 'if .enable_all_plugins == null then "" else (.enable_all_plugins | tostring) end' 2>/dev/null || true)"
 
         if [ -n "${saved_profiles}" ]; then
-            IFS='|' read -ra PROFILES <<< "${saved_profiles}"
+            # Re-validate that each restored profile name still resolves via
+            # the same three discovery locations profile-installer.js's
+            # findProfile() checks (profile_exists(), src/profiles.sh) --
+            # mirrors the marketplace-scheme re-validation a few lines below.
+            # A profile that resolved fine at `create` time can go stale
+            # later (deleted, renamed, or a project-local profile only
+            # resolvable relative to the create-time CWD). Without this
+            # check, restoring an unresolvable name verbatim makes
+            # bin/profile-installer.js's loadProfile() call die() ->
+            # process.exit(1), and src/index.sh's
+            # `PROFILE_INSTALLER_OUTPUT="$(node ...)" || exit $?` propagates
+            # that failure, hard-aborting the whole invocation before CMD
+            # dispatch is ever reached -- including delete/clean/stop, the
+            # exact commands a user needs when an instance is broken. Drop
+            # (with a warning) any entry that doesn't resolve, rather than
+            # restoring it verbatim; when every restored name is dropped,
+            # PROFILES stays unset and profile-installer.js falls back to its
+            # own default-profile resolution (config.yaml, else [base,
+            # mirror]) instead of failing.
+            #
+            # Note: profile_exists() deliberately rejects symlinked profile
+            # files (src/profiles.sh) as a security guard, while
+            # bin/profile-installer.js's findProfile() follows symlinks and
+            # would load the same path -- so a restored name that only
+            # resolves via a symlink is spuriously dropped here even though
+            # profile-installer.js would have loaded it fine. Safe direction
+            # (over-conservative fallback, not a crash); left as-is.
+            local _restored_profiles _validated_profiles=() _prof
+            IFS='|' read -ra _restored_profiles <<< "${saved_profiles}"
+            for _prof in "${_restored_profiles[@]}"; do
+                if profile_exists "${_prof}"; then
+                    _validated_profiles+=("${_prof}")
+                else
+                    echo "Warning: dropping restored profile '${_prof}' -- no longer found in any search location (./profiles, \${XDG_CONFIG_HOME:-\$HOME/.config}/ai-sandbox/profiles, or the bundled profiles/ dir); falling back to default profile resolution" 1>&2
+                fi
+            done
+            if [ "${#_validated_profiles[@]}" -gt 0 ]; then
+                PROFILES=("${_validated_profiles[@]}")
+            fi
         fi
         if [ -n "${saved_mode}" ]; then
             MODE_OVERRIDE="${saved_mode}"
@@ -399,7 +544,12 @@ function ensure_image() {
 
 function do_build() {
     docker image rm -f "${AI_SANDBOX_IMAGE_TAG}" >/dev/null 2>&1 || true
-    docker compose ${COMPOSE_FILES} build --ssh "default=${SSH_AUTH_SOCK}"
+    # -p "${COMPOSE_PROJECT}" scopes the build to this instance's compose
+    # project, matching every other compose invocation in the codebase (e.g.
+    # start_shell() above, src/index.sh, src/create.sh) -- without it, this
+    # resolves against Compose's default project-name derivation instead of
+    # the named instance's actual project scope.
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} build --ssh "default=${SSH_AUTH_SOCK}"
 }
 
 # Remove all ai-sandbox:* variant images from the local daemon.
@@ -500,7 +650,12 @@ function fix_ssh() {
         return 1
     fi
     # 'ai-sandbox' here is the compose service name, not the container name.
-    docker compose ${COMPOSE_FILES} up -d --force-recreate --no-deps ai-sandbox
+    # -p "${COMPOSE_PROJECT}" scopes the recreate to this instance's compose
+    # project, matching every other compose invocation in the codebase (e.g.
+    # start_shell() above, src/index.sh, src/create.sh) -- without it, this
+    # resolves against Compose's default project-name derivation instead of
+    # the named instance's actual project scope.
+    docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} up -d --force-recreate --no-deps ai-sandbox
     qecho "Container recreated with SSH_AUTH_SOCK=${SSH_AUTH_SOCK}"
 }
 

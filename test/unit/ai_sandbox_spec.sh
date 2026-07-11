@@ -113,10 +113,54 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'is_docker_proxy_label_true()'
+    # Unit coverage for the authoritative-label fallback this task adds to
+    # src/index.sh's EFFECTIVE_PROXY computation (phase-01/003). See the
+    # 'command dispatch: dropped custom profile' Describe block below for the
+    # end-to-end regression coverage of the actual EFFECTIVE_PROXY fallback
+    # behavior this function backs.
+    It 'returns success when the persisted label is "true"'
+      SANDBOX_NAME="test"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo "true"; return 0; fi
+      }
+      When call is_docker_proxy_label_true
+      The status should be success
+    End
+
+    It 'returns failure when the persisted label is "false"'
+      SANDBOX_NAME="test"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo "false"; return 0; fi
+      }
+      When call is_docker_proxy_label_true
+      The status should be failure
+    End
+
+    It 'returns failure when the label is absent (empty output, e.g. pre-label container)'
+      SANDBOX_NAME="test"
+      docker() {
+        if [ "$1" = "inspect" ]; then echo ""; return 0; fi
+      }
+      When call is_docker_proxy_label_true
+      The status should be failure
+    End
+
+    It 'returns failure when no container exists (inspect fails) -- naturally scopes the fallback off of create'
+      SANDBOX_NAME="test"
+      docker() {
+        if [ "$1" = "inspect" ]; then return 1; fi
+      }
+      When call is_docker_proxy_label_true
+      The status should be failure
+    End
+  End
+
   Describe 'ensure_image()'
     setup() {
       export TOOL_CACHE_DIR="$(mktemp -d)"
       export AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-test"
+      export COMPOSE_PROJECT="ai-sandbox-flow-rook"
       unset PROFILE_COMPOSITION_HASH
     }
     cleanup() {
@@ -137,6 +181,9 @@ Describe 'ai-sandbox.sh'
             ;;
           compose)
             shift
+            # do_build() now emits '-p "${COMPOSE_PROJECT}"' before
+            # ${COMPOSE_FILES} (regression: missing -p flag) -- skip it too.
+            [ "$1" = "-p" ] && { shift; shift; }
             while [ "$1" = "-f" ]; do shift; shift; done
             [ "$1" = "build" ] && built=true
             ;;
@@ -161,6 +208,27 @@ Describe 'ai-sandbox.sh'
       COMPOSE_FILES="-f docker-compose.yaml"
       When call ensure_image
       The output should eq ''
+    End
+  End
+
+  Describe 'do_build()'
+    It 'scopes the build to the current compose project (regression: missing -p flag)'
+      # Without -p "${COMPOSE_PROJECT}", build resolves against Compose's
+      # default project-name derivation instead of the named instance's
+      # actual project scope -- the same class of bug the start_shell()
+      # regression test above already caught and fixed for exec.
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-test"
+      COMPOSE_FILES="-f docker-compose.yaml"
+      COMPOSE_PROJECT="ai-sandbox-flow-rook"
+      SSH_AUTH_SOCK="/tmp/ssh"
+      docker() {
+        case "$1" in
+          image) [ "$2" = "rm" ] && return 0 ;;
+          compose) printf '%s\n' "$*" ;;
+        esac
+      }
+      When call do_build
+      The output should include 'compose -p ai-sandbox-flow-rook -f docker-compose.yaml build'
     End
   End
 
@@ -218,6 +286,231 @@ Describe 'ai-sandbox.sh'
       When call run_enter_shell_if_requested
       The status should be success
       The variable called should eq false
+    End
+  End
+
+  Describe 'should_restore_config()'
+    # Regression coverage for the orphaned docker-socket-proxy sidecar bug:
+    # src/index.sh's restore call site previously gated restore_saved_config()
+    # to only CMD=start/enter, so every other per-instance command (delete,
+    # clean, stop, build, fix-ssh, ...) ran with whatever --profile flags
+    # (usually none) this invocation passed rather than the instance's
+    # persisted composition -- silently dropping the docker capability (and
+    # therefore the proxy sidecar/network) from that invocation's compose-file
+    # assembly. should_restore_config() must return true for every CMD value
+    # reachable at that call site except "create".
+    It 'returns true for CMD=start'
+      When call should_restore_config start
+      The status should be success
+    End
+
+    It 'returns true for CMD=enter'
+      When call should_restore_config enter
+      The status should be success
+    End
+
+    It 'returns true for CMD=attach'
+      When call should_restore_config attach
+      The status should be success
+    End
+
+    It 'returns true for CMD=fix-ssh'
+      When call should_restore_config fix-ssh
+      The status should be success
+    End
+
+    It 'returns true for CMD=build'
+      When call should_restore_config build
+      The status should be success
+    End
+
+    It 'returns true for CMD=user-exec'
+      When call should_restore_config user-exec
+      The status should be success
+    End
+
+    It 'returns true for CMD=root-exec'
+      When call should_restore_config root-exec
+      The status should be success
+    End
+
+    It 'returns true for CMD=detail'
+      When call should_restore_config detail
+      The status should be success
+    End
+
+    It 'returns true for CMD=stop'
+      When call should_restore_config stop
+      The status should be success
+    End
+
+    It 'returns true for CMD=delete'
+      When call should_restore_config delete
+      The status should be success
+    End
+
+    It 'returns true for CMD=clean'
+      When call should_restore_config clean
+      The status should be success
+    End
+
+    It 'returns true for CMD=up'
+      When call should_restore_config up
+      The status should be success
+    End
+
+    It 'returns true for an arbitrary word forwarded to the docker-compose passthrough branch (e.g. CMD=logs)'
+      When call should_restore_config logs
+      The status should be success
+    End
+
+    It 'returns false for CMD=create (fresh state, nothing to restore)'
+      When call should_restore_config create
+      The status should be failure
+    End
+  End
+
+  Describe 'should_force_proxy_label_fallback()'
+    # Regression coverage for phase-01/004 (scoping task 003's EFFECTIVE_PROXY
+    # label fallback down to only the teardown/preserve commands where the
+    # orphaned-sidecar bug actually manifests) as refined by phase-01/005
+    # (gating on CONFIG_FLAGS_PROVIDED in addition to CMD). The third phase-1
+    # gate review found task 003's fallback applied unconditionally to every
+    # per-instance CMD, including start/enter, which meant an explicit,
+    # user-confirmed --profile change removing the docker capability was
+    # silently reverted -- violating docs/architecture.md's "Matches"
+    # subsection ("explicit invocation always wins" invariant). The fourth
+    # phase-1 gate review then found task 004's CMD-only gating was itself
+    # the wrong axis: whether an invocation is "explicit" is decided by
+    # CONFIG_FLAGS_PROVIDED, not by which CMD was typed -- a bare start/enter
+    # with no --profile this run (CONFIG_FLAGS_PROVIDED=false) is a
+    # restore/resume, not an explicit override, and must still get the
+    # fallback if the persisted profile has drifted; conversely an explicit
+    # `fix-ssh --profile <non-docker>` (CONFIG_FLAGS_PROVIDED=true) must be
+    # allowed to actually drop the capability.
+    #
+    # stop/delete/clean apply the fallback unconditionally, regardless of
+    # CONFIG_FLAGS_PROVIDED. fix-ssh/start/enter/up apply it only when
+    # CONFIG_FLAGS_PROVIDED is not "true". Every other CMD never applies it,
+    # regardless of CONFIG_FLAGS_PROVIDED.
+    It 'returns true for CMD=stop regardless of CONFIG_FLAGS_PROVIDED (unset)'
+      When call should_force_proxy_label_fallback stop
+      The status should be success
+    End
+
+    It 'returns true for CMD=stop with CONFIG_FLAGS_PROVIDED=true'
+      When call should_force_proxy_label_fallback stop true
+      The status should be success
+    End
+
+    It 'returns true for CMD=stop with CONFIG_FLAGS_PROVIDED=false'
+      When call should_force_proxy_label_fallback stop false
+      The status should be success
+    End
+
+    It 'returns true for CMD=delete regardless of CONFIG_FLAGS_PROVIDED (unset)'
+      When call should_force_proxy_label_fallback delete
+      The status should be success
+    End
+
+    It 'returns true for CMD=delete with CONFIG_FLAGS_PROVIDED=true'
+      When call should_force_proxy_label_fallback delete true
+      The status should be success
+    End
+
+    It 'returns true for CMD=clean regardless of CONFIG_FLAGS_PROVIDED (unset)'
+      When call should_force_proxy_label_fallback clean
+      The status should be success
+    End
+
+    It 'returns true for CMD=clean with CONFIG_FLAGS_PROVIDED=true'
+      When call should_force_proxy_label_fallback clean true
+      The status should be success
+    End
+
+    It 'returns true for CMD=fix-ssh when CONFIG_FLAGS_PROVIDED is unset (bare restore/resume)'
+      When call should_force_proxy_label_fallback fix-ssh
+      The status should be success
+    End
+
+    It 'returns true for CMD=fix-ssh with CONFIG_FLAGS_PROVIDED=false'
+      When call should_force_proxy_label_fallback fix-ssh false
+      The status should be success
+    End
+
+    It 'returns false for CMD=fix-ssh with CONFIG_FLAGS_PROVIDED=true (explicit --profile must take effect)'
+      When call should_force_proxy_label_fallback fix-ssh true
+      The status should be failure
+    End
+
+    It 'returns true for CMD=start when CONFIG_FLAGS_PROVIDED is unset (bare restore/resume, e.g. profile drift)'
+      When call should_force_proxy_label_fallback start
+      The status should be success
+    End
+
+    It 'returns true for CMD=start with CONFIG_FLAGS_PROVIDED=false'
+      When call should_force_proxy_label_fallback start false
+      The status should be success
+    End
+
+    It 'returns false for CMD=start with CONFIG_FLAGS_PROVIDED=true (explicit profile change must take effect)'
+      When call should_force_proxy_label_fallback start true
+      The status should be failure
+    End
+
+    It 'returns true for CMD=enter when CONFIG_FLAGS_PROVIDED is unset (bare restore/resume)'
+      When call should_force_proxy_label_fallback enter
+      The status should be success
+    End
+
+    It 'returns false for CMD=enter with CONFIG_FLAGS_PROVIDED=true (explicit profile change must take effect)'
+      When call should_force_proxy_label_fallback enter true
+      The status should be failure
+    End
+
+    It 'returns true for CMD=up when CONFIG_FLAGS_PROVIDED is unset (bare restore/resume)'
+      When call should_force_proxy_label_fallback up
+      The status should be success
+    End
+
+    It 'returns false for CMD=up with CONFIG_FLAGS_PROVIDED=true'
+      When call should_force_proxy_label_fallback up true
+      The status should be failure
+    End
+
+    It 'returns false for CMD=create (no prior container to read a label from) regardless of CONFIG_FLAGS_PROVIDED'
+      When call should_force_proxy_label_fallback create
+      The status should be failure
+    End
+
+    It 'returns false for CMD=create with CONFIG_FLAGS_PROVIDED=false'
+      When call should_force_proxy_label_fallback create false
+      The status should be failure
+    End
+
+    It 'returns false for CMD=detail (do_status() never consumes EFFECTIVE_PROXY) regardless of CONFIG_FLAGS_PROVIDED'
+      When call should_force_proxy_label_fallback detail
+      The status should be failure
+    End
+
+    It 'returns false for CMD=build regardless of CONFIG_FLAGS_PROVIDED'
+      When call should_force_proxy_label_fallback build false
+      The status should be failure
+    End
+
+    It 'returns false for CMD=user-exec regardless of CONFIG_FLAGS_PROVIDED'
+      When call should_force_proxy_label_fallback user-exec
+      The status should be failure
+    End
+
+    It 'returns false for CMD=root-exec regardless of CONFIG_FLAGS_PROVIDED'
+      When call should_force_proxy_label_fallback root-exec
+      The status should be failure
+    End
+
+    It 'returns false for CMD=attach regardless of CONFIG_FLAGS_PROVIDED'
+      When call should_force_proxy_label_fallback attach
+      The status should be failure
     End
   End
 
@@ -406,6 +699,78 @@ Describe 'ai-sandbox.sh'
       The variable "CLI_MARKETPLACES[*]" should eq 'https://good.example.com/plugins'
       The stderr should include 'invalid scheme'
       The stderr should include 'ftp://bad.example.com'
+    End
+
+    It 'drops a restored profile name that no longer resolves, keeping other valid restored profiles (regression: profile-restore hard-failure on teardown commands)'
+      # Root cause: unlike the marketplace-scheme validation above, the
+      # profile-name restore previously had no fallback -- a restored name
+      # that no longer resolves (deleted/renamed profile, or a project-local
+      # profile only resolvable relative to the create-time CWD) would be
+      # restored verbatim into PROFILES, and bin/profile-installer.js's
+      # loadProfile() call would then die() -> process.exit(1), which
+      # src/index.sh's `PROFILE_INSTALLER_OUTPUT="$(node ...)" || exit $?`
+      # propagates, hard-aborting the whole invocation -- including
+      # delete/clean/stop, the exact commands a user needs when an instance
+      # is broken -- before CMD dispatch is ever reached. profile_exists()
+      # (src/profiles.sh) is pure bash (no docker involved), so it's
+      # overridden directly here per this file's convention for mocking pure-
+      # bash helpers (see "parse_options() -- per-name verb-gating" above).
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      config_b64="$(encode_config '{"version":1,"profiles":["base","ghost-profile"]}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      profile_exists() { [ "$1" = "base" ]; }
+      When call restore_saved_config
+      The status should be success
+      The variable "PROFILES[*]" should eq 'base'
+      The stderr should include 'ghost-profile'
+      The stderr should include 'no longer found'
+    End
+
+    It 'falls back to default profile resolution (empty PROFILES) when every restored profile is unresolvable'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      config_b64="$(encode_config '{"version":1,"profiles":["ghost-one","ghost-two"]}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      profile_exists() { return 1; }
+      When call restore_saved_config
+      The status should be success
+      # bash's ${arr[*]+x} existence test (which the variable subject uses
+      # under the hood) treats a zero-element array the same as an unset
+      # variable, so "should be undefined" -- not "should eq ''" -- is the
+      # correct assertion for "PROFILES was left as the empty array it
+      # started as".
+      The variable "PROFILES[*]" should be undefined
+      The stderr should include 'ghost-one'
+      The stderr should include 'ghost-two'
     End
 
     It 'treats an oversized ai.sandbox.config label as absent rather than decoding it (followup qVbA)'
@@ -1751,6 +2116,28 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'fix_ssh()'
+    It 'scopes the recreate to the current compose project (regression: missing -p flag)'
+      # Without -p "${COMPOSE_PROJECT}", the recreate resolves against
+      # Compose's default project-name derivation instead of the named
+      # instance's actual project scope -- the same class of bug the
+      # start_shell() regression test above already caught and fixed for exec.
+      SANDBOX_NAME="test"
+      COMPOSE_FILES="-f docker-compose.yaml"
+      COMPOSE_PROJECT="ai-sandbox-flow-rook"
+      SSH_AUTH_SOCK="/tmp/agent.sock"
+      QUIET=1
+      ssh_preflight() { return 0; }
+      docker() {
+        case "$1" in
+          compose) printf '%s\n' "$*" ;;
+        esac
+      }
+      When call fix_ssh
+      The output should include 'compose -p ai-sandbox-flow-rook -f docker-compose.yaml up -d --force-recreate --no-deps ai-sandbox'
+    End
+  End
+
   Describe 'profiles_create()'
     # Renamed/rewritten from new_profile() (phase-02-profiles-resource task
     # 001, "Build Profiles Module"): the auto-discovery scaffolding logic is
@@ -2210,6 +2597,286 @@ MOCK_DOCKER
       The status should be success
       The output should include 'confirmed.'
       The contents of file "${DISPATCH_DOCKER_LOG}" should include 'exec -u root ai-sandbox echo hi'
+    End
+  End
+
+  Describe 'command dispatch: teardown commands survive an unresolvable restored profile (regression: profile-restore hard-failure on teardown commands)'
+    # End-to-end regression coverage for task doc requirement 1
+    # (plan/phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md):
+    # the graceful-degradation fix lives in restore_saved_config()'s runtime
+    # call to profile_exists()/PROFILE_JSON assembly, which only fully
+    # exercises end to end when the real bin/profile-installer.js gets
+    # invoked with the (now-filtered) PROFILES array -- so this runs the real
+    # built script via `When run script`, same convention and rationale as
+    # the "command dispatch: exec/passthrough branches" Describe block above.
+    # `docker inspect ... ai.sandbox.config` is mocked to return a persisted
+    # config recording a profile name ("ghost-profile") that does not exist
+    # anywhere under this repo's real profiles/ tree -- simulating a profile
+    # that was valid at `create` time but has since been deleted/renamed.
+    # Without the fix, bin/profile-installer.js's loadProfile() would die()
+    # on "ghost-profile" and src/index.sh's `|| exit $?` would abort before
+    # CMD dispatch, so `delete` would never reach `docker compose ... down`.
+    setup() {
+      DISPATCH_WORK_DIR="$(mktemp -d)"
+      export XDG_CACHE_HOME="${DISPATCH_WORK_DIR}/cache"
+      DISPATCH_MOCK_BIN="${DISPATCH_WORK_DIR}/mockbin"
+      mkdir -p "${DISPATCH_MOCK_BIN}"
+      DISPATCH_DOCKER_LOG="${DISPATCH_WORK_DIR}/docker_calls.log"
+      : > "${DISPATCH_DOCKER_LOG}"
+      export DISPATCH_DOCKER_LOG
+      # Persisted ai.sandbox.config label: profiles=["ghost-profile"], a name
+      # that does not resolve to any file under ./profiles,
+      # ${XDG_CONFIG_HOME:-$HOME/.config}/ai-sandbox/profiles, or this repo's
+      # bundled profiles/ dir.
+      config_json='{"version":1,"profiles":["ghost-profile"],"mode":"","no_isolate_config":false,"clean_slate":false,"marketplaces":[],"plugins":[],"enable_all_plugins":false}'
+      config_b64="$(printf '%s' "${config_json}" | base64 | tr -d '\n')"
+      export DISPATCH_CONFIG_B64="${config_b64}"
+      cat > "${DISPATCH_MOCK_BIN}/docker" <<'MOCK_DOCKER'
+#!/bin/bash
+printf '%s\n' "$*" >> "${DISPATCH_DOCKER_LOG}"
+case "$1" in
+  info) exit 0 ;;
+  ps) echo "ai-sandbox-dispatchtest"; exit 0 ;;
+  inspect)
+    if [[ "$*" == *"ai.sandbox.config"* ]]; then
+      echo "${DISPATCH_CONFIG_B64}"
+    elif [[ "$*" == *"State.Status"* ]]; then
+      # Reported as exited (not running) so delete/stop/clean skip the
+      # interactive confirm_stop_running() prompt.
+      echo "exited"
+    fi
+    exit 0
+    ;;
+  *) exit 0 ;;
+esac
+MOCK_DOCKER
+      chmod +x "${DISPATCH_MOCK_BIN}/docker"
+      export PATH="${DISPATCH_MOCK_BIN}:${PATH}"
+      export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
+    }
+    cleanup() {
+      rm -rf "${DISPATCH_WORK_DIR}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'lets delete (no --profile flag) succeed with a warning instead of hard-aborting on an unresolvable restored profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest delete
+      The status should be success
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The output should include "deleted"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' down'
+    End
+
+    It 'lets stop (no --profile flag) succeed with a warning instead of hard-aborting on an unresolvable restored profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest stop
+      The status should be success
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The output should include "stopped"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' stop'
+    End
+
+    It 'lets clean (no --profile flag) succeed with a warning instead of hard-aborting on an unresolvable restored profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest clean
+      The status should be success
+      The output should include 'confirmed.'
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' down'
+    End
+  End
+
+  Describe 'command dispatch: dropped custom profile that provided the docker capability does not orphan the sidecar (regression: EFFECTIVE_PROXY label fallback, phase-01/003)'
+    # End-to-end regression coverage for task doc requirement 1
+    # (plan/phase-01-fix-orphaned-sidecar-teardown/003-fix-capability-loss-on-profile-drop.md).
+    # Same setup as the "teardown commands survive an unresolvable restored
+    # profile" Describe block above (restore_saved_config() drops
+    # "ghost-profile", falling back to the default [base, mirror]
+    # composition, which has no docker capability), but here the container's
+    # persisted ai.sandbox.docker-proxy label is also mocked as "true" --
+    # recording that the instance *was* created with the docker capability
+    # via that now-unresolvable profile. Without this task's fix,
+    # EFFECTIVE_PROXY silently recomputes to false and COMPOSE_FILES omits
+    # docker-compose.proxy.yaml, leaving the docker-socket-proxy sidecar
+    # orphaned (delete/clean) or left running (stop) -- the same bug class
+    # task 001 fixed, reintroduced in this narrower scenario.
+    setup() {
+      DISPATCH_WORK_DIR="$(mktemp -d)"
+      export XDG_CACHE_HOME="${DISPATCH_WORK_DIR}/cache"
+      DISPATCH_MOCK_BIN="${DISPATCH_WORK_DIR}/mockbin"
+      mkdir -p "${DISPATCH_MOCK_BIN}"
+      DISPATCH_DOCKER_LOG="${DISPATCH_WORK_DIR}/docker_calls.log"
+      : > "${DISPATCH_DOCKER_LOG}"
+      export DISPATCH_DOCKER_LOG
+      # Persisted ai.sandbox.config label: profiles=["ghost-profile"], a name
+      # that does not resolve to any file under ./profiles,
+      # ${XDG_CONFIG_HOME:-$HOME/.config}/ai-sandbox/profiles, or this repo's
+      # bundled profiles/ dir -- so it gets dropped, and PROFILES falls back
+      # to the default [base, mirror] composition (no docker capability).
+      config_json='{"version":1,"profiles":["ghost-profile"],"mode":"","no_isolate_config":false,"clean_slate":false,"marketplaces":[],"plugins":[],"enable_all_plugins":false}'
+      config_b64="$(printf '%s' "${config_json}" | base64 | tr -d '\n')"
+      export DISPATCH_CONFIG_B64="${config_b64}"
+      cat > "${DISPATCH_MOCK_BIN}/docker" <<'MOCK_DOCKER'
+#!/bin/bash
+printf '%s\n' "$*" >> "${DISPATCH_DOCKER_LOG}"
+case "$1" in
+  info) exit 0 ;;
+  ps) echo "ai-sandbox-dispatchtest"; exit 0 ;;
+  inspect)
+    if [[ "$*" == *"ai.sandbox.config"* ]]; then
+      echo "${DISPATCH_CONFIG_B64}"
+    elif [[ "$*" == *"docker-proxy"* ]]; then
+      # Instance was created with the docker capability (via the
+      # now-dropped "ghost-profile"); the label persists independent of
+      # whether that profile still resolves.
+      echo "true"
+    elif [[ "$*" == *"State.Status"* ]]; then
+      # Reported as exited (not running) so delete/stop/clean skip the
+      # interactive confirm_stop_running() prompt.
+      echo "exited"
+    fi
+    exit 0
+    ;;
+  *) exit 0 ;;
+esac
+MOCK_DOCKER
+      chmod +x "${DISPATCH_MOCK_BIN}/docker"
+      export PATH="${DISPATCH_MOCK_BIN}:${PATH}"
+      export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
+    }
+    cleanup() {
+      rm -rf "${DISPATCH_WORK_DIR}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'includes docker-compose.proxy.yaml in the down call for delete (no --profile flag) despite the dropped profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest delete
+      The status should be success
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The output should include "deleted"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'docker-compose.proxy.yaml'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' down'
+    End
+
+    It 'includes docker-compose.proxy.yaml in the stop call for stop (no --profile flag) despite the dropped profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest stop
+      The status should be success
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The output should include "stopped"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'docker-compose.proxy.yaml'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' stop'
+    End
+
+    It 'includes docker-compose.proxy.yaml in the down call for clean (no --profile flag) despite the dropped profile'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest clean
+      The status should be success
+      The output should include 'confirmed.'
+      The stderr should include "dropping restored profile 'ghost-profile'"
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'compose -p ai-sandbox-dispatchtest'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'docker-compose.proxy.yaml'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include ' down'
+    End
+  End
+
+  Describe 'command dispatch: fix-ssh on a clean-slate instance preserves credentials across --force-recreate (regression: fix-ssh clean-slate credential loss)'
+    # End-to-end regression coverage for task doc requirement 2
+    # (plan/phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md):
+    # the fix lives in src/index.sh's credential-snapshot CMD guard (inline
+    # top-level script logic, not a function), so -- same rationale as the
+    # other end-to-end Describe blocks in this file -- this runs the real
+    # built bin/ai-sandbox.sh via `When run script`.
+    #
+    # `docker inspect ... ai.sandbox.config` is mocked to return a persisted
+    # config recording clean_slate=true (as `create --clean` would save), so
+    # restore_saved_config() sets CLEAN_SLATE=true for a bare `fix-ssh` (no
+    # --clean flag this run) exactly as should_restore_config()'s broadened
+    # trigger (task 001) intends. `security` is shadowed to always fail so
+    # the test never touches the real host Keychain; ensure_clean_slate_
+    # credentials() then falls back to a fake ~/.claude/.credentials.json
+    # planted under a throwaway HOME. `ssh_preflight()`'s SSH_AUTH_SOCK check
+    # needs a real, live-but-protocol-silent UNIX socket (a plain `-S` file
+    # test isn't enough: ssh-add -l against a dead/unbound socket path exits
+    # 2, which fix_ssh() treats as fatal) -- a background Python listener
+    # provides one without speaking the ssh-agent protocol (ssh-add exits 1,
+    # "communication with agent failed", which ssh_preflight() tolerates).
+    #
+    # Without the fix, AI_SANDBOX_CREDENTIALS_JSON_B64 is never populated for
+    # fix-ssh, so COMPOSE_FILES omits docker-compose.claude-auth.yaml (and,
+    # since CLEAN_SLATE=true also skips docker-compose.mirror-claude.yaml),
+    # leaving --force-recreate with no credential source at all.
+    setup() {
+      DISPATCH_WORK_DIR="$(mktemp -d)"
+      export XDG_CACHE_HOME="${DISPATCH_WORK_DIR}/cache"
+      DISPATCH_MOCK_BIN="${DISPATCH_WORK_DIR}/mockbin"
+      mkdir -p "${DISPATCH_MOCK_BIN}"
+      DISPATCH_DOCKER_LOG="${DISPATCH_WORK_DIR}/docker_calls.log"
+      : > "${DISPATCH_DOCKER_LOG}"
+      export DISPATCH_DOCKER_LOG
+      config_json='{"version":1,"profiles":[],"mode":"","no_isolate_config":false,"clean_slate":true,"marketplaces":[],"plugins":[],"enable_all_plugins":false}'
+      config_b64="$(printf '%s' "${config_json}" | base64 | tr -d '\n')"
+      export DISPATCH_CONFIG_B64="${config_b64}"
+      cat > "${DISPATCH_MOCK_BIN}/docker" <<'MOCK_DOCKER'
+#!/bin/bash
+printf '%s\n' "$*" >> "${DISPATCH_DOCKER_LOG}"
+case "$1" in
+  info) exit 0 ;;
+  ps) echo "ai-sandbox-dispatchtest"; exit 0 ;;
+  inspect)
+    if [[ "$*" == *"ai.sandbox.config"* ]]; then
+      echo "${DISPATCH_CONFIG_B64}"
+    fi
+    exit 0
+    ;;
+  *) exit 0 ;;
+esac
+MOCK_DOCKER
+      chmod +x "${DISPATCH_MOCK_BIN}/docker"
+      # Shadow `security` so the test never reads the real host Keychain.
+      cat > "${DISPATCH_MOCK_BIN}/security" <<'MOCK_SECURITY'
+#!/bin/bash
+exit 1
+MOCK_SECURITY
+      chmod +x "${DISPATCH_MOCK_BIN}/security"
+      export PATH="${DISPATCH_MOCK_BIN}:${PATH}"
+      export AI_SANDBOX_SKIP_PLUGIN_CHECK=1
+
+      DISPATCH_FAKE_HOME="${DISPATCH_WORK_DIR}/home"
+      mkdir -p "${DISPATCH_FAKE_HOME}/.claude"
+      printf '%s' '{"claudeAiOauth":{"accessToken":"file-tok","refreshToken":"file-ref","expiresAt":9999999999000}}' \
+        > "${DISPATCH_FAKE_HOME}/.claude/.credentials.json"
+      export HOME="${DISPATCH_FAKE_HOME}"
+
+      DISPATCH_SSH_SOCK="${DISPATCH_WORK_DIR}/agent.sock"
+      python3 -c "
+import socket, time
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.bind('${DISPATCH_SSH_SOCK}')
+s.listen(1)
+time.sleep(30)
+" &
+      DISPATCH_SSH_LISTENER_PID=$!
+      # Give the listener a moment to bind before the script under test runs.
+      sleep 0.3
+      export SSH_AUTH_SOCK="${DISPATCH_SSH_SOCK}"
+    }
+    cleanup() {
+      kill "${DISPATCH_SSH_LISTENER_PID}" 2>/dev/null || true
+      rm -rf "${DISPATCH_WORK_DIR}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'includes docker-compose.claude-auth.yaml in the force-recreate compose call so credentials survive'
+      When run script "$PWD/bin/ai-sandbox.sh" dispatchtest fix-ssh
+      The status should be success
+      The output should include 'Container recreated with SSH_AUTH_SOCK='
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'docker-compose.claude-auth.yaml'
+      The contents of file "${DISPATCH_DOCKER_LOG}" should include 'force-recreate'
     End
   End
 End

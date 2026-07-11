@@ -127,12 +127,17 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 PROJECT_ROOT="$(cd -P "${SCRIPT_DIR}/.." && pwd)"
 
-# --- Phase: restore saved config for start/enter (no config flags) ---
-# When start/enter is called without any config-changing flags, read the
-# profiles/mode/clean-slate settings that were saved at `create` time so the
-# container restarts with its original composition without requiring the user
-# to re-specify --profile/--mode/--clean flags each time.
-if [ "${CMD}" == "start" ] || [ "${CMD}" == "enter" ]; then
+# --- Phase: restore saved config for every per-instance command except create (no config flags) ---
+# When any per-instance command other than `create` is called without any
+# config-changing flags, read the profiles/mode/clean-slate settings that
+# were saved at `create` time so this invocation's compose-file assembly
+# reflects the instance's actual persisted composition (e.g. the `docker`
+# capability / proxy sidecar) instead of just whatever --profile flags
+# (usually none) this particular invocation passed. should_restore_config()
+# excludes only `create`, which provisions fresh state and has no prior
+# config to restore. See should_restore_config()'s doc comment (src/utils.sh)
+# for the full rationale.
+if should_restore_config "${CMD}"; then
     restore_saved_config
 fi
 
@@ -201,8 +206,8 @@ export PROFILE_JSON
 # base64-encode it single-line -- mirroring src/credentials.sh's
 # AI_SANDBOX_CREDENTIALS_JSON_B64 pattern -- for safe embedding in the
 # ai.sandbox.config Docker label (docker/docker-compose.yaml).
-# restore_saved_config() decodes this label to rehydrate all seven inputs on a
-# bare start/enter. Persist CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL (the
+# restore_saved_config() decodes this label to rehydrate all seven inputs on
+# every per-instance command except create (see should_restore_config(), src/utils.sh). Persist CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL (the
 # CLI deltas), not the profile-merged PROFILE_JSON set: profile-contributed
 # entries are reproduced for free by re-running profile-installer.js on
 # restore, so only the CLI additions need to round-trip through the label.
@@ -272,6 +277,47 @@ if profile_has_capability docker; then
 else
   EFFECTIVE_PROXY=false
 fi
+
+# Fallback: the computation above only reflects *this invocation's* profile
+# resolution, which can drift from the instance's actual persisted
+# composition -- e.g. restore_saved_config() (src/utils.sh) drops a restored
+# profile name that no longer resolves (task 002's graceful-degradation
+# fix), or a directly-provided --profile flag names a profile that has since
+# lost the docker capability it once had. When that drift silently flips a
+# docker-capable instance's EFFECTIVE_PROXY to false, COMPOSE_FILES below
+# omits docker-compose.proxy.yaml and delete/stop/clean leave the
+# docker-socket-proxy sidecar orphaned (or, for stop, left running) -- the
+# exact orphaned-sidecar bug this codebase exists to prevent, reintroduced in
+# a narrower scenario. Use the container's own persisted
+# ai.sandbox.docker-proxy label (docker/docker-compose.yaml) as an
+# authoritative fallback, independent of profile resolution:
+# is_docker_proxy_label_true() (src/utils.sh) is naturally scoped to "a
+# container already exists" (its docker inspect fails, and so it returns
+# false, when SANDBOX_NAME has no container yet -- e.g. `create`), so no
+# separate existence guard is needed here. Only the "label true, current
+# false" direction is forced: the reverse (label false, current resolution
+# true) is not a regression risk -- an invocation that correctly resolves the
+# docker capability today should get it.
+#
+# should_force_proxy_label_fallback() (src/utils.sh) scopes this to
+# stop/delete/clean unconditionally (teardown/preserve commands with no
+# legitimate "explicit invocation" story to override the label), and to
+# fix-ssh/start/enter/up only when this invocation's CONFIG_FLAGS_PROVIDED is
+# not "true" -- i.e. a bare restore/resume, not this run's own explicit
+# composition choice. create/detail/build/user-exec/root-exec/attach are
+# never in scope. When CONFIG_FLAGS_PROVIDED is "true" for fix-ssh/start/
+# enter/up, an explicit, confirmed invocation (docs/architecture.md's
+# "Matches" subsection, "explicit invocation always wins") must be allowed to
+# actually change the composition, including deliberately dropping the docker
+# capability -- applying the fallback there would silently re-grant network
+# access to the docker-socket-proxy sidecar (a documented container-escape
+# vector) against the user's explicit intent (phase-01/004, refined by
+# phase-01/005 to gate on CONFIG_FLAGS_PROVIDED rather than CMD alone).
+if should_force_proxy_label_fallback "${CMD}" "${CONFIG_FLAGS_PROVIDED}" \
+    && [ "${EFFECTIVE_PROXY}" != "true" ] && is_docker_proxy_label_true; then
+  echo "Warning: honoring the persisted ai.sandbox.docker-proxy label (true) for '${SANDBOX_NAME}' over this invocation's resolved profile composition (false) -- '${CMD}' did not explicitly change this instance's composition this run, so the instance's actual persisted composition is used instead of what this run's profile resolution would otherwise produce." 1>&2
+  EFFECTIVE_PROXY=true
+fi
 export EFFECTIVE_PROXY NO_ISOLATE_CONFIG
 
 # Extract plugin-marketplace configuration for container passthrough.
@@ -300,12 +346,32 @@ export AI_SANDBOX_MARKETPLACES AI_SANDBOX_PLUGINS AI_SANDBOX_ENABLE_ALL_PLUGINS
   "${PROFILE_CAPABILITIES}" "${PROFILE_ASSEMBLED_DOCKERFILE}" >/dev/null
 export AI_SANDBOX_DOCKERFILE="${PROFILE_ASSEMBLED_DOCKERFILE}"
 
-# --- Phase: credential snapshot (clean-slate mode, start/enter/create/up only) ---
+# --- Phase: credential snapshot (clean-slate mode, start/enter/create/up/fix-ssh only) ---
 # Export AI_SANDBOX_CREDENTIALS_JSON_B64 before compose assembly so the claude-auth
 # compose file is included only when credentials are actually available.
+#
+# fix-ssh is included alongside start/enter/create/up (regression fix): once
+# should_restore_config() (src/utils.sh) started restoring CLEAN_SLATE for
+# every per-instance CMD except create, a bare `fix-ssh` on a --clean-created
+# instance now correctly restores CLEAN_SLATE=true, which routes the
+# COMPOSE_FILES assembly below into the AI_SANDBOX_CREDENTIALS_JSON_B64-gated
+# docker-compose.claude-auth.yaml branch instead of docker-compose.mirror-
+# claude.yaml. fix_ssh() (src/utils.sh) then runs `docker compose ... up -d
+# --force-recreate --no-deps ai-sandbox` using COMPOSE_FILES as already
+# assembled below -- by the time fix_ssh() itself runs (command-dispatch
+# phase, well after COMPOSE_FILES is fixed), it is too late for fix_ssh() to
+# populate credentials itself, since that decision has already been baked
+# into COMPOSE_FILES. Without this guard here, the credentials would never
+# have been captured, so neither compose overlay would apply them, and
+# --force-recreate would destroy the previous container's writable-layer
+# credentials with nothing to replace them (clean-slate mode never bind-
+# mounts host ~/.claude). Populating the snapshot here, before COMPOSE_FILES
+# assembly, is the only point in the pipeline where it can still affect
+# which overlay gets selected.
 if [ "${CLEAN_SLATE:-false}" = "true" ] && \
    { [ "${CMD}" = "start" ] || [ "${CMD}" = "enter" ] || \
-     [ "${CMD}" = "create" ] || [ "${CMD}" = "up" ]; }; then
+     [ "${CMD}" = "create" ] || [ "${CMD}" = "up" ] || \
+     [ "${CMD}" = "fix-ssh" ]; }; then
     ensure_clean_slate_credentials
 fi
 
