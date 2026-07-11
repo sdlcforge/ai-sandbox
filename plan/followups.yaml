@@ -60,3 +60,58 @@ items:
       date: "2026-07-10"
       tag: firewall-enforcement
       text: '[phase-01-firewall-enforcement, task 004] docker/Dockerfile.base''s `node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh` sudoers entry is now inert since Task 004 moved firewall application to the firewall-init sidecar — the ai-sandbox container no longer has NET_ADMIN, so that script can no longer succeed there. Left untouched by Task 004 per its own scope (no sudoers surgery). Cleanup candidate: remove the dead entry.'
+    - title: test/integration/docker_proxy_spec.sh and tes
+      id: AQag
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] test/integration/docker_proxy_spec.sh and test/integration/clean_container_spec.sh are currently broken, independent of this task: both invoke a CLI flag ordering (--profile docker start, --clean credtest start) that the current dispatch grammar rejects outright. Stale from an earlier CLI-grammar rewrite never propagated to these two spec files.'
+    - title: test/integration/lifecycle_spec.sh invokes th
+      id: ps6H
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] test/integration/lifecycle_spec.sh invokes the retired status command word (replaced by detail), so it falls through as an unknown per-name dispatch attempt instead of reporting status.'
+    - title: Recommend a follow-up task to modernize docke
+      id: Ia7w
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] Recommend a follow-up task to modernize docker_proxy_spec.sh/clean_container_spec.sh/lifecycle_spec.sh to the current CLI grammar so make test.integration can pass as a whole again.'
+    - title: The task doc's requirement 2 offered 'have fi
+      id: VqTZ
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] The task doc''s requirement 2 offered ''have fix_ssh() itself call ensure_clean_slate_credentials()'' as an alternative mechanism; as implemented it would not actually fix the bug since COMPOSE_FILES is already finalized by the time fix_ssh() runs. Worth correcting in the phase''s design notes if this option gets referenced again elsewhere.'
+    - title: 'Minor: running the integration suite leaves s'
+      id: MVL1
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/002-fix-review-regressions.md] Minor: running the integration suite leaves stray .ai-sandbox.<instance>.log files in the repo root not covered by .gitignore''s /.ai-sandbox*.startup.log pattern — a latent gitignore gap in the existing test suite design, not introduced by this task.'
+    - title: Pre-existing, out-of-scope latent bug noticed
+      id: 1C2m
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md] Pre-existing, out-of-scope latent bug noticed during validation: do_create() (src/create.sh) is invoked as do_create || exit $? in src/index.sh; under bash''s documented set -e exception for compound commands used as the left side of ||, this suppresses errexit for the entire do_create() function body — so a real failure inside it (e.g. docker compose up -d failing due to a container-name conflict, which was hit once during validation from an unrelated concurrent sibling test run) is silently swallowed and do_create() still prints "Sandbox ''...'' created and started." This is unrelated to this task''s diff and was not touched; surfacing it for awareness since it could mask real creation failures.'
+    - title: Environmental/test-infrastructure observation
+      id: DvGv
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-01-fix-orphaned-sidecar-teardown/004-scope-proxy-label-fallback.md] Environmental/test-infrastructure observation: the docker-capable integration suite shares a single, non-project-scoped, fixed container name (ai-sandbox-docker-proxy) across the whole suite and across any concurrently-running ai-sandbox worktree/branch on the same Docker daemon. During validation, a sibling task''s concurrent make test.integration run (a different worktree, 2026-07-10-lockdown-egress) transiently collided with the new test via that shared name; the window was waited out and retried successfully. Not a defect in this change, but worth the manager''s awareness for future parallel-dispatch runs against a shared Docker daemon.'
+    - title: Sidecar orphaned via new explicit-drop path
+      id: iLwl
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-review round 4, arch-review-003] Neither the start/enter recreate (src/index.sh) nor create (src/create.sh) `docker compose ... up -d` invocation passes --remove-orphans. This means the positive scenario task 004 fixed (explicit `start --profile <non-docker>` correctly dropping the docker capability) still leaves the docker-socket-proxy sidecar container running as an orphan after the recreate — confirmed by task 004''s own integration-test comment dismissing the "Found orphan containers" warning as out of scope. Not a correctness regression (the capability-drop itself works), but a cleanup-hygiene gap adjacent to this plan''s whole purpose. Recommend a follow-up task to add --remove-orphans to the start/enter/create up -d invocations, or otherwise tie orphan cleanup to the same should_force_proxy_label_fallback()-style command classification.'
+    - title: 'Round-4 efficiency: redundant inspect calls'
+      id: j7jf
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-review round 4, efficiency-001/002/003] (1) For stop/delete/clean/fix-ssh, a single invocation can now issue up to three separate docker inspect calls against the same container (existence check, ai.sandbox.config label via restore_saved_config(), ai.sandbox.docker-proxy label via is_docker_proxy_label_true()) where the codebase''s own running_config_matches() precedent (followup 4DzF) consolidates exactly this kind of same-container multi-label lookup into one multi-field `docker inspect -f` call. Recommend consolidating into a shared helper. (2) Minor: restore_saved_config()''s profile re-validation loop re-derives _profiles_project_root() per iteration (loop-invariant, negligible at typical list sizes but worth hoisting if profile lists ever grow). (3) Minor: docker_proxy_teardown_spec.sh''s ''stop'' and ''fix-ssh'' Describe blocks each run independent full create/delete cycles for a docker-capable instance despite having no structural need to be separate (fix-ssh could reuse the stopped instance from the stop scenario) — could merge to remove one docker-capable create/delete cycle from the suite''s critical path.'
+    - title: Pre-existing doc-orphans (unrelated)
+      id: ragj
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-review round 4, link-chain check] check-links.sh found three .md files not reachable from README.md: next-steps.md, profiles/README.md, test/fixtures/plugins/hello-world-marketplace/plugins/hello-world/skills/hello-world/SKILL.md. Confirmed pre-existing at this phase''s diff_base (7c02e87) and untouched by any of tasks 001-005 — unrelated to this plan''s scope, surfaced only because phase-review''s Phase 3 link-chain check runs against the whole repo. Recommend a small follow-up task to either link these from README.md (or an intermediate doc) or relocate/exclude them if they''re not meant to be part of the doc corpus.'
+    - title: 'Round-5: fix-ssh test could reuse instance'
+      id: zSn1
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-review round 5, efficiency-004 — non-blocking, deliberate choice not an oversight] test/integration/docker_proxy_fix_ssh_explicit_override_spec.sh (task 005) runs its own full docker-capable create/delete cycle for one fix-ssh --profile scenario, structurally identical to docker_proxy_explicit_profile_override_spec.sh''s (task 004) start --profile scenario one file over. Unlike that sibling test, fix-ssh doesn''t trigger resolve_and_download_tools() (src/index.sh), so it lacks the same technical justification for a separate live-Docker create/delete cycle. Task 005''s own Assumptions section explicitly permitted a mocked-docker alternative here. Recommend either merging this scenario into docker_proxy_explicit_profile_override_spec.sh''s existing instance (exercise fix-ssh --profile before deletion) or adding a unit-level mocked-docker equivalent, removing one docker-capable create/delete cycle from the suite''s serialized critical path.'
