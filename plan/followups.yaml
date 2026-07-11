@@ -35,11 +35,6 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] test/integration/lifecycle_spec.sh invokes the retired status command word (replaced by detail), so it falls through as an unknown per-name dispatch attempt instead of reporting status.'
-    - title: A separate, already-tracked qecho()/QUIET inv
-      id: jWIn
-      date: "2026-07-10"
-      tag: fix-orphaned-sidecar-teardown
-      text: '[phase-01-fix-orphaned-sidecar-teardown/001-restore-config-for-teardown-commands.md] A separate, already-tracked qecho()/QUIET inversion bug (sibling branch 2026-07-10-fix-quiet-stdout-leak-and-stat is actively addressing it) leaks a ''Checking docker is running...'' line onto stdout regardless of --quiet, breaking several exact-match assertions in container_spec.sh.'
     - title: Recommend a follow-up task to modernize docke
       id: Ia7w
       date: "2026-07-10"
