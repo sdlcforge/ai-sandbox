@@ -125,3 +125,8 @@ items:
       date: "2026-07-10"
       tag: firewall-enforcement
       text: '[phase-review re-review, phase-01-firewall-enforcement, arch-review-002] Whether Compose reliably recreates the dependent firewall-init sidecar in lockstep whenever ai-sandbox is implicitly recreated via plain `docker compose up -d` on config drift (e.g. a new --add-marketplace value, per running_config_matches()) was never exercised — only the explicit --force-recreate --no-deps ai-sandbox firewall-init pair in fix_ssh() was validated. Low risk (marker''s clear-before-poll design fails loud on a timeout, never silently unprotected) but unverified. Add an integration test or manual verification: change a config-drift-triggering option on a running instance via plain enter/start and confirm the firewall re-applies (or confirm the fail-loud timeout path if it doesn''t).'
+    - title: Stale comment on firewall-handshake volume
+      id: ZiET
+      date: "2026-07-10"
+      tag: firewall-enforcement
+      text: '[phase-01-firewall-enforcement, task 006] docker/docker-compose.yaml''s firewall-handshake volume comment ("the wait stage clears any stale marker before polling") describes the pre-task-006 mechanism. Task 006 moved marker-clearing from the consumer (03-init-firewall) to the producer (init-firewall-sidecar.sh, at the start of its run) to fix a cross-container race. Update the comment to reflect the producer-clears-first invariant.'
