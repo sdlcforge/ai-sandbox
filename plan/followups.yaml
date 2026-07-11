@@ -95,3 +95,8 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-review round 4, arch-review-004 — informational, for phase-02-doc-updates/001 to address, not phase 1] docs/architecture.md has two specific now-stale statements beyond the already-acknowledged missing description of is_docker_proxy_label_true()/should_force_proxy_label_fallback(): (1) the "Restore" subsection''s opening sentence still describes restore_saved_config() as scoped to bare start/enter, but should_restore_config() (tasks 001/002) extended it to every per-instance CMD except create; (2) the "Docker access" subsection''s durability narrative ("auto-reapplied on every subsequent bare enter/start") no longer fully describes the mechanism now that the label can also be forcibly reasserted via the fallback on stop/delete/clean/fix-ssh (and, pending task 005, conditionally on start/enter/up too) regardless of "bare" status.'
+    - title: Pre-existing doc-orphans (unrelated)
+      id: ragj
+      date: "2026-07-10"
+      tag: fix-orphaned-sidecar-teardown
+      text: '[phase-review round 4, link-chain check] check-links.sh found three .md files not reachable from README.md: next-steps.md, profiles/README.md, test/fixtures/plugins/hello-world-marketplace/plugins/hello-world/skills/hello-world/SKILL.md. Confirmed pre-existing at this phase''s diff_base (7c02e87) and untouched by any of tasks 001-005 — unrelated to this plan''s scope, surfaced only because phase-review''s Phase 3 link-chain check runs against the whole repo. Recommend a small follow-up task to either link these from README.md (or an intermediate doc) or relocate/exclude them if they''re not meant to be part of the doc corpus.'
