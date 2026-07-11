@@ -140,3 +140,8 @@ items:
       date: "2026-07-10"
       tag: firewall-enforcement
       text: '[phase-01-firewall-enforcement, task 007, incidental discovery] `ai-sandbox <name> fix-ssh` against a named --clean instance resolves the Compose project/volume name incorrectly on recreate (created `docker_firewall-handshake` instead of `ai-sandbox-<name>_firewall-handshake`), hit a container-name conflict, and misreported success. Not touched by task 007''s diff (pre-existing, unrelated to the firewall work). Needs investigation and fix.'
+    - title: profiles/README.md missing new profiles
+      id: MUou
+      date: "2026-07-11"
+      tag: network-capabilities
+      text: '[phase-02-network-capabilities, task 001] profiles/README.md''s "Available profiles" table lists docker/chromium/mirror/static but not the new web-search profile (and will need host-access/lan-access added too as those land). This file is separate from docs/ai-sandbox-profiles-spec.md and isn''t explicitly in Phase 4''s doc-updates task scope (README.md, docs/architecture.md, docs/ai-sandbox-profiles-spec.md). Update profiles/README.md''s table for all three new network-capability profiles.'
