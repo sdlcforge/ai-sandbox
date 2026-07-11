@@ -30,3 +30,8 @@ items:
       date: "2026-07-10"
       tag: firewall-enforcement
       text: '[phase-review, phase-01-firewall-enforcement, correctness-001] docker/init-firewall.sh''s only working Anthropic-host ACCEPT rule is a bare `anthropic.com` hostname resolution; there''s no literal `api.anthropic.com` entry (the `.anthropic.com` leading-dot line is permanently non-resolving, tracked separately). Confirmed empirically that anthropic.com and api.anthropic.com currently share an IP, so the sandbox''s core "run Claude Code against the Anthropic API" use case works today only by DNS coincidence, untested. Add an explicit api.anthropic.com ACCEPT rule and a reachability assertion in test/integration/container_spec.sh''s Firewall rules block, alongside the existing github.com check.'
+    - title: claude-install fallback broken under deny
+      id: AK1Z
+      date: "2026-07-10"
+      tag: firewall-enforcement
+      text: '[phase-review, phase-01-firewall-enforcement, correctness-002] docker/rootfs/etc/cont-init.d/05-install-claude (pre-existing, unmodified) falls back to `bun install -g @anthropic-ai/claude-code` against registry.npmjs.org when the binary is missing at container start. registry.npmjs.org is not on the new default-deny allow-list, so this fallback now silently fails (caught, logged as warning, non-fatal) instead of always succeeding as before. Narrow real-world exposure since normal builds pre-install claude at Dockerfile build time, but a genuine undocumented behavior change. Decide: allow-list the npm/bun registry host, or explicitly document that this bootstrap path is now build-time-only.'
