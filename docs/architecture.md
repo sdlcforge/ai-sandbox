@@ -165,10 +165,43 @@ Since the full-config-restore work, this escape has a durability consequence
 worth calling out: Docker labels are fixed at container-create time, so a
 workload that escapes this way has enough host Docker access to recreate the
 container with a poisoned `ai.sandbox.config` label — and that label is now
-durable, auto-reapplied on every subsequent bare `enter`/`start`. What was
-previously a one-shot compromise becomes self-perpetuating across future,
-otherwise-clean sessions. This is particularly relevant in the default
-`mirror` mode, where `~/.claude` is bind-mounted read-write from the host.
+durable, restored on every subsequent per-instance command via
+`restore_saved_config` (see [Config persistence and restore](#config-persistence-and-restore)
+below). What was previously a one-shot compromise becomes self-perpetuating
+across future, otherwise-clean sessions. This is particularly relevant in the
+default `mirror` mode, where `~/.claude` is bind-mounted read-write from the
+host.
+
+The persisted `ai.sandbox.docker-proxy` label has a second, independent
+durability mechanism beyond config-label restore: `is_docker_proxy_label_true`
+(`src/utils.sh`) reads that label directly and, when this invocation's own
+profile resolution would otherwise compute `EFFECTIVE_PROXY=false` (e.g. a
+docker-capability-granting profile has since become unresolvable, or a
+directly-passed `--profile` no longer declares the capability), forces
+`EFFECTIVE_PROXY` back to `true` — independent of whether `restore_saved_config`
+itself ran or what it restored. This fallback is deliberately scoped by
+`should_force_proxy_label_fallback` (`src/utils.sh`), gated on `CMD` and, for
+four of those CMDs, on `CONFIG_FLAGS_PROVIDED`:
+
+- `stop`, `delete`, `clean` — applied unconditionally. These commands tear
+  down or pause whatever composition *actually exists*; there is no
+  legitimate "explicit invocation" story for e.g. `delete` to act on a
+  different composition than what was actually created, so the persisted
+  label always wins.
+- `fix-ssh`, `start`, `enter`, `up` — applied only when this invocation's
+  `CONFIG_FLAGS_PROVIDED != "true"` (a bare restore/resume, not a
+  composition change this run itself explicitly requested). When this
+  invocation *does* pass an explicit composition-changing flag (e.g. `start
+  --profile no-docker`), the fallback is skipped so the explicit choice —
+  including deliberately dropping the `docker` capability — actually takes
+  effect, per the "explicit invocation always wins" invariant described in
+  the Matches part of [Config persistence and restore](#config-persistence-and-restore)
+  below.
+- Every other CMD (`create`, `detail`, `build`, `user-exec`, `root-exec`,
+  `attach`) is outside the fallback's scope entirely — `create` has no prior
+  container/label to consult, `detail` never consumes `EFFECTIVE_PROXY`, and
+  the rest never touch composition.
+
 See [Config persistence and restore](#config-persistence-and-restore) below
 for the full label/restore contract.
 
@@ -296,22 +329,37 @@ composition, the CLI merge, `EFFECTIVE_MODE`/`EFFECTIVE_PROXY`/
 raw *inputs* need to survive between invocations; everything else is safe to
 recompute fresh every time and is never trusted across invocations.
 
-**Restore (`restore_saved_config`, `src/utils.sh`).** On a bare `start`/`enter`
-(no config-changing flags passed — the existing `CONFIG_FLAGS_PROVIDED !=
-true` gate), this reads only the `ai.sandbox.config` label, base64-decodes
+**Restore (`restore_saved_config`, `src/utils.sh`).** Runs for every
+per-instance `CMD` except `create` — broadened from the original bare-
+`start`/`enter`-only trigger, since every other per-instance command (`stop`,
+`delete`, `clean`, `fix-ssh`, `build`, `user-exec`, `root-exec`, `attach`,
+`detail`, `up`, and the docker-compose passthrough) also acts on an
+already-created instance and needs its compose-file assembly to reflect that
+instance's actual persisted composition, not just whatever `--profile` flags
+(usually none) this particular invocation passed. `create` is the sole
+exception: it provisions fresh state and rejects name collisions in
+`do_create` before a restored value would ever be consulted.
+`should_restore_config` (`src/utils.sh`) is the extracted, unit-tested
+predicate that decides this; `src/index.sh`'s call site reduces to `if
+should_restore_config "${CMD}"; then restore_saved_config; fi`. The trigger's
+own guard is unchanged from before the broadening: no config-changing flags
+passed this invocation (the existing `CONFIG_FLAGS_PROVIDED != true` gate)
+and a container (running or stopped) already exists for `SANDBOX_NAME`.
+
+When triggered, this reads only the `ai.sandbox.config` label, base64-decodes
 and extracts each field via `jq`, and rehydrates all seven input globals.
 Each field is only assigned when present, so a missing or empty label is a
 natural no-op. **There is no fallback of any kind** — a container with no
 `ai.sandbox.config` label (including any container created before this label
-existed) simply keeps today's un-configured default behavior on a bare
-`enter`/`start` (mirror mode, no clean-slate, no profiles). This is a
-deliberate product decision (no external users of this tool yet; a single
-label-based config regime is preferred over supporting a legacy fallback in
-parallel), not a gap to be closed later. Restored marketplace entries are
-re-validated against the `https://`/`file://` scheme constraint before being
-trusted — a persisted label is not the same trust boundary as freshly-typed
-`--add-marketplace` input — dropping (with a warning) any entry that doesn't
-match rather than restoring it verbatim.
+existed) simply keeps today's un-configured default behavior (mirror mode, no
+clean-slate, no profiles) for any command that would otherwise restore it.
+This is a deliberate product decision (no external users of this tool yet; a
+single label-based config regime is preferred over supporting a legacy
+fallback in parallel), not a gap to be closed later. Restored marketplace
+entries are re-validated against the `https://`/`file://` scheme constraint
+before being trusted — a persisted label is not the same trust boundary as
+freshly-typed `--add-marketplace` input — dropping (with a warning) any entry
+that doesn't match rather than restoring it verbatim.
 
 **Matches (`running_config_matches`, `src/utils.sh`).** Compares the running
 container's labels against the current invocation's freshly-resolved
@@ -325,7 +373,16 @@ env vars (the same values the container's `10-plugin-setup` init consumes).
 An explicit invocation that changes any of these (e.g. `enter
 --add-marketplace NEW` on a container created without it) is now correctly
 detected as a config change and triggers the stop-and-recreate prompt instead
-of silently never applying.
+of silently never applying. This is the "explicit invocation always wins"
+invariant: whatever this invocation itself explicitly asked for takes effect,
+even over what's already persisted. The `EFFECTIVE_PROXY` label fallback
+described under [Docker access: proxy, not socket or DinD](#docker-access-proxy-not-socket-or-dind)
+above is a worked example of the same invariant applied in the opposite
+direction — it deliberately stops short of overriding an explicit
+`--profile`/`--mode`/etc. flag on `fix-ssh`/`start`/`enter`/`up`
+(`CONFIG_FLAGS_PROVIDED == "true"`), so that an invocation which explicitly
+changes composition, including dropping the `docker` capability, is never
+silently reverted by the persisted `ai.sandbox.docker-proxy` label.
 
 **Why restore and matches don't read the same labels.** They operate at
 different pipeline stages, not out of inconsistency: restore runs *before*
@@ -333,8 +390,9 @@ different pipeline stages, not out of inconsistency: restore runs *before*
 globals; matches runs *after* resolution, comparing the freshly re-derived
 effective values against what's already baked into the running container.
 The reconciliation that matters is that both sides now cover the complete
-dimension set — restore reconstructs every input, so after a bare-enter
-restore `running_config_matches` returns true by construction and never
+dimension set — restore reconstructs every input, so after a restore (any
+per-instance `CMD` except `create` that triggers it, not just `start`/`enter`)
+`running_config_matches` returns true by construction and never
 false-prompts; matches compares every derived dimension an explicit
 invocation could change, so a real config change is never silently dropped.
 Future maintainers should not try to "unify" the two into reading one literal

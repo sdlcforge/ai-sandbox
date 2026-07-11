@@ -119,3 +119,80 @@ the end state of all five, not just task 001's change:
   equivalent) to catch any other stale "start/enter only" phrasing tied to
   `restore_saved_config`/config restore that this task's targeted edit might
   have missed.
+
+## Status
+
+**Outcome: succeeded.** Implemented 2026-07-10.
+
+- **Restore subsection** (`docs/architecture.md`, "Config persistence and
+  restore"): replaced the "On a bare `start`/`enter`..." opening with a
+  description of the broadened trigger — every per-instance `CMD` except
+  `create`, decided by `should_restore_config()` (`src/utils.sh`), with the
+  `src/index.sh` call site quoted verbatim (`if should_restore_config
+  "${CMD}"; then restore_saved_config; fi`). The unchanged guard
+  (`CONFIG_FLAGS_PROVIDED != true` + container-exists) is called out
+  explicitly as unchanged. The "no fallback of any kind" sentence's "on a
+  bare `enter`/`start`" qualifier was generalized to "for any command that
+  would otherwise restore it" so it no longer implies the old narrower scope.
+- **"Why restore and matches don't read the same labels"** (same section):
+  updated "after a bare-enter restore" to "after a restore (any per-instance
+  `CMD` except `create` that triggers it, not just `start`/`enter`)" — the
+  task doc's Requirements explicitly called out this subsection as needing
+  the same broadening.
+- **"Docker access: proxy, not socket or DinD"**: replaced "auto-reapplied on
+  every subsequent bare `enter`/`start`" (the `ai.sandbox.config` label
+  restore) with "restored on every subsequent per-instance command via
+  `restore_saved_config`", then added a new paragraph describing the second,
+  independent durability mechanism: `is_docker_proxy_label_true()`
+  (`src/utils.sh`) forcing `EFFECTIVE_PROXY` back to the persisted label's
+  value, scoped by `should_force_proxy_label_fallback()` — unconditional for
+  `stop`/`delete`/`clean`, conditional (`CONFIG_FLAGS_PROVIDED != "true"`)
+  for `fix-ssh`/`start`/`enter`/`up`, and out of scope entirely for
+  `create`/`detail`/`build`/`user-exec`/`root-exec`/`attach`, matching
+  `should_force_proxy_label_fallback()`'s doc comment and the
+  `src/index.sh` guard-site comment exactly.
+- **"Matches" subsection**: confirmed its own description doesn't need a
+  behavioral correction (tasks 004/005 were written to conform to it, not
+  change it) and added a cross-reference/worked-example paragraph naming the
+  "explicit invocation always wins" invariant explicitly and pointing at the
+  `EFFECTIVE_PROXY` label fallback (linked to the "Docker access" section)
+  as the same invariant applied in the opposite direction (an override that
+  deliberately stops short when `CONFIG_FLAGS_PROVIDED == "true"`).
+- **`docs/ai-sandbox-profiles-spec.md`**: read in full, including "Image
+  tagging by profile" and the capabilities reference section. No changes
+  needed or applied — nothing in that file assumes the old start/enter-only
+  restore scope; its `start`/profile-composition examples are orthogonal to
+  the restore trigger.
+- **Consistency re-check**: re-read the "Command flow" numbered list (no
+  restore-scope claims there to begin with) and the other `start`/`enter`
+  mentions in `docs/architecture.md` (plugin-conflict preflight scope, the
+  SSH-mount-staleness warning scope) — both are independent, unrelated
+  command scopes that phase-1 did not touch, so they remain accurate as-is
+  and were left untouched.
+- `grep -n "bare .start.*enter\|start/enter" docs/architecture.md`: no
+  matches after the edits (previously matched the two sentences fixed
+  above).
+
+### Validation results
+
+- `docs/architecture.md`'s Restore subsection no longer scopes restore to "a
+  bare `start`/`enter`": passed (verified by re-reading the edited section
+  and by the grep check below).
+- `docs/architecture.md`'s "Docker access" section describes
+  `is_docker_proxy_label_true()`'s fallback and its exact `CMD` x
+  `CONFIG_FLAGS_PROVIDED` scope: passed.
+- "Matches" subsection either already consistent or gained a
+  cross-reference: passed (added a cross-reference paragraph naming the
+  invariant and pointing at the fallback as a worked example).
+- `docs/ai-sandbox-profiles-spec.md` requires no changes: confirmed by
+  reading the full file; no edits applied.
+- No other section of `docs/architecture.md` contradicts the new behavior:
+  confirmed by re-reading "Command flow" and the remaining `start`/`enter`
+  mentions (plugin-conflict preflight, SSH-mount staleness) — both are
+  unrelated, unchanged scopes.
+- `grep -n "bare .start.*enter\|start/enter" docs/architecture.md`: exit 1
+  (no matches) after the edits — passed.
+
+Only `docs/architecture.md` was modified; no source files were touched (this
+is a documentation-only task, consistent with the phase-1 tasks it
+documents already being merged).
