@@ -115,3 +115,8 @@ items:
       date: "2026-07-10"
       tag: fix-orphaned-sidecar-teardown
       text: '[phase-review round 5, efficiency-004 — non-blocking, deliberate choice not an oversight] test/integration/docker_proxy_fix_ssh_explicit_override_spec.sh (task 005) runs its own full docker-capable create/delete cycle for one fix-ssh --profile scenario, structurally identical to docker_proxy_explicit_profile_override_spec.sh''s (task 004) start --profile scenario one file over. Unlike that sibling test, fix-ssh doesn''t trigger resolve_and_download_tools() (src/index.sh), so it lacks the same technical justification for a separate live-Docker create/delete cycle. Task 005''s own Assumptions section explicitly permitted a mocked-docker alternative here. Recommend either merging this scenario into docker_proxy_explicit_profile_override_spec.sh''s existing instance (exercise fix-ssh --profile before deletion) or adding a unit-level mocked-docker equivalent, removing one docker-capable create/delete cycle from the suite''s serialized critical path.'
+    - title: Orphaned firewall-handshake volume
+      id: K4K8
+      date: "2026-07-10"
+      tag: firewall-enforcement
+      text: '[phase-review re-review, phase-01-firewall-enforcement, arch-review-001] The new firewall-handshake named Docker volume (docker/docker-compose.yaml) is never removed by `ai-sandbox delete`/`clean` (docker compose down with no -v/--volumes), leaving an orphaned per-instance volume behind for every deleted sandbox instance. Add -v/--volumes to the down calls in src/index.sh''s delete/clean branches, or explicitly docker volume rm the instance-scoped volume, mirroring the project''s existing "close what you open" cleanup convention.'
