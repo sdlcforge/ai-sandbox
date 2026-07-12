@@ -1,0 +1,14 @@
+# Keep stray, gitignore'd stub files out of the build context.
+#
+# claude-mem (and similar Claude Code plugins) stamp an empty `CLAUDE.md`
+# stub (`<claude-mem-context>\n\n</claude-mem-context>`) into directories as
+# sessions work in them. Repo-root .gitignore hides these from `git status`
+# repo-wide, but that does NOT stop `docker build` from picking one up if it
+# lands under docker/ (this build's context -- see docker-compose.yaml's
+# `build.context: .` relative to this file). Dockerfile.base's `COPY rootfs/ /`
+# plus its blind `chmod +x /etc/cont-init.d/* /etc/cont-finish.d/* ...` glob
+# then bakes a non-executable-shell stub straight into an s6-overlay boot
+# stage directory, where it fails at runtime and (since
+# S6_BEHAVIOUR_IF_STAGE2_FAILS=2) halts the whole container. See
+# test/integration/container_boot_spec.sh for the regression coverage.
+**/CLAUDE.md
