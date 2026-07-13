@@ -1,0 +1,8 @@
+slug: static-playground
+version: 1
+title: ""
+phases:
+    - number: 1
+      slug: playground-isolation
+      title: Playground Isolation
+      tasks: []
