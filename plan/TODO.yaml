@@ -56,3 +56,13 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 6
+          slug: readme-documentation
+          title: Readme Documentation
+          path: phase-01-playground-isolation/006-readme-documentation.md
+          done: false
+          tier: sonnet-med
+          git:
+            branch: null
+            commit: []
+            merge: null
