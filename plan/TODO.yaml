@@ -26,3 +26,13 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 3
+          slug: volume-override-skip-guard-fix
+          title: Volume Override Skip Guard Fix
+          path: phase-01-playground-isolation/003-volume-override-skip-guard-fix.md
+          done: false
+          tier: sonnet-med
+          git:
+            branch: null
+            commit: []
+            merge: null
