@@ -46,3 +46,13 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 5
+          slug: integration-test
+          title: Integration Test
+          path: phase-01-playground-isolation/005-integration-test.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
