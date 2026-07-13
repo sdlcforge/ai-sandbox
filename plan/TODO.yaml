@@ -5,4 +5,14 @@ phases:
     - number: 1
       slug: playground-isolation
       title: Playground Isolation
-      tasks: []
+      tasks:
+        - number: 1
+          slug: cli-flag-and-config-persistence
+          title: Cli Flag And Config Persistence
+          path: phase-01-playground-isolation/001-cli-flag-and-config-persistence.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
