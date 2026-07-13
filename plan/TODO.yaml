@@ -16,3 +16,13 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 2
+          slug: docker-overlay-mechanism
+          title: Docker Overlay Mechanism
+          path: phase-01-playground-isolation/002-docker-overlay-mechanism.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
