@@ -270,3 +270,8 @@ items:
       date: "2026-07-14"
       tag: doc-updates
       text: '[phase-02-doc-updates/001-update-architecture-docs.md] Background note (already resolved): docker/docker-compose.yaml''s ~/playground bind-mount comment gap flagged by phase-01 review has since been fixed and merged into main via a separate simple-task dispatch (commit b2d06b3) — no further action needed.'
+    - title: 'Minor process note: the task doc''s own Metada'
+      id: Oe6b
+      date: "2026-07-14"
+      tag: doc-updates
+      text: '[phase-02-doc-updates/001-update-architecture-docs.md] Minor process note: the task doc''s own Metadata lines named role_doc: architect-cloud.md and task-procedure: update-architecture-docs/SKILL.md, differing from the architect-backend.md role and implement-task-only skill chain actually dispatched. The agent additionally consulted the task-doc-named update-architecture-docs/SKILL.md procedure on its own initiative since the task doc''s own Purpose and scope named it. No impact on output quality, but worth checking whether task-doc authoring and dispatch role-derivation are drifting apart for this task type.'
