@@ -60,6 +60,7 @@ The image is rebuilt automatically when any file under `docker/` (Dockerfile, co
 | `--mode <mirror\|static>` | Override the container identity mode for this run only, without changing the profile file. |
 | `--force` | Bypass the host plugin-conflict pre-flight check (same as `AI_SANDBOX_SKIP_PLUGIN_CHECK=1`) |
 | `--no-isolate-config` | Share `~/.config` read-write with the host (opt out of the default copy-on-write overlay). See [Config isolation](#config-isolation). |
+| `--static-playground` | Give `~/playground` a copy-on-write overlay: writes stay container-local and the host copy is never modified. Opt-in (default off). Unrelated to `--mode static` despite the shared word — see [Playground isolation](#playground-isolation). |
 
 ## Profiles
 
@@ -200,6 +201,67 @@ Requirements: the container is granted `CAP_SYS_ADMIN` and
 the firewall is the primary boundary and the cap set is intentionally
 permissive, but if that trade-off doesn't fit your use case, `--no-isolate-config`
 drops both.
+
+### Playground isolation
+
+By default, `~/playground` is bind-mounted read-write regardless of mode.
+Pass `--static-playground` to give it the same copy-on-write treatment as
+`~/.config`: the container sees the host's current `~/playground` as a
+read-only lower layer, and any writes inside the container land on an
+overlay upper layer that's discarded with the container. Host
+`~/playground` is never modified while the flag is active. Mechanics:
+
+- Host `~/playground` → bind-mounted read-only at
+  `/mnt/ai-sandbox/host-playground`.
+- A Docker **named volume**, `playground-overlay` — not tmpfs, because
+  `~/playground` is large (often 19GB+) and a RAM-backed upper layer would be
+  the wrong trade-off — holds the `upper/` and `work/` dirs.
+- `docker/rootfs/etc/cont-init.d/06-overlay-playground` mounts an overlayfs
+  at `${HOME}/playground` inside the container during s6 startup.
+- Reads pass through to the host for files the container hasn't touched, so
+  host edits during a session are still visible for untouched files.
+
+```sh
+ai-sandbox --static-playground
+```
+
+**Not related to `--mode static`.** Despite the shared word, `--static-playground`
+and [`--mode <mirror|static>`](#profiles) are unrelated features:
+`--static-playground` only controls whether writes under `~/playground` are
+visible on the host, while `--mode static` controls container identity
+(whether SSH keys, git config, `~/.claude`, and `~/.config` are mirrored
+from the host at all). Either mode value can be combined with either
+setting of `--static-playground`.
+
+Unlike config isolation, playground isolation is **opt-in** (default off).
+`~/.config` isolation is safe to force on for everyone because config
+directories are small and rarely relied on as host-writable state; the
+`~/playground` tree is exactly the kind of path many users already expect
+to keep writing to on the host, so the write-isolation behavior only
+applies when you explicitly ask for it.
+
+Use [`sandbox-volumes`](#inspecting-and-syncing-overlay-volumes-sandbox-volumes)
+to inspect drift and sync changes — the same tool used for config
+isolation works against any registered overlay, including the `playground`
+one it registers once the flag is active. **Performance caveat:** always
+scope `sandbox-volumes status`/`diff`/`sync` to a subpath (e.g.
+`sandbox-volumes diff ~/playground/some-repo`), never the whole tree — an
+unscoped recursive diff across a large, multi-repo `~/playground` can take
+many minutes, unlike the near-instant diff against `~/.config`.
+
+Requirements: same as [config isolation](#config-isolation) — the container
+is granted `CAP_SYS_ADMIN` and `apparmor=unconfined` while either overlay is
+active, so it can call `mount()`; the two overlays share this grant rather
+than requesting it twice. `CAP_SYS_ADMIN` is a real privilege grant — in
+this project's threat model the firewall is the primary boundary and the
+cap set is intentionally permissive, but since `--static-playground` is
+opt-in and off by default, you only take on the grant on its account if you
+ask for it.
+
+`delete`/`clean` remove the `playground-overlay` volume along with the
+container, discarding any container-local writes that were never synced
+back to the host. There is no separate confirmation for this — it matches
+plain `docker compose down` expectations.
 
 ### Concurrency invariant
 
