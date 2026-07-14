@@ -35,7 +35,8 @@ phases:
           tier: sonnet-med
           git:
             branch: phase-01-task-03-volume-override-skip-guard-fix
-            commit: []
+            commit:
+                - b242b0c
             merge: null
         - number: 4
           slug: unit-tests
