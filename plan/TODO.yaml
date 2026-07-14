@@ -49,6 +49,7 @@ phases:
           path: phase-01-playground-isolation/004-unit-tests.md
           done: false
           tier: sonnet-med
+          digest: Added 8 ShellSpec unit examples to test/unit/ai_sandbox_spec.sh covering --static-playground flag parsing, restore_saved_config() round-trip, running_config_matches() label match/mismatch, and generate_volume_override() volume-maps skip-guard coverage. All new examples pass; full suite shows same 7 pre-existing unrelated failures as baseline. make lint clean.
           git:
             branch: phase-01-task-04-unit-tests
             commit:
