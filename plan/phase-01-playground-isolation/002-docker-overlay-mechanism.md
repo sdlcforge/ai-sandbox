@@ -169,4 +169,103 @@ architectural_impact: true
 - After `src/index.sh` `COMPOSE_FILES` wiring + the four `config` scenarios.
 - After `delete`/`clean` volume cleanup.
 - After `make build` + `make lint`.
+
+## Status
+
+**Outcome: succeeded.** Implemented 2026-07-14.
+
+- `docker/docker-compose.overlay-privileges.yaml` (new): shared `cap_add:
+  [SYS_ADMIN]` / `security_opt: [apparmor=unconfined]` fragment, carried the
+  original explanatory comments plus the finding-#2 rationale.
+- `docker/docker-compose.isolate-config.yaml` (edit — flagged per
+  Requirement 2): cap/security block removed, replaced with a pointer
+  comment to the new fragment. Comment wording deliberately avoids the
+  literal strings `cap_add`/`security_opt` so it does not itself trip the
+  Validation section's `grep -n 'cap_add\|security_opt'` check.
+- `docker/docker-compose.static-playground.yaml` (new): four volume entries
+  (`:ro` override at `${HOST_HOME}/playground`, `:ro` lowerdir bind, RW
+  sudo-only bind, `playground-overlay` named volume), the
+  `AI_SANDBOX_STATIC_PLAYGROUND`/host-RO/overlay/RW/host-source env vars, and
+  the top-level `playground-overlay:` volume declaration. No
+  `cap_add`/`security_opt` (same wording precaution as above).
+- `docker/rootfs/etc/cont-init.d/06-overlay-playground` (new, executable):
+  mirrors `02-overlay-config`'s mount/warn-and-continue shape; upper/work
+  live under the named-volume mount rather than tmpfs; writes its registry
+  row via the idempotent strip-own-row-then-append pattern keyed
+  `^playground\t`.
+- `docker/rootfs/etc/cont-init.d/02-overlay-config` (edit — flagged per
+  Requirement 5): registry write changed from truncate-and-write to the same
+  idempotent strip-own-row-then-append pattern keyed `^config\t`.
+- `src/index.sh`: `COMPOSE_FILES` assembly now computes a single
+  `_config_isolation_active` predicate (mirror mode AND not
+  `--no-isolate-config`) and includes the privileges fragment at most once
+  when that predicate OR `STATIC_PLAYGROUND` holds; includes
+  `docker-compose.static-playground.yaml` whenever `STATIC_PLAYGROUND=true`,
+  outside the `EFFECTIVE_MODE = mirror` branch. `delete`/`clean` handlers
+  each gained a targeted `docker volume rm
+  "${COMPOSE_PROJECT}_playground-overlay"` (not `down -v`) gated on the
+  (restored) `STATIC_PLAYGROUND` value.
+
+Validation performed:
+- `make build`: succeeds.
+- `make lint`: passes (shellcheck across `src/`, `docker/`, `test/`); the two
+  cont-init scripts were additionally shellchecked directly
+  (`shellcheck docker/rootfs/etc/cont-init.d/02-overlay-config
+  docker/rootfs/etc/cont-init.d/06-overlay-playground`) since they lack a
+  `.sh` extension and so fall outside `make lint`'s file-discovery glob
+  (pre-existing project convention, not something this task changes) — both
+  clean.
+- All four `docker compose ... config` scenarios from Requirement 6 (default;
+  `--static-playground` only; `--static-playground` + `--no-isolate-config`;
+  `--mode static --static-playground`) exercised directly against the real
+  compose files with representative env vars: each resolves with exactly one
+  `security_opt` entry, exactly one `${HOST_HOME}/playground` mount (RO in
+  the three static-playground scenarios, base RW in the default scenario),
+  and the privileges fragment's `cap_add: [SYS_ADMIN]` present in every
+  scenario where any overlay is active. A fifth sanity scenario
+  (`--no-isolate-config` alone, no `--static-playground`) confirmed the
+  fragment is *not* included when neither overlay is active.
+- File-existence and grep checks all pass as specified, including
+  `docker/docker-compose.isolate-config.yaml`/`docker-compose.static-playground.yaml`
+  returning no `cap_add`/`security_opt` matches and those tokens appearing
+  only in `docker-compose.overlay-privileges.yaml` among the files this task
+  touches (the pre-existing, unrelated `cap_add: [NET_ADMIN]` on the
+  `firewall-init` sidecar service in `docker-compose.yaml` predates this task
+  and is out of scope).
+- Registry idempotency: reasoned through and additionally exercised in
+  isolation (a standalone harness reproducing both scripts' registry-write
+  snippets against a scratch file) across three orderings — config-then-
+  playground with each run repeated twice (simulating restarts),
+  playground-then-config-then-playground again, and playground-only (config
+  overlay never active) — each yielding exactly one `^config\t` row (where
+  applicable), exactly one `^playground\t` row, and both header lines intact.
+- `make test.unit`: 300 examples, 7 failures — confirmed (via `git stash` to
+  the pre-task baseline and re-running) that the same 7 failures pre-exist on
+  `HEAD` before this task's changes and are unrelated to this task (profile-
+  restore/EFFECTIVE_PROXY/fix-ssh regression tests, unrelated to the overlay
+  mechanism). No new failures introduced.
+- `make test.integration` / full end-to-end container boot was **not**
+  executed in this session: it spins up real Docker containers against the
+  host's actual `~/.config`/`~/playground`, which risks interacting with any
+  already-running default sandbox instance on this host, and the task doc's
+  own scope defers end-to-end validation to Task 005. The `docker compose
+  config` scenario verification above is offered as the compose-assembly-
+  level substitute. Flagged for the manager in case a pre-merge integration
+  run is wanted.
+
+Files touched (repo-relative):
+- `docker/docker-compose.overlay-privileges.yaml` (new)
+- `docker/docker-compose.isolate-config.yaml` (edited)
+- `docker/docker-compose.static-playground.yaml` (new)
+- `docker/rootfs/etc/cont-init.d/06-overlay-playground` (new)
+- `docker/rootfs/etc/cont-init.d/02-overlay-config` (edited)
+- `src/index.sh` (edited)
+- `plan/phase-01-playground-isolation/002-docker-overlay-mechanism.md` (this
+  file, Status section)
+
+Assumptions relied on: Task 001 had already landed on this branch (confirmed
+by reading `src/options.sh`/`src/utils.sh` — `STATIC_PLAYGROUND` is defined,
+exported, restored, and compared), so the `${STATIC_PLAYGROUND:-false}`
+defensive-default fallback path in `src/index.sh` was exercised as a
+belt-and-suspenders default rather than a load-bearing one.
 </content>
