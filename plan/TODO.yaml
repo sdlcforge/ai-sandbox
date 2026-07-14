@@ -95,4 +95,4 @@ phases:
             branch: phase-02-task-01-update-architecture-docs
             commit:
                 - "4721169"
-            merge: null
+            merge: eb1efb5
