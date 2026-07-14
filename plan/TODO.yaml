@@ -50,7 +50,7 @@ phases:
           done: false
           tier: sonnet-med
           git:
-            branch: null
+            branch: phase-01-task-04-unit-tests
             commit: []
             merge: null
         - number: 5
