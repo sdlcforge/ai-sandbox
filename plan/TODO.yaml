@@ -38,7 +38,7 @@ phases:
             branch: phase-01-task-03-volume-override-skip-guard-fix
             commit:
                 - b242b0c
-            merge: null
+            merge: 4023d42
         - number: 4
           slug: unit-tests
           title: Unit Tests
