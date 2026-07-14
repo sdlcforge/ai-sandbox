@@ -67,7 +67,8 @@ phases:
           tier: sonnet-med
           git:
             branch: phase-01-task-06-readme-documentation
-            commit: []
+            commit:
+                - e2e6065
             merge: null
     - number: 2
       slug: doc-updates
