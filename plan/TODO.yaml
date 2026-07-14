@@ -88,7 +88,7 @@ phases:
           slug: update-architecture-docs
           title: Update Architecture Docs
           path: phase-02-doc-updates/001-update-architecture-docs.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: 'Updated docs/architecture.md: added a new subsection documenting the playground-isolation subsystem (base-mount-override safe-failure finding, shared overlay-privileges fragment rationale, registry idempotency fix, named-volume-vs-tmpfs choice, delete/clean cleanup), and updated the Config persistence and restore section from eight to nine dimensions throughout. Confirmed docs/ai-sandbox-profiles-spec.md needs no update. All prose cross-checked against actually-landed source files. Two same-diff self-fixes to stale/orphaned sentences.'
           git:
