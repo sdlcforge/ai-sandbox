@@ -220,3 +220,8 @@ items:
       date: "2026-07-14"
       tag: playground-isolation
       text: '[phase-01-playground-isolation/001-cli-flag-and-config-persistence.md] The 7 make test.unit failures are pre-existing (confirmed present on baseline commit 921b6e8, unrelated to this task''s changes) — appears to be an environment/fixture issue on dispatch test delete/stop/clean/fix-ssh cases. Worth tracking as a separate follow-up if not already known.'
+    - title: Task 004 is expected to add dedicated unit-te
+      id: OQxa
+      date: "2026-07-14"
+      tag: playground-isolation
+      text: '[phase-01-playground-isolation/001-cli-flag-and-config-persistence.md] Task 004 is expected to add dedicated unit-test coverage for the new STATIC_PLAYGROUND dimension — none was added in this task, consistent with the task doc''s stated scope.'
