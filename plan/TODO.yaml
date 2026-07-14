@@ -63,7 +63,7 @@ phases:
           slug: readme-documentation
           title: Readme Documentation
           path: phase-01-playground-isolation/006-readme-documentation.md
-          done: false
+          done: true
           tier: sonnet-med
           digest: 'Added user-facing documentation for --static-playground to README.md: a new flags-table row and a new Playground isolation section mirroring Config isolation in structure and depth. Verified all internal anchor links resolve and confirmed make lint doesn''t cover Markdown.'
           git:
