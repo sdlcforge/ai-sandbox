@@ -198,3 +198,26 @@ Carried forward from `plan/followups.yaml`, filtered to items tagged
   output quality, but worth checking whether task-doc authoring and dispatch
   role-derivation are drifting apart for this task type.
 </content>
+
+## Final Task State
+
+# TODO
+
+## Purpose and scope
+
+Tracking document for the active plan.
+
+## Tasks
+
+### Phase 01 — Playground Isolation
+
+- [x] [001-cli-flag-and-config-persistence.md](./phase-01-playground-isolation/001-cli-flag-and-config-persistence.md) — tier `sonnet-high` · branch `phase-01-task-01-cli-flag-and-config-persistenc` · commit `41feaaf` · merge `ee8bc63`
+- [x] [002-docker-overlay-mechanism.md](./phase-01-playground-isolation/002-docker-overlay-mechanism.md) — tier `sonnet-high` · branch `phase-01-task-02-docker-overlay-mechanism` · commit `495a2a1` · merge `07c808c`
+- [x] [003-volume-override-skip-guard-fix.md](./phase-01-playground-isolation/003-volume-override-skip-guard-fix.md) — tier `sonnet-med` · branch `phase-01-task-03-volume-override-skip-guard-fix` · commit `b242b0c` · merge `4023d42`
+- [x] [004-unit-tests.md](./phase-01-playground-isolation/004-unit-tests.md) — tier `sonnet-med` · branch `phase-01-task-04-unit-tests` · commit `6bcdafb` · merge `888ec67`
+- [x] [005-integration-test.md](./phase-01-playground-isolation/005-integration-test.md) — tier `sonnet-high` · branch `phase-01-task-05-integration-test` · commit `858ea4b` · merge `1fa2ac6`
+- [x] [006-readme-documentation.md](./phase-01-playground-isolation/006-readme-documentation.md) — tier `sonnet-med` · branch `phase-01-task-06-readme-documentation` · commit `e2e6065` · merge `90b3727`
+
+### Phase 02 — Documentation Updates
+
+- [x] [001-update-architecture-docs.md](./phase-02-doc-updates/001-update-architecture-docs.md) — tier `sonnet-high` · branch `phase-02-task-01-update-architecture-docs` · commit `4721169` · merge `eb1efb5`
