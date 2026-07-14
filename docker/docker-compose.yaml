@@ -95,6 +95,10 @@ services:
       #   - docker-compose.isolate-config.yaml (default): read-only lower + overlayfs
       #   - docker-compose.shared-config.yaml  (--no-isolate-config): rw passthrough
       # Additional per-plugin mounts are generated dynamically into docker-compose.generated.yaml.
+      # ~/playground handling is conditionally overridden when --static-playground is active:
+      #   - default: read-write passthrough (this line)
+      #   - --static-playground: docker-compose.static-playground.yaml adds read-only bind with overlayfs
+      # Mechanism: overlay-privileges fragment, named playground-overlay volume, 06-overlay-playground cont-init stage
       - ${HOST_HOME}/playground:${HOST_HOME}/playground
       # SSH agent socket: host path is bind-mounted to a stable in-container path
       # (decouples container env from host path changes).
