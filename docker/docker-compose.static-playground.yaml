@@ -1,0 +1,60 @@
+# Applied when --static-playground is active (opt-in, default off — unlike
+# ~/.config isolation, this changes a path users currently rely on being
+# host-writable). Mounts the host's ~/playground as a read-only "lower"
+# under /mnt/ai-sandbox/host-playground, then the 06-overlay-playground
+# cont-init script stacks an overlayfs at ${HOST_HOME}/playground so writes
+# inside the container stay container-local and never touch the host.
+#
+# cap_add/security_opt are NOT declared here -- they live in the shared
+# docker-compose.overlay-privileges.yaml fragment (see its header comment),
+# included at most once by src/index.sh's COMPOSE_FILES assembly whenever
+# either this overlay or the ~/.config overlay is active.
+#
+# Deliberately re-declares the base playground mount below as a `:ro` bind at
+# the same target (${HOST_HOME}/playground): Compose replaces same-target
+# volume entries and the last `-f` file wins, so without this override the
+# base docker-compose.yaml's read-write bind would stay live underneath the
+# overlay mount. Re-declaring it `:ro` also yields a safe failure mode: if
+# the overlay `mount` in 06-overlay-playground fails, the container degrades
+# to a read-only view of the host rather than to the base's live read-write
+# passthrough -- a write-isolation feature must never silently degrade to
+# full host write access.
+#
+# Unlike ~/.config's overlay, the upper/work dirs live on a Docker named
+# volume (playground-overlay) rather than tmpfs: ~/playground is large
+# (19GB+), so a RAM-backed tmpfs upper would be the wrong tradeoff.
+services:
+  ai-sandbox:
+    volumes:
+      # Override of the base RW bind (docker-compose.yaml) at the real
+      # mountpoint -- see header comment on same-target replacement.
+      - ${HOST_HOME}/playground:${HOST_HOME}/playground:ro
+      # Host ~/playground as read-only lower. The overlay mounts at
+      # ${HOST_HOME}/playground inside the container, so reads fall through
+      # here. Must differ from the mountpoint above.
+      - ${HOST_HOME}/playground:/mnt/ai-sandbox/host-playground:ro
+      # Host ~/playground as read-write bind, reachable only via sudo (the
+      # parent dir /var/lib/ai-sandbox-rw is chmod 0700 root, hardened by the
+      # 02/06 cont-init scripts). Used exclusively by `sandbox-volumes sync
+      # --match-container` to write container changes back to the host --
+      # the isolation path users write through normally (~/playground) still
+      # stays container-local.
+      - ${HOST_HOME}/playground:/var/lib/ai-sandbox-rw/playground
+      # Named volume backing the overlay's upper+work dirs (cont-init creates
+      # the subdirs). Compose-scoped per instance, same bare-key idiom as the
+      # firewall-handshake volume in docker-compose.yaml.
+      - playground-overlay:/var/lib/ai-sandbox-overlay/playground
+    environment:
+      - AI_SANDBOX_STATIC_PLAYGROUND=1
+      - AI_SANDBOX_HOST_PLAYGROUND_DIR=/mnt/ai-sandbox/host-playground
+      - AI_SANDBOX_PLAYGROUND_OVERLAY_DIR=/var/lib/ai-sandbox-overlay/playground
+      - AI_SANDBOX_PLAYGROUND_RW_DIR=/var/lib/ai-sandbox-rw/playground
+      - AI_SANDBOX_HOST_PLAYGROUND_SOURCE=${HOST_HOME}/playground
+
+volumes:
+  # Container-local upper+work storage for the ~/playground overlay. Compose
+  # scopes it per project (per sandbox instance), e.g.
+  # ai-sandbox-<name>_playground-overlay. Removed explicitly on `delete`/
+  # `clean` (src/index.sh) rather than via a blanket `down -v`, which would
+  # also remove the unrelated firewall-handshake volume.
+  playground-overlay:
