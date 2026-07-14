@@ -33,6 +33,7 @@ phases:
           path: phase-01-playground-isolation/003-volume-override-skip-guard-fix.md
           done: false
           tier: sonnet-med
+          digest: Extended the pre-existing ${HOME}/playground skip-guard in generate_volume_override() (src/volume-override.sh) to also cover the user_maps loop, not just the file:// marketplace block. Mirrors the marketplace block's case-based guard idiom. make build and make lint pass cleanly; manual harness confirms correct behavior. Pre-existing test failures verified unrelated via git stash. Dedicated unit coverage deferred to Task 004.
           git:
             branch: phase-01-task-03-volume-override-skip-guard-fix
             commit:
