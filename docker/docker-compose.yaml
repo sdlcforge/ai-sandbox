@@ -57,6 +57,7 @@ services:
       ai.sandbox.profile-hash: "${PROFILE_COMPOSITION_HASH:-}"
       ai.sandbox.mode: "${EFFECTIVE_MODE:-mirror}"
       ai.sandbox.no-isolate-config: "${NO_ISOLATE_CONFIG:-false}"
+      ai.sandbox.static-playground: "${STATIC_PLAYGROUND:-false}"
       ai.sandbox.docker-proxy: "${EFFECTIVE_PROXY:-false}"
       ai.sandbox.clean-slate: "${AI_SANDBOX_CLEAN_SLATE:-false}"
       # Derived (post profile+CLI merge) marketplace/plugin/enable-all state --
@@ -81,9 +82,10 @@ services:
       ai.sandbox.managed: "true"
       ai.sandbox.instance: "${SANDBOX_NAME}"
       ai.sandbox.profiles: "${SANDBOX_PROFILES:-}"
-      # Canonical config-input record: base64-encoded JSON capturing all eight
+      # Canonical config-input record: base64-encoded JSON capturing all nine
       # config-changing CLI inputs (profiles, mode, no-isolate-config,
-      # clean-slate, marketplaces, plugins, enable-all-plugins, allow-egress).
+      # clean-slate, marketplaces, plugins, enable-all-plugins, allow-egress,
+      # static-playground).
       # Sole source restore_saved_config() reads to rehydrate a bare
       # start/enter; see plan/notes/config-persistence-design.md.
       ai.sandbox.config: "${AI_SANDBOX_CONFIG_B64:-}"

@@ -35,6 +35,7 @@
 #   PROFILES      — array of --profile names, in invocation order (current run's profile resolution)
 #   MODE_OVERRIDE — "mirror" / "static" from --mode, or "" if not given
 #   NO_ISOLATE_CONFIG — "true" if --no-isolate-config was passed
+#   STATIC_PLAYGROUND — "true" if --static-playground was passed
 #   CONFIG_FLAGS_PROVIDED — "true" if any flag changing container config was passed
 #   AUTO_YES      — "true" if --yes / -y was passed (skip confirmation prompts)
 #   ENTER_AFTER_CREATE — "true" if --enter was passed to `create`
@@ -150,6 +151,7 @@ function parse_options() {
     PROFILES=()
     MODE_OVERRIDE=""
     NO_ISOLATE_CONFIG=false
+    STATIC_PLAYGROUND=false
     CONFIG_FLAGS_PROVIDED=false
     AUTO_YES=false
     ENTER_AFTER_CREATE=false
@@ -232,7 +234,7 @@ function parse_options() {
     # If --help/-h was already set via leading flag, nothing else to do for CMD
     if [ "${CMD}" = "help" ]; then
         export SANDBOX_NAME SANDBOX_NAME_KIND SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
-               NO_ISOLATE_CONFIG CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
+               NO_ISOLATE_CONFIG STATIC_PLAYGROUND CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
                STATUS_JSON STATUS_TEST_CHECK QUIET \
                CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE CLI_ALLOW_EGRESS
         if [ -z "${QUIET}" ]; then
@@ -467,6 +469,10 @@ function parse_options() {
                 NO_ISOLATE_CONFIG=true
                 CONFIG_FLAGS_PROVIDED=true
                 ;;
+            --static-playground)
+                STATIC_PLAYGROUND=true
+                CONFIG_FLAGS_PROVIDED=true
+                ;;
             --add-marketplace)
                 i=$(( i + 1 ))
                 if [ "${i}" -ge "${#all_remaining[@]}" ]; then
@@ -636,7 +642,7 @@ function parse_options() {
     # consumed within the same shell session by index.sh before any
     # subprocess boundary is crossed — same pattern as PROFILES.
     export SANDBOX_NAME SANDBOX_NAME_KIND SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
-           NO_ISOLATE_CONFIG CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
+           NO_ISOLATE_CONFIG STATIC_PLAYGROUND CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
            STATUS_JSON STATUS_TEST_CHECK QUIET \
            CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE CLI_ALLOW_EGRESS
 }

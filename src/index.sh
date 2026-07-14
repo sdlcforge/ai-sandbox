@@ -213,13 +213,14 @@ fi
 export PROFILE_JSON
 
 # --- Phase: assemble the full config-input record for persistence ---
-# Capture all eight config-input dimensions (see
+# Capture all nine config-input dimensions (see
 # plan/notes/config-persistence-design.md; allow_egress is the eighth,
-# added alongside the original seven) as a single JSON record, then
+# added alongside the original seven, and static_playground is the ninth,
+# added alongside allow_egress) as a single JSON record, then
 # base64-encode it single-line -- mirroring src/credentials.sh's
 # AI_SANDBOX_CREDENTIALS_JSON_B64 pattern -- for safe embedding in the
 # ai.sandbox.config Docker label (docker/docker-compose.yaml).
-# restore_saved_config() decodes this label to rehydrate all eight inputs on
+# restore_saved_config() decodes this label to rehydrate all nine inputs on
 # every per-instance command except create (see should_restore_config(),
 # src/utils.sh) -- broadened from the original bare-start/enter-only trigger,
 # since every other per-instance command also acts on an already-created
@@ -244,11 +245,14 @@ _config_no_isolate_json=false
 [ "${NO_ISOLATE_CONFIG}" = "true" ] && _config_no_isolate_json=true
 _config_clean_slate_json=false
 [ "${CLEAN_SLATE:-false}" = "true" ] && _config_clean_slate_json=true
+_config_static_playground_json=false
+[ "${STATIC_PLAYGROUND:-false}" = "true" ] && _config_static_playground_json=true
 
-# version stays 1: allow_egress is an additive optional field, same
-# reasoning already applied elsewhere in this project's own schema
-# conventions (task doc Requirement 4/Assumptions) -- no code branches on
-# `version` today, so an additive field doesn't warrant a bump.
+# version stays 1: allow_egress (8th field) and static_playground (9th
+# field) are both additive optional fields, same reasoning already applied
+# elsewhere in this project's own schema conventions (task doc Requirement
+# 4/Assumptions) -- no code branches on `version` today, so an additive
+# field doesn't warrant a bump.
 AI_SANDBOX_CONFIG_JSON="$(jq -n \
     --argjson profiles "${_config_profiles_json}" \
     --arg mode "${MODE_OVERRIDE}" \
@@ -258,11 +262,13 @@ AI_SANDBOX_CONFIG_JSON="$(jq -n \
     --argjson plugins "${_cli_plugins_json}" \
     --argjson enable_all_plugins "${_cli_enable_all_json}" \
     --argjson allow_egress "${_cli_allow_egress_json}" \
+    --argjson static_playground "${_config_static_playground_json}" \
     '{version: 1, profiles: $profiles, mode: $mode,
       no_isolate_config: $no_isolate_config, clean_slate: $clean_slate,
       marketplaces: $marketplaces, plugins: $plugins,
       enable_all_plugins: $enable_all_plugins,
-      allow_egress: $allow_egress}')"
+      allow_egress: $allow_egress,
+      static_playground: $static_playground}')"
 # macOS base64 may line-wrap; tr -d '\n' guarantees a single-line label value.
 AI_SANDBOX_CONFIG_B64="$(printf '%s' "${AI_SANDBOX_CONFIG_JSON}" | base64 | tr -d '\n')"
 export AI_SANDBOX_CONFIG_B64
@@ -344,7 +350,7 @@ if should_force_proxy_label_fallback "${CMD}" "${CONFIG_FLAGS_PROVIDED}" \
   echo "Warning: honoring the persisted ai.sandbox.docker-proxy label (true) for '${SANDBOX_NAME}' over this invocation's resolved profile composition (false) -- '${CMD}' did not explicitly change this instance's composition this run, so the instance's actual persisted composition is used instead of what this run's profile resolution would otherwise produce." 1>&2
   EFFECTIVE_PROXY=true
 fi
-export EFFECTIVE_PROXY NO_ISOLATE_CONFIG
+export EFFECTIVE_PROXY NO_ISOLATE_CONFIG STATIC_PLAYGROUND
 
 # Extract plugin-marketplace configuration for container passthrough.
 # When phase-02 is present, PROFILE_JSON is already set by the CLI merge block;
