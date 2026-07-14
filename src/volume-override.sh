@@ -41,7 +41,18 @@ function generate_volume_override() {
             else
                 src="${line}"; dst="${line}"
             fi
-            mounts+=("${src}:${dst}")
+            # Skip the mount entirely when it falls inside ${HOME}/playground:
+            # docker-compose.yaml already bind-mounts that whole tree read-write
+            # unconditionally (and, with --static-playground, an overlay mount is
+            # stacked over it at container start), so a redundant mount here would
+            # either be a no-op or get silently shadowed by the overlay with no error.
+            case "${dst}" in
+                "${HOME}/playground"/*|"${HOME}/playground")
+                    ;;
+                *)
+                    mounts+=("${src}:${dst}")
+                    ;;
+            esac
         done < "${user_maps}"
     fi
 
