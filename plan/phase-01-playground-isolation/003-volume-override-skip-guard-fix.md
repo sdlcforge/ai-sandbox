@@ -50,4 +50,33 @@ Implement part 7 of the [design note](../notes/static-playground-design.md).
 - [static-playground design note](../notes/static-playground-design.md) — part 7.
 - `src/volume-override.sh` — the existing marketplace skip-guard (~lines 80-92)
   to mirror, and the `user_maps` loop (~lines 31-46) to fix.
+
+## Status
+
+- **Outcome:** succeeded
+- **Date:** 2026-07-14
+- Extended `generate_volume_override()`'s `user_maps` loop in
+  `src/volume-override.sh` with the same `case`-based skip-guard idiom the
+  `file://` marketplace block already used, matching against the resolved
+  `dst` and skipping `mounts+=(...)` for `"${HOME}/playground"/*` and the bare
+  `"${HOME}/playground"`. Applied unconditionally, independent of
+  `STATIC_PLAYGROUND`, per the task's requirement. The marketplace block's own
+  guard and rationale comment were left untouched.
+- **Validation:**
+  - `make build` — succeeded.
+  - `make lint` (shellcheck across `src/`, `docker/`, `test/`) — passed, no
+    findings for `src/volume-override.sh`.
+  - Manual read-through: generated the override for a `volume-maps` file with
+    one entry under `$HOME/playground/foo` and one entry at `$HOME/other-dir`
+    (via a scratch harness sourcing `generate_volume_override` directly with
+    `HOME` and `AI_SANDBOX_CLEAN_SLATE=true` set). Confirmed the
+    `$HOME/playground/foo` entry produced no corresponding volume line while
+    the `$HOME/other-dir` entry did.
+  - Ran the existing `generate_volume_override` unit examples
+    (`shellspec test/unit/ai_sandbox_spec.sh -e 'generate_volume_override'`);
+    the full-suite run this pattern actually triggers (264 examples) shows 7
+    pre-existing failures unrelated to this change (verified identical with
+    `git stash` applied, i.e. before this task's edit) — nothing regressed.
+  - Per this task's own scope, dedicated unit coverage for the skip-guard
+    (volume-maps and marketplace paths) is deferred to Task 004, as specified.
 </content>
