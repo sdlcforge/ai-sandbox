@@ -5,6 +5,7 @@ phases:
     - number: 1
       slug: playground-isolation
       title: Playground Isolation
+      diff_base: 769cf5ce680b2282a52a28d5414e3fa2e9388849
       tasks:
         - number: 1
           slug: cli-flag-and-config-persistence
