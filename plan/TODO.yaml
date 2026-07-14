@@ -15,7 +15,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-01-cli-flag-and-config-persistenc
-            commit: []
+            commit:
+                - 41feaaf
             merge: null
         - number: 2
           slug: docker-overlay-mechanism
