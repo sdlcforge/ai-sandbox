@@ -70,7 +70,7 @@ phases:
             branch: phase-01-task-06-readme-documentation
             commit:
                 - e2e6065
-            merge: null
+            merge: 90b3727
     - number: 2
       slug: doc-updates
       title: Documentation Updates
