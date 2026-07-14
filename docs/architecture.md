@@ -392,10 +392,12 @@ overlay owns:
   already granted in the image, so the UX stays smooth without creating a
   second trust surface.
 
-The registry is tab-separated on purpose: adding a second overlay later
-(e.g. `~/.ssh`, `~/.aws`) is a matter of appending a row in the cont-init
-and adding the matching mounts in the isolate-config compose file —
-`sandbox-volumes` itself doesn't need changes.
+The registry is tab-separated on purpose: it already covers two overlays in
+production — `~/.config` (this section) and the opt-in `~/playground`
+overlay (see the next subsection below) — and adding a further one later
+(e.g. `~/.ssh`, `~/.aws`) is a matter of appending a row in the relevant
+cont-init stage and adding the matching mounts in that overlay's compose
+file — `sandbox-volumes` itself doesn't need changes.
 
 Bidirectional "smart" sync is deliberately out of scope: without a baseline
 snapshot at container start, "file missing on side X" is ambiguous
@@ -403,6 +405,84 @@ snapshot at container start, "file missing on side X" is ambiguous
 (`--match-host` or `--match-container`) and an explicit `--delete` opt-in,
 which matches what users actually want (restore from host, or promote from
 container) without the correctness pitfalls of three-way merging.
+
+### `~/playground` is copy-on-write when `--static-playground` is set
+
+The opt-in `--static-playground` flag (default **off** — unlike `~/.config`
+isolation above, which is on by default, this changes a path users currently
+rely on being host-writable) extends the same overlayfs isolation pattern to
+`~/playground`: every real host file is visible read-through with no upfront
+copy, but any write from inside the container stays container-local and
+never reaches the host.
+
+- `docker/docker-compose.static-playground.yaml` bind-mounts host
+  `~/playground` read-only at `/mnt/ai-sandbox/host-playground` (the
+  overlay's lower layer) and declares a Compose-scoped named volume,
+  `playground-overlay`, mounted at `/var/lib/ai-sandbox-overlay/playground`
+  to back the overlay's `upper`/`work` dirs.
+- `docker/rootfs/etc/cont-init.d/06-overlay-playground` (s6 cont-init stage)
+  calls `mount -t overlay` to stack that volume over the read-only lower at
+  `${HOST_HOME}/playground`, mirroring `02-overlay-config`'s shape and its
+  warn-and-continue-on-failure behavior.
+
+**Base-mount override and its safe failure mode.** Compose replaces
+same-target volume entries — the last `-f` file in the assembled list wins —
+so `docker-compose.static-playground.yaml` must itself re-declare
+`${HOST_HOME}/playground` as a `:ro` bind at the exact target the base
+`docker-compose.yaml` already binds read-write; without that re-declaration
+the base's live RW passthrough would stay in effect underneath the overlay.
+This re-declaration also gives the feature a safe failure mode: if
+`06-overlay-playground`'s `mount -t overlay` call fails for any reason
+(missing `CAP_SYS_ADMIN`, no kernel overlayfs support, AppArmor), the
+container degrades to a read-only view of the host rather than falling back
+to the base's live RW bind — a write-isolation feature must never silently
+degrade to full host write access.
+
+**Named volume, not tmpfs.** Unlike `~/.config`'s tmpfs-backed upper/work
+pair (fine for a small directory), `~/playground` is large enough in
+practice (19GB+) that a RAM-backed tmpfs upper would be the wrong trade-off,
+so its overlay's upper/work dirs live on the `playground-overlay` named
+volume instead — the same bare-key idiom as the pre-existing
+`firewall-handshake` volume. `delete`/`clean` (`src/index.sh`) remove it
+explicitly (`docker volume rm "${COMPOSE_PROJECT}_playground-overlay"`)
+rather than via a blanket `docker compose down -v`, which would also delete
+the unrelated `firewall-handshake` volume; this discards any unsynced
+container-side edits, matching plain `docker compose down` expectations.
+
+**Shared privileges fragment.** Both overlays need `CAP_SYS_ADMIN` +
+`apparmor=unconfined` for `mount()` to succeed inside the container, and both
+can be active at once (default config isolation plus `--static-playground`
+together). Declaring the same `security_opt` entry in two merged compose
+files is a hard `docker compose config` validation error (`cap_add` de-dupes
+cleanly across merges; `security_opt` does not), so the grant is factored
+out of `docker-compose.isolate-config.yaml` into a shared
+`docker/docker-compose.overlay-privileges.yaml` fragment. `src/index.sh`'s
+`COMPOSE_FILES` assembly includes that fragment at most once, gated on a
+single "either overlay active" predicate computed independently of
+`EFFECTIVE_MODE`: the playground overlay, like the base playground mount it
+replaces, applies regardless of mode, while the `~/.config` overlay stays
+mirror-mode-only.
+
+**Registry idempotency.** The [`sandbox-volumes`
+registry](#sandbox-volumes-inspecting-and-syncing-overlay-state) above
+originally had each cont-init script truncate and rewrite the whole
+`/etc/ai-sandbox/overlay-volumes.conf` file — harmless with a single
+overlay, but with two, whichever script's cont-init stage runs later would
+silently erase the other's row; and since the registry lives on the
+writable layer and persists across `stop`/`start`, naive appending instead
+would duplicate rows on every restart. Both `02-overlay-config` and
+`06-overlay-playground` write their row with the same idempotent pattern:
+strip any existing row for their own key (`^config\t` / `^playground\t`),
+ensure the two header lines are present, then append — correct regardless of
+which script runs first or how many restarts have happened.
+
+The cap-set and performance trade-offs mirror the `~/.config` section above:
+the broad `CAP_SYS_ADMIN` grant is accepted for the same reason (the egress
+firewall is this project's primary boundary, not the capability set), and
+`sandbox-volumes status`/`diff`/`sync` should always be scoped to a small
+subpath here too — an unscoped recursive diff across a 19GB+ multi-repo tree
+(with `.git` internals and `node_modules`) is a real, currently unmitigated
+performance risk.
 
 ### SSH agent forwarding is decoupled from the host path
 
@@ -441,22 +521,27 @@ git@github.com` looking for `successfully authenticated`.
 `docker/docker-compose.yaml` writes a single canonical label,
 `ai.sandbox.config`, capturing every config-changing CLI input as
 base64-encoded JSON: `profiles`, `mode`, `no_isolate_config`, `clean_slate`,
-`marketplaces`, `plugins`, `enable_all_plugins`, `allow_egress`, plus a
-`version` field (currently always `1`, present for future extensibility — no
-code branches on it today; `allow_egress` was added as an additive eighth
-field without bumping `version`). `src/index.sh` assembles this JSON after
-the CLI-merge phase (once `PROFILES`/`MODE_OVERRIDE`/`NO_ISOLATE_CONFIG`/
+`marketplaces`, `plugins`, `enable_all_plugins`, `allow_egress`,
+`static_playground`, plus a `version` field (currently always `1`, present
+for future extensibility — no code branches on it today; `allow_egress` was
+added as an additive eighth field, and `static_playground` as an additive
+ninth field, neither bumping `version`). `src/index.sh` assembles this JSON
+after the CLI-merge phase (once `PROFILES`/`MODE_OVERRIDE`/`NO_ISOLATE_CONFIG`/
 `CLEAN_SLATE`/`CLI_MARKETPLACES`/`CLI_PLUGINS`/`CLI_ENABLE_ALL`/
-`CLI_ALLOW_EGRESS` are all final) and exports it as `AI_SANDBOX_CONFIG_B64`,
-mirroring the `AI_SANDBOX_CREDENTIALS_JSON_B64` pattern already used for
-clean-slate credentials (`src/credentials.sh`). Marketplaces, plugins, and
-allow-egress specs are persisted as the **CLI deltas**
-(`CLI_MARKETPLACES`/`CLI_PLUGINS`/`CLI_ALLOW_EGRESS`), not a profile-merged
-effective set — for marketplaces/plugins, the profile-contributed entries are
-reproduced for free by re-running `profile-installer.js` on restore, so only
-the CLI additions need to round-trip through the label; `--allow-egress` has
-no profile-level equivalent at all (it's CLI-only), so its persisted value
-*is* the full effective value.
+`CLI_ALLOW_EGRESS`/`STATIC_PLAYGROUND` are all final) and exports it as
+`AI_SANDBOX_CONFIG_B64`, mirroring the `AI_SANDBOX_CREDENTIALS_JSON_B64`
+pattern already used for clean-slate credentials (`src/credentials.sh`).
+Marketplaces, plugins, and allow-egress specs are persisted as the **CLI
+deltas** (`CLI_MARKETPLACES`/`CLI_PLUGINS`/`CLI_ALLOW_EGRESS`), not a
+profile-merged effective set — for marketplaces/plugins, the
+profile-contributed entries are reproduced for free by re-running
+`profile-installer.js` on restore, so only the CLI additions need to
+round-trip through the label; `--allow-egress` has no profile-level
+equivalent at all (it's CLI-only), so its persisted value *is* the full
+effective value. `static_playground` is simpler still: a plain boolean with
+no profile-level composition or CLI-merge step of its own (see the
+`~/playground` copy-on-write overlay described earlier in this document),
+persisted as the raw `STATIC_PLAYGROUND` global.
 
 **Input vs. derived.** The launcher re-derives the entire effective
 configuration from these inputs on every invocation — `profile-installer.js`
@@ -483,7 +568,7 @@ passed this invocation (the existing `CONFIG_FLAGS_PROVIDED != true` gate)
 and a container (running or stopped) already exists for `SANDBOX_NAME`.
 
 When triggered, this reads only the `ai.sandbox.config` label, base64-decodes
-and extracts each field via `jq`, and rehydrates all eight input globals.
+and extracts each field via `jq`, and rehydrates all nine input globals.
 Each field is only assigned when present, so a missing or empty label is a
 natural no-op. **There is no fallback of any kind** — a container with no
 `ai.sandbox.config` label (including any container created before this label
@@ -504,24 +589,29 @@ for per-failure-mode error messages; `restore_saved_config()`
 (`src/utils.sh`) calls `is_valid_allow_egress_spec()`, a convenience wrapper
 around those same two predicates — both routes enforce byte-for-byte
 identical rules — a diverging restore-time check here would let an invalid
-egress spec reach Task 002's container-init-time firewall-rule application.
+egress spec reach the container-init-time firewall-rule application.
 
 **Matches (`running_config_matches`, `src/utils.sh`).** Compares the running
 container's labels against the current invocation's freshly-resolved
 effective values across the full derived-config dimension set: image tag,
 `ai.sandbox.profile-hash`, `ai.sandbox.mode`, `ai.sandbox.no-isolate-config`,
-`ai.sandbox.docker-proxy`, `ai.sandbox.clean-slate`, and four additional
+`ai.sandbox.docker-proxy`, `ai.sandbox.clean-slate`, and five additional
 derived labels — `ai.sandbox.marketplaces`, `ai.sandbox.plugins`,
-`ai.sandbox.enable-all-plugins`, `ai.sandbox.allow-egress` — populated from
-the effective `AI_SANDBOX_MARKETPLACES`/`AI_SANDBOX_PLUGINS`/
-`AI_SANDBOX_ENABLE_ALL_PLUGINS`/`AI_SANDBOX_ALLOW_EGRESS` env vars (the first
-three are the same values the container's `10-plugin-setup` init consumes;
+`ai.sandbox.enable-all-plugins`, `ai.sandbox.allow-egress`,
+`ai.sandbox.static-playground` — compared against the effective
+`AI_SANDBOX_MARKETPLACES`/`AI_SANDBOX_PLUGINS`/`AI_SANDBOX_ENABLE_ALL_PLUGINS`/
+`AI_SANDBOX_ALLOW_EGRESS`/`STATIC_PLAYGROUND` values (the first three are the
+same values the container's `10-plugin-setup` init consumes;
 `AI_SANDBOX_ALLOW_EGRESS` is simply `CLI_ALLOW_EGRESS` joined with `|`, since
-`--allow-egress` is CLI-only with no profile-level value to merge in). An
+`--allow-egress` is CLI-only with no profile-level value to merge in;
+`ai.sandbox.static-playground` skips that derived-env-var indirection
+entirely and compares directly against the plain `STATIC_PLAYGROUND` global,
+since the flag has no profile-level or CLI-merge step of its own). An
 explicit invocation that changes any of these (e.g. `enter --add-marketplace
-NEW` or `enter --allow-egress 1.2.3.4:443` on a container created without it)
-is now correctly detected as a config change and triggers the
-stop-and-recreate prompt instead of silently never applying. This is the
+NEW`, `enter --allow-egress 1.2.3.4:443`, or `enter --static-playground` on a
+container created without it) is now correctly detected as a config change
+and triggers the stop-and-recreate prompt instead of silently never
+applying. This is the
 "explicit invocation always wins" invariant: whatever this invocation itself
 explicitly asked for takes effect, even over what's already persisted. The
 `EFFECTIVE_PROXY` label fallback described under
