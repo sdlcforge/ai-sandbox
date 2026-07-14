@@ -51,7 +51,8 @@ phases:
           tier: sonnet-med
           git:
             branch: phase-01-task-04-unit-tests
-            commit: []
+            commit:
+                - 6bcdafb
             merge: null
         - number: 5
           slug: integration-test
