@@ -54,7 +54,7 @@ phases:
             branch: phase-01-task-04-unit-tests
             commit:
                 - 6bcdafb
-            merge: null
+            merge: 888ec67
         - number: 5
           slug: integration-test
           title: Integration Test
