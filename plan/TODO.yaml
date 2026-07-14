@@ -11,7 +11,7 @@ phases:
           slug: cli-flag-and-config-persistence
           title: Cli Flag And Config Persistence
           path: phase-01-playground-isolation/001-cli-flag-and-config-persistence.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: 'Implemented --static-playground as a fully wired, inert 9th config-input dimension: CLI flag in src/options.sh, additive field in persisted config-JSON and its ai.sandbox.static-playground docker-compose label, restore-on-bare-invocation support, and drift detection in running_config_matches() — mirroring existing no_isolate_config/allow_egress patterns. COMPOSE_FILES assembly and delete/clean volume cleanup deliberately left for Task 002. make build/make lint green; make test.unit shows same 7 pre-existing failures as baseline, no regressions.'
           git:
