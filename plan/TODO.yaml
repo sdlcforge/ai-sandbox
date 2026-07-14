@@ -63,7 +63,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-05-integration-test
-            commit: []
+            commit:
+                - 858ea4b
             merge: null
         - number: 6
           slug: readme-documentation
