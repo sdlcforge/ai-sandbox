@@ -250,3 +250,8 @@ items:
       date: "2026-07-14"
       tag: playground-isolation
       text: '[phase-01-playground-isolation/004-unit-tests.md] The task doc file (004-unit-tests.md) ends with a stray literal ''</content>'' line after ## References — pre-existing authoring artifact outside this task''s editable scope, noted for a possible cleanup follow-up.'
+    - title: One transient failure observed in the new spe
+      id: r3Q2
+      date: "2026-07-14"
+      tag: playground-isolation
+      text: '[phase-01-playground-isolation/005-integration-test.md] One transient failure observed in the new spec''s overlay-fstype assertion during a single heavily-loaded full-suite make test.integration run; not reproduced in 3 isolated reruns before/after. Likely a rare race/resource-contention issue in Task 002''s 06-overlay-playground cont-init mount under heavy concurrent load, or sandbox-environment flakiness. Recommend treating as a follow-up monitoring item rather than a defect in the test.'
