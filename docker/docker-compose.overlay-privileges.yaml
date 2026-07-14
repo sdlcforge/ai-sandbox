@@ -1,0 +1,27 @@
+# Shared privilege fragment for the container's overlayfs-based isolation
+# mechanisms: the default ~/.config overlay (docker-compose.isolate-config.yaml
+# + 02-overlay-config) and the opt-in ~/playground overlay
+# (docker-compose.static-playground.yaml + 06-overlay-playground). Both need
+# to run `mount -t overlay` from inside the container and so both need this
+# same cap_add/security_opt pair -- extracted here so it is included at most
+# once even when both overlays are active simultaneously.
+#
+# This split exists because of an empirically-verified docker-compose-merge
+# quirk: cap_add entries across merged compose files de-dupe cleanly, but
+# duplicate security_opt entries across merged compose files are a hard
+# `docker compose config` validation error
+# (`services.ai-sandbox.security_opt items at 0 and 1 are equal`). Copying
+# this block verbatim into a second compose file would break
+# `ai-sandbox start --static-playground` in the default (mirror +
+# isolate-config) configuration. See src/index.sh's COMPOSE_FILES assembly
+# for the single-inclusion guard.
+services:
+  ai-sandbox:
+    # Required for mount() from inside the container. Default Docker seccomp
+    # profile allows the mount syscall when the thread holds CAP_SYS_ADMIN.
+    cap_add:
+      - SYS_ADMIN
+    # AppArmor on Linux hosts blocks mount() even with CAP_SYS_ADMIN; no-op
+    # on Docker Desktop's linuxkit VM which doesn't run AppArmor by default.
+    security_opt:
+      - apparmor=unconfined

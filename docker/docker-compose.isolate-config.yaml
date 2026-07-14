@@ -5,14 +5,12 @@
 # writes inside the container stay container-local.
 services:
   ai-sandbox:
-    # Required for mount() from inside the container. Default Docker seccomp
-    # profile allows the mount syscall when the thread holds CAP_SYS_ADMIN.
-    cap_add:
-      - SYS_ADMIN
-    # AppArmor on Linux hosts blocks mount() even with CAP_SYS_ADMIN; no-op
-    # on Docker Desktop's linuxkit VM which doesn't run AppArmor by default.
-    security_opt:
-      - apparmor=unconfined
+    # The mount-capability grants this service used to declare directly here
+    # now live in docker-compose.overlay-privileges.yaml, shared with the
+    # ~/playground overlay so the pair is included at most once (one of the
+    # two grant kinds is a hard `docker compose config` validation error when
+    # duplicated across merged compose files). See that file's header
+    # comment for the full rationale.
     volumes:
       # Host ~/.config as read-only lower. The overlay mounts at
       # ${HOST_HOME}/.config inside the container, so reads fall through here.

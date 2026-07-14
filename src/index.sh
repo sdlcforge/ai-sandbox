@@ -458,6 +458,25 @@ elif [ -n "${AI_SANDBOX_CREDENTIALS_JSON_B64:-}" ]; then
   COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.claude-auth.yaml"
 fi
 
+# ~/playground overlay is mode-independent (the base compose file's RW bind
+# of ~/playground that it replaces is itself unconditional on mode today),
+# unlike the ~/.config overlay below which only applies in mirror mode.
+# Compute a single "either overlay active" predicate so the shared
+# privileges fragment (docker-compose.overlay-privileges.yaml) is included
+# at most once regardless of which overlay(s) are active -- duplicate
+# security_opt entries across merged compose files is a hard `docker compose
+# config` validation error (see that fragment's header comment). Critical:
+# because the caps moved out of isolate-config.yaml into the shared
+# fragment, the fragment must be included wherever isolate-config.yaml is,
+# or default config isolation loses CAP_SYS_ADMIN and breaks.
+_config_isolation_active=false
+if [ "${EFFECTIVE_MODE}" = "mirror" ] && [ "$NO_ISOLATE_CONFIG" != "true" ]; then
+  _config_isolation_active=true
+fi
+if [ "$_config_isolation_active" = "true" ] || [ "${STATIC_PLAYGROUND:-false}" = "true" ]; then
+  COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.overlay-privileges.yaml"
+fi
+
 # Host-identity / config overlays only apply in mirror mode. static mode is
 # self-contained: no ~/.config overlay is applied (see decisions in task report
 # for the V1 scope of static-mode mount suppression).
@@ -471,6 +490,17 @@ if [ "${EFFECTIVE_MODE}" = "mirror" ]; then
   else
     COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.isolate-config.yaml"
   fi
+fi
+
+# ~/playground overlay: unlike ~/.config isolation, applies regardless of
+# EFFECTIVE_MODE -- the base playground bind mount it replaces
+# (docker-compose.yaml) is unconditional on mode today, so the flag
+# replacing it must be too. Compose replaces same-target volume entries
+# (last -f file wins), and COMPOSE_FILES always starts with the base
+# docker-compose.yaml, so this file's `:ro` override at the same target
+# wins regardless of where in the remaining assembly it's added.
+if [ "${STATIC_PLAYGROUND:-false}" = "true" ]; then
+  COMPOSE_FILES="${COMPOSE_FILES} -f ${PROJECT_ROOT}/docker/docker-compose.static-playground.yaml"
 fi
 
 COMPOSE_FILES="${COMPOSE_FILES} -f ${GENERATED_COMPOSE}"
@@ -594,6 +624,15 @@ elif [ "${CMD}" == "delete" ]; then
         confirm_stop_running "stop and delete the running sandbox" || exit 1
     fi
     docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} down
+    # Targeted cleanup of the playground-overlay named volume when the
+    # (restored -- delete triggers restore_saved_config()) STATIC_PLAYGROUND
+    # value is true. Deliberately not a blanket `down -v`, which would also
+    # remove the unrelated firewall-handshake volume. This discards any
+    # unsynced container-side playground edits by design, matching plain
+    # `docker compose down` expectations.
+    if [ "${STATIC_PLAYGROUND:-false}" = "true" ]; then
+        docker volume rm "${COMPOSE_PROJECT}_playground-overlay" 2>/dev/null || true
+    fi
     qecho "Sandbox '${SANDBOX_NAME}' deleted."
 
 elif [ "${CMD}" == "clean" ]; then
@@ -601,6 +640,10 @@ elif [ "${CMD}" == "clean" ]; then
         confirm_stop_running "stop and delete the running sandbox" || exit 1
     fi
     docker compose -p "${COMPOSE_PROJECT}" ${COMPOSE_FILES} down
+    # See the `delete` arm above for why this is targeted rather than `down -v`.
+    if [ "${STATIC_PLAYGROUND:-false}" = "true" ]; then
+        docker volume rm "${COMPOSE_PROJECT}_playground-overlay" 2>/dev/null || true
+    fi
     # Remove the container by its explicit name in case compose down left it.
     docker rm -f "$(sandbox_container_name)" 2>/dev/null || true
     do_clean_images
