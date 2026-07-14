@@ -265,3 +265,8 @@ items:
       date: "2026-07-14"
       tag: playground-isolation
       text: '[phase-review, phase-01-playground-isolation, arch-review-002] restore_saved_config() restores static_playground the same unvalidated way as no_isolate_config/clean_slate/enable_all_plugins, per existing precedent. docs/architecture.md already documents an open, deliberately-deferred risk: a container-escape via --docker capability grants enough host Docker access to recreate the container with a poisoned ai.sandbox.config label, which restore_saved_config() then durably re-applies on every subsequent per-instance command. static_playground marginally widens the blast radius of that already-accepted, already-documented risk (a poisoned label could now also silently flip static_playground=true, granting CAP_SYS_ADMIN + apparmor=unconfined via the shared privileges fragment). Not a new risk class — no action required to conform to current architecture — but if/when the project revisits the label-poisoning risk, fold static_playground into that same discussion rather than treating it as newly introduced. Suggestion-severity, medium confidence.'
+    - title: 'Background note (already resolved): docker/do'
+      id: uwIN
+      date: "2026-07-14"
+      tag: doc-updates
+      text: '[phase-02-doc-updates/001-update-architecture-docs.md] Background note (already resolved): docker/docker-compose.yaml''s ~/playground bind-mount comment gap flagged by phase-01 review has since been fixed and merged into main via a separate simple-task dispatch (commit b2d06b3) — no further action needed.'
