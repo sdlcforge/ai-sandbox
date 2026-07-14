@@ -225,3 +225,8 @@ items:
       date: "2026-07-14"
       tag: playground-isolation
       text: '[phase-01-playground-isolation/001-cli-flag-and-config-persistence.md] Task 004 is expected to add dedicated unit-test coverage for the new STATIC_PLAYGROUND dimension — none was added in this task, consistent with the task doc''s stated scope.'
+    - title: 'Per the task doc''s explicit instruction: edit'
+      id: UZm0
+      date: "2026-07-14"
+      tag: playground-isolation
+      text: '[phase-01-playground-isolation/002-docker-overlay-mechanism.md] Per the task doc''s explicit instruction: edits to docker-compose.isolate-config.yaml and 02-overlay-config are required, mechanically forced by findings #2 and #3 respectively — narrow and covered by validation, flagged per the task doc''s own instruction to call it out explicitly.'
