@@ -455,24 +455,26 @@ function compute_lan_cidr() {
 }
 
 # Restore PROFILES / MODE_OVERRIDE / NO_ISOLATE_CONFIG / CLEAN_SLATE /
-# CLI_MARKETPLACES / CLI_PLUGINS / CLI_ENABLE_ALL / CLI_ALLOW_EGRESS -- the
-# complete eight-dimension config-input record (see
+# CLI_MARKETPLACES / CLI_PLUGINS / CLI_ENABLE_ALL / CLI_ALLOW_EGRESS /
+# STATIC_PLAYGROUND -- the complete nine-dimension config-input record (see
 # plan/notes/config-persistence-design.md; allow_egress is the eighth
-# dimension, added alongside the original seven) -- from the single
-# ai.sandbox.config label saved on the container at `create` time, when the
-# current invocation didn't pass any config-changing flags itself. Called for
-# every CMD except `create` (see should_restore_config()) -- broadened from
-# the original bare-`start`/`enter`-only trigger, since every other
-# per-instance command (`stop`, `delete`, `clean`, `fix-ssh`, `build`,
-# `user-exec`, `root-exec`, `attach`, `detail`, `up`, and the docker-compose
-# passthrough) also acts on an already-created instance and needs its
-# compose-file assembly to reflect that instance's actual persisted
-# composition, not just whatever flags (usually none) this particular
-# invocation passed. When CONFIG_FLAGS_PROVIDED is "true" (i.e.
+# dimension, added alongside the original seven, and static_playground is
+# the ninth) -- from the single ai.sandbox.config label saved on the
+# container at `create` time, when the current invocation didn't pass any
+# config-changing flags itself. Called for every CMD except `create` (see
+# should_restore_config()) -- broadened from the original bare-`start`/
+# `enter`-only trigger, since every other per-instance command (`stop`,
+# `delete`, `clean`, `fix-ssh`, `build`, `user-exec`, `root-exec`, `attach`,
+# `detail`, `up`, and the docker-compose passthrough) also acts on an
+# already-created instance and needs its compose-file assembly to reflect
+# that instance's actual persisted composition, not just whatever flags
+# (usually none) this particular invocation passed. When
+# CONFIG_FLAGS_PROVIDED is "true" (i.e.
 # --profile/--mode/--no-isolate-config/--add-marketplace/--enable-plugin/
-# --enable-all/--clean/--allow-egress was explicitly passed this run) or no
-# container exists yet, returns immediately without touching any of the eight
-# globals, so the explicit flags on the current invocation always win.
+# --enable-all/--clean/--allow-egress/--static-playground was explicitly
+# passed this run) or no container exists yet, returns immediately without
+# touching any of the nine globals, so the explicit flags on the current
+# invocation always win.
 #
 # No fallback of any kind: only the single ai.sandbox.config label is read.
 # When the label is absent or empty -- including on any container created
@@ -480,12 +482,13 @@ function compute_lan_cidr() {
 # explicit product decision (design note Sec 2.5/2.6: no external users yet, a
 # single label-based config regime is preferred over supporting two), not a
 # gap to guard against.
-# shellcheck disable=SC2034 # PROFILES/MODE_OVERRIDE/NO_ISOLATE_CONFIG/CLEAN_SLATE/CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL/CLI_ALLOW_EGRESS are globals consumed downstream by src/index.sh (profile-resolution, EFFECTIVE_MODE, and CLI-merge phases), not local to this function
+# shellcheck disable=SC2034 # PROFILES/MODE_OVERRIDE/NO_ISOLATE_CONFIG/CLEAN_SLATE/CLI_MARKETPLACES/CLI_PLUGINS/CLI_ENABLE_ALL/CLI_ALLOW_EGRESS/STATIC_PLAYGROUND are globals consumed downstream by src/index.sh (profile-resolution, EFFECTIVE_MODE, and CLI-merge phases), not local to this function
 function restore_saved_config() {
     if [ "${CONFIG_FLAGS_PROVIDED}" != "true" ] && is_container_running_or_stopped; then
         local ctr_name saved_config_b64 saved_config_json
         local saved_profiles saved_mode saved_no_isolate saved_clean
         local saved_marketplaces saved_plugins saved_enable_all saved_allow_egress
+        local saved_static_playground
         ctr_name="$(sandbox_container_name)"
         saved_config_b64="$(docker inspect -f \
             '{{index .Config.Labels "ai.sandbox.config"}}' \
@@ -496,10 +499,10 @@ function restore_saved_config() {
         # writable at container-create time by the host process itself, so
         # the practical risk here is low, but bound it anyway before
         # base64-decoding/jq-parsing. 16KB is generously larger than any real
-        # eight-field config record (profiles/mode/marketplaces/plugins/
-        # allow_egress are short strings/lists) could ever produce. An
-        # oversized value is treated the same as an absent label -- nothing
-        # to restore -- rather than erroring.
+        # nine-field config record (profiles/mode/marketplaces/plugins/
+        # allow_egress/static_playground are short strings/lists/booleans)
+        # could ever produce. An oversized value is treated the same as an
+        # absent label -- nothing to restore -- rather than erroring.
         local max_config_b64_len=16384
         [ "${#saved_config_b64}" -le "${max_config_b64_len}" ] || return 0
 
@@ -525,6 +528,7 @@ function restore_saved_config() {
         saved_plugins="$(printf '%s' "${saved_config_json}" | jq -r '(.plugins // []) | join("|")' 2>/dev/null || true)"
         saved_enable_all="$(printf '%s' "${saved_config_json}" | jq -r 'if .enable_all_plugins == null then "" else (.enable_all_plugins | tostring) end' 2>/dev/null || true)"
         saved_allow_egress="$(printf '%s' "${saved_config_json}" | jq -r '(.allow_egress // []) | join("|")' 2>/dev/null || true)"
+        saved_static_playground="$(printf '%s' "${saved_config_json}" | jq -r 'if .static_playground == null then "" else (.static_playground | tostring) end' 2>/dev/null || true)"
 
         if [ -n "${saved_profiles}" ]; then
             # Re-validate that each restored profile name still resolves via
@@ -627,6 +631,9 @@ function restore_saved_config() {
                 CLI_ALLOW_EGRESS=("${_validated_allow_egress[@]}")
             fi
         fi
+        if [ -n "${saved_static_playground}" ]; then
+            STATIC_PLAYGROUND="${saved_static_playground}"
+        fi
     fi
 }
 
@@ -635,24 +642,28 @@ function restore_saved_config() {
 # running. Reads AI_SANDBOX_IMAGE_TAG / PROFILE_COMPOSITION_HASH / EFFECTIVE_MODE
 # / NO_ISOLATE_CONFIG / EFFECTIVE_PROXY / AI_SANDBOX_CLEAN_SLATE /
 # AI_SANDBOX_MARKETPLACES / AI_SANDBOX_PLUGINS / AI_SANDBOX_ENABLE_ALL_PLUGINS /
-# AI_SANDBOX_ALLOW_EGRESS from caller scope. The last four complete the
-# derived-value comparison to the full effective-config dimension set (design
-# note plan/notes/config-persistence-design.md Sec 2.3/2.6): an explicit
-# invocation that changes marketplaces/plugins/enable-all/allow-egress (e.g.
-# `enter --add-marketplace NEW` or `enter --allow-egress 1.2.3.4:443` on a
-# container created without it) must be detected as a config change so it
-# prompts a recreate rather than silently never applying. `:-` defaults on
-# both sides of each comparison mean a container missing these labels
-# (created before this label existed) compares equal to an empty/default
-# current invocation rather than false-positiving. AI_SANDBOX_ALLOW_EGRESS is
-# simply the CLI_ALLOW_EGRESS array joined with '|' (src/index.sh) -- unlike
-# marketplaces/plugins/enable-all, there is no profile-level equivalent to
-# merge in, since --allow-egress is CLI-only (see the task doc's Requirement
-# 4).
+# AI_SANDBOX_ALLOW_EGRESS / STATIC_PLAYGROUND from caller scope. The last five
+# complete the derived-value comparison to the full effective-config
+# dimension set (design note plan/notes/config-persistence-design.md Sec
+# 2.3/2.6): an explicit invocation that changes
+# marketplaces/plugins/enable-all/allow-egress/static-playground (e.g.
+# `enter --add-marketplace NEW`, `enter --allow-egress 1.2.3.4:443`, or
+# `enter --static-playground` on a container created without it) must be
+# detected as a config change so it prompts a recreate rather than silently
+# never applying. `:-` defaults on both sides of each comparison mean a
+# container missing these labels (created before this label existed)
+# compares equal to an empty/default current invocation rather than
+# false-positiving. AI_SANDBOX_ALLOW_EGRESS is simply the CLI_ALLOW_EGRESS
+# array joined with '|' (src/index.sh) -- unlike marketplaces/plugins/
+# enable-all, there is no profile-level equivalent to merge in, since
+# --allow-egress is CLI-only (see the task doc's Requirement 4).
+# STATIC_PLAYGROUND is compared directly (no derived AI_SANDBOX_* value --
+# it has no profile-level or CLI-merge step of its own, just the plain
+# boolean global set by src/options.sh / restored by restore_saved_config()).
 function running_config_matches() {
     is_container_running || return 2
     local cur_image cur_hash cur_mode cur_no_isolate cur_proxy cur_clean ctr_name
-    local cur_marketplaces cur_plugins cur_enable_all cur_allow_egress sep fmt line
+    local cur_marketplaces cur_plugins cur_enable_all cur_allow_egress cur_static_playground sep fmt line
     ctr_name="$(sandbox_container_name)"
 
     # Single multi-field `docker inspect` call replaces what used to be 9
@@ -667,10 +678,11 @@ function running_config_matches() {
     # values already use '|' as their own internal join delimiter (see
     # AI_SANDBOX_MARKETPLACES in src/index.sh).
     sep=$'\x1f'
-    fmt="{{.Config.Image}}${sep}{{index .Config.Labels \"ai.sandbox.profile-hash\"}}${sep}{{index .Config.Labels \"ai.sandbox.mode\"}}${sep}{{index .Config.Labels \"ai.sandbox.no-isolate-config\"}}${sep}{{index .Config.Labels \"ai.sandbox.docker-proxy\"}}${sep}{{index .Config.Labels \"ai.sandbox.clean-slate\"}}${sep}{{index .Config.Labels \"ai.sandbox.marketplaces\"}}${sep}{{index .Config.Labels \"ai.sandbox.plugins\"}}${sep}{{index .Config.Labels \"ai.sandbox.enable-all-plugins\"}}${sep}{{index .Config.Labels \"ai.sandbox.allow-egress\"}}"
+    fmt="{{.Config.Image}}${sep}{{index .Config.Labels \"ai.sandbox.profile-hash\"}}${sep}{{index .Config.Labels \"ai.sandbox.mode\"}}${sep}{{index .Config.Labels \"ai.sandbox.no-isolate-config\"}}${sep}{{index .Config.Labels \"ai.sandbox.docker-proxy\"}}${sep}{{index .Config.Labels \"ai.sandbox.clean-slate\"}}${sep}{{index .Config.Labels \"ai.sandbox.marketplaces\"}}${sep}{{index .Config.Labels \"ai.sandbox.plugins\"}}${sep}{{index .Config.Labels \"ai.sandbox.enable-all-plugins\"}}${sep}{{index .Config.Labels \"ai.sandbox.allow-egress\"}}${sep}{{index .Config.Labels \"ai.sandbox.static-playground\"}}"
     line="$(docker inspect -f "${fmt}" "${ctr_name}" 2>/dev/null || true)"
     IFS="${sep}" read -r cur_image cur_hash cur_mode cur_no_isolate cur_proxy \
-        cur_clean cur_marketplaces cur_plugins cur_enable_all cur_allow_egress <<< "${line}"
+        cur_clean cur_marketplaces cur_plugins cur_enable_all cur_allow_egress \
+        cur_static_playground <<< "${line}"
 
     [ "${cur_image}" = "${AI_SANDBOX_IMAGE_TAG:-}" ] || return 1
     [ "${cur_hash}" = "${PROFILE_COMPOSITION_HASH:-}" ] || return 1
@@ -682,6 +694,7 @@ function running_config_matches() {
     [ "${cur_plugins:-}" = "${AI_SANDBOX_PLUGINS:-}" ] || return 1
     [ "${cur_enable_all:-false}" = "${AI_SANDBOX_ENABLE_ALL_PLUGINS:-false}" ] || return 1
     [ "${cur_allow_egress:-}" = "${AI_SANDBOX_ALLOW_EGRESS:-}" ] || return 1
+    [ "${cur_static_playground:-false}" = "${STATIC_PLAYGROUND:-false}" ] || return 1
     return 0
 }
 
