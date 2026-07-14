@@ -27,7 +27,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-02-docker-overlay-mechanism
-            commit: []
+            commit:
+                - 495a2a1
             merge: null
         - number: 3
           slug: volume-override-skip-guard-fix
