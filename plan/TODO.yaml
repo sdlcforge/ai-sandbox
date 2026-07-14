@@ -23,7 +23,7 @@ phases:
           slug: docker-overlay-mechanism
           title: Docker Overlay Mechanism
           path: phase-01-playground-isolation/002-docker-overlay-mechanism.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: 'Implemented the core copy-on-write overlay mechanism for ~/playground: extracted shared cap_add/security_opt fragment, added docker-compose.static-playground.yaml with named playground-overlay volume, added 06-overlay-playground cont-init stage with idempotent registry write plus companion fix to 02-overlay-config, wired COMPOSE_FILES assembly with an either-overlay-active predicate, and added targeted volume cleanup to delete/clean gated on STATIC_PLAYGROUND. All four required docker compose config scenarios verified. No new test regressions. Full container integration testing deliberately deferred to Task 005.'
           git:
