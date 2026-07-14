@@ -73,4 +73,61 @@ sections.
   mirror, including the `sandbox-volumes` subsection and `CAP_SYS_ADMIN` note.
 - `README.md` § "Flags" table (~lines 57-62) and the `--mode` row to disambiguate
   against.
+
+## Status
+
+**Outcome:** succeeded — 2026-07-14.
+
+Implemented from the design note alone (part 9 and the "Open risks" section),
+independent of the other phase-01 implementation tasks, per this task's own
+scope note.
+
+- Added a `--static-playground` row to the `README.md` flags table
+  (new row after `--no-isolate-config`), stating the copy-on-write behavior,
+  opt-in default, and linking to the new section.
+- Added a new `### Playground isolation` section (after `### Config isolation`,
+  before `### Concurrency invariant`) mirroring Config isolation's structure:
+  mechanics list (RO host bind, named volume rationale vs. tmpfs, the
+  `06-overlay-playground` cont-init script, read-through semantics), the
+  opt-in invocation example, an explicit "Not related to `--mode static`"
+  callout, the opt-in-vs-opt-out asymmetry rationale, a pointer to
+  `sandbox-volumes` (existing subsection, not duplicated) with the
+  documented performance caveat (always scope to a subpath), the shared
+  `CAP_SYS_ADMIN`/`apparmor=unconfined` requirements note, and the
+  delete/clean discard-without-confirmation behavior.
+- Disambiguated `--static-playground` from `--mode static` in both the flags
+  table row and the new section, describing each feature's actual effect
+  (write-isolation for `~/playground` vs. container identity mirroring) using
+  language verified against `docs/ai-sandbox-profiles-spec.md`.
+
+Validation:
+- Confirmed the `--static-playground` table row and `### Playground isolation`
+  heading are both present and cross-reference correctly: the table links to
+  `#playground-isolation`, which the heading slug resolves to. Verified with a
+  full internal-anchor scan of `README.md` (all headings vs. all
+  `](#...)` links) — no broken anchors, including the new
+  `#playground-isolation` link and the reused
+  `#inspecting-and-syncing-overlay-volumes-sandbox-volumes` link.
+- The section covers all six required points: mechanism, named-volume-vs-tmpfs
+  rationale, opt-in asymmetry, `sandbox-volumes` performance caveat,
+  `CAP_SYS_ADMIN` cost, and delete/clean discard behavior.
+- The `--mode static` disambiguation is explicit in both the flags table row
+  and a dedicated "Not related to `--mode static`" paragraph in the new
+  section.
+- `make lint` was run; the repo's lint target covers only shellcheck across
+  `src/`, `docker/`, `test/` (`make/55-lint-bash.mk`) and does not lint
+  Markdown, so it reported "Nothing to be done" (README.md isn't a lint
+  input) — not applicable to this doc-only change. The anchor-link scan above
+  serves as the fallback validation named in this task's `## Validation`.
+- Prose describes the mechanism as specified in the design note (part 2/3):
+  named volume `playground-overlay`, `:ro` base-mount override, and mirrors
+  the registry/`sandbox-volumes` behavior already documented for config
+  isolation. This task did not depend on or verify Task 002's actual
+  implementation (parallel-eligible, docs-only per this task's scope note);
+  the prose is accurate to the design note's specification of that mechanism.
+
+Assumptions applied: none beyond the task doc's own scope note (writable
+independent of the implementation tasks).
+
+Files changed: `README.md`.
 </content>
