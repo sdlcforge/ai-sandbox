@@ -71,4 +71,61 @@ precedent.
   restore (~792), and `running_config_matches` (~1116) blocks to mirror.
 - `docs/architecture.md` § "Test strategy" — unit-tier conventions
   (`__SOURCED__=1`, tags).
+
+## Status
+
+- **Outcome:** succeeded (2026-07-14).
+- Added 8 new ShellSpec examples to `test/unit/ai_sandbox_spec.sh`, mirroring
+  the cited existing blocks:
+  - `parse_options()`: default-false and `--static-playground` flag-parsing
+    examples (mirrors the `NO_ISOLATE_CONFIG` block, ~1507).
+  - `restore_saved_config()`: `static_playground:true` round-trip and an
+    additive-field-omitted regression example (mirrors the
+    `NO_ISOLATE_CONFIG=true` case, ~792).
+  - `running_config_matches()`: match and mismatch examples for the
+    `ai.sandbox.static-playground` label (mirrors the `cur_no_isolate`
+    cases, ~1116); extended the local `mock_inspect_line()` test helper from
+    10 to 11 positional fields (existing 9/10-arg callers are unaffected —
+    unset trailing `%s` slots default to empty, same precedent already
+    documented for the 9→10 allow-egress extension).
+  - `generate_volume_override()`: new `Describe` block covering the
+    `user_maps`/volume-maps skip-guard under `${HOME}/playground` (the Task
+    003 fix) for both the in-guard and outside-guard cases.
+- **Validation:**
+  - `make build` then `make test.unit`: 308 examples, 7 failures. The 7
+    failures are the same pre-existing, unrelated failures confirmed present
+    before this task's changes (verified via `git stash` — identical 7
+    failure descriptions at baseline); none of the 8 new examples are among
+    them.
+  - `shellspec test/unit/ai_sandbox_spec.sh --example '<glob-pattern>'`
+    (note: the project's `-e` shorthand collides with ShellSpec's `--env`
+    flag in this ShellSpec version (0.28.1); the working per-example filter
+    is `-E`/`--example` with a `*substring*` glob, not a bare substring) run
+    individually and pass: `*STATIC_PLAYGROUND*` (6/6),
+    `*volume-maps*` (2/2), `*redundant read-only mount*` (1/1, pre-existing
+    marketplace-skip example unaffected).
+  - `make lint`: passes. Added inline `shellcheck disable=SC2016` comments
+    (with reason) on the two new volume-maps examples, where a literal
+    `$HOME` is intentionally written unexpanded to the mocked
+    `volume-maps` file for `generate_volume_override()`'s own `eval` to
+    expand at read time.
+  - Optional sanity spot-check (not left in place): confirmed against the
+    pre-Task-003 `src/volume-override.sh` (i.e., without the `user_maps`
+    skip-guard) that the new volume-maps "does not add a mount ... under
+    HOME/playground" example fails, and against a build without Task 001
+    (`--static-playground` unimplemented) that the flag-parsing example
+    fails — both via reasoning over the diff rather than re-checking out
+    prior commits, since Tasks 001/003 are already merged into this branch.
+- **Assumptions applied:** Tasks 001 and 003 have landed (confirmed:
+  `STATIC_PLAYGROUND`/`--static-playground` exist in `src/options.sh`, and
+  the `user_maps` skip-guard exists in `src/volume-override.sh`).
+- **Note:** the design note/task doc's premise that the `${HOME}/playground`
+  skip-guard was "previously untested even for the marketplace path" does
+  not match this branch's current state — a marketplace-skip example
+  (`does not add a redundant read-only mount for a path already under
+  HOME/playground`) already exists in `test/unit/ai_sandbox_spec.sh`
+  (predates this plan, commit `f223177`). Left that existing example
+  untouched and added only the volume-maps half that was genuinely missing,
+  per Requirement 4's actual ask ("new coverage for both"). Flagged for the
+  manager below rather than silently reconciling the design note.
 </content>

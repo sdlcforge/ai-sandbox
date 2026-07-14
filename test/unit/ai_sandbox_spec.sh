@@ -803,6 +803,54 @@ Describe 'ai-sandbox.sh'
       The variable CLEAN_SLATE should eq false
     End
 
+    It 'restores STATIC_PLAYGROUND=true from a mocked ai.sandbox.config label carrying static_playground:true'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      STATIC_PLAYGROUND=false
+      config_b64="$(encode_config '{"version":1,"profiles":[],"mode":"","no_isolate_config":false,"clean_slate":false,"marketplaces":[],"plugins":[],"enable_all_plugins":false,"static_playground":true}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable STATIC_PLAYGROUND should eq true
+    End
+
+    It 'leaves STATIC_PLAYGROUND at its default false when the label omits the field (regression: additive-field no-op)'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      STATIC_PLAYGROUND=false
+      config_b64="$(encode_config '{"version":1,"profiles":[],"mode":"","no_isolate_config":false,"clean_slate":false,"marketplaces":[],"plugins":[],"enable_all_plugins":false}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable STATIC_PLAYGROUND should eq false
+    End
+
     It 'restores CLI_MARKETPLACES, CLI_PLUGINS, and CLI_ENABLE_ALL (regression: followup AL7i -- previously silently dropped)'
       SANDBOX_NAME="test"
       CONFIG_FLAGS_PROVIDED=false
@@ -1031,16 +1079,18 @@ Describe 'ai-sandbox.sh'
     # Builds the single sep-joined line the consolidated `docker inspect`
     # call in running_config_matches() now expects (followup 4DzF: 9
     # separate single-field calls collapsed into 1 multi-field call, later
-    # extended to 10 fields for allow-egress). Field order matches the
-    # function's own `read`: image hash mode no_isolate proxy clean
-    # marketplaces plugins enable_all allow_egress. Uses the same ASCII Unit
-    # Separator (0x1F) as the implementation, not tab/pipe -- see the
-    # implementation comment for why. Existing callers that still pass only 9
+    # extended to 10 fields for allow-egress, then to 11 for
+    # static-playground). Field order matches the function's own `read`:
+    # image hash mode no_isolate proxy clean marketplaces plugins enable_all
+    # allow_egress static_playground. Uses the same ASCII Unit Separator
+    # (0x1F) as the implementation, not tab/pipe -- see the implementation
+    # comment for why. Existing callers that still pass only 9 or 10
     # positional args are unaffected: printf leaves an unset trailing %s
-    # empty, which read()s into an empty allow_egress field -- the same
-    # default AI_SANDBOX_ALLOW_EGRESS has when a test doesn't set it.
+    # empty, which read()s into an empty trailing field -- the same default
+    # AI_SANDBOX_ALLOW_EGRESS/STATIC_PLAYGROUND has when a test doesn't set
+    # it.
     mock_inspect_line() {
-      printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$@"
+      printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$@"
     }
 
     It 'returns 2 when no container is running'
@@ -1289,6 +1339,58 @@ Describe 'ai-sandbox.sh'
       When call running_config_matches
       The status should eq 1
     End
+
+    It 'returns success when the static-playground label matches STATIC_PLAYGROUND'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      STATIC_PLAYGROUND=true
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" "" "" "false" "" "true"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 0
+    End
+
+    It 'returns failure when the static-playground label disagrees with STATIC_PLAYGROUND (e.g. enter --static-playground on a container created without it)'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      STATIC_PLAYGROUND=true
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" "" "" "false" "" "false"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 1
+    End
   End
 
   Describe 'parse_options()'
@@ -1507,6 +1609,17 @@ Describe 'ai-sandbox.sh'
     It 'sets NO_ISOLATE_CONFIG when --no-isolate-config is passed'
       When call parse_options instances create mybox --no-isolate-config
       The variable NO_ISOLATE_CONFIG should eq true
+    End
+
+    It 'leaves STATIC_PLAYGROUND false by default (playground isolation off)'
+      When call parse_options
+      The variable STATIC_PLAYGROUND should eq false
+    End
+
+    It 'sets STATIC_PLAYGROUND when --static-playground is passed'
+      When call parse_options instances create mybox --static-playground
+      The variable STATIC_PLAYGROUND should eq true
+      The variable CONFIG_FLAGS_PROVIDED should eq true
     End
 
     It 'accepts --add-marketplace with https:// ref'
@@ -2238,6 +2351,51 @@ Describe 'ai-sandbox.sh'
       export AI_SANDBOX_MARKETPLACES="file://${HOME}/playground/my-repo"
       When call generate_volume_override "${OUT}"
       The contents of file "${OUT}" should not include "${HOME}/playground/my-repo:${HOME}/playground/my-repo:ro"
+      The status should be success
+    End
+  End
+
+  Describe 'generate_volume_override() volume-maps skip-guard' unit
+    # Task 003 fix: the ${HOME}/playground skip-guard previously only
+    # covered the file:// marketplace block above -- the user_maps loop
+    # (~/.config/ai-sandbox/volume-maps entries) had no such guard, so an
+    # entry resolving under ${HOME}/playground would double-mount and, with
+    # --static-playground active, get silently shadowed by the overlay mount
+    # applied afterward. This exact case was previously untested even for
+    # the marketplace path (see the design note); the marketplace half is
+    # now covered by the "does not add a redundant read-only mount..."
+    # example above, so this block adds the volume-maps half.
+    setup() {
+      export TMPDIR_VM="$(mktemp -d)"
+      export HOME="${TMPDIR_VM}"
+      export OUT="${TMPDIR_VM}/compose-override.yaml"
+      mkdir -p "${HOME}/.config/ai-sandbox"
+      unset AI_SANDBOX_MARKETPLACES
+      unset AI_SANDBOX_CLEAN_SLATE
+    }
+    cleanup() {
+      rm -rf "${TMPDIR_VM}"
+    }
+    Before 'setup'
+    After 'cleanup'
+
+    It 'does not add a mount for a volume-maps entry that resolves under HOME/playground'
+      # shellcheck disable=SC2016 # literal $HOME written to the volume-maps
+      # file on purpose -- generate_volume_override()'s own eval expands it
+      # against the test's HOME at read time, mirroring real user input.
+      printf '%s\n' '$HOME/playground/my-repo' > "${HOME}/.config/ai-sandbox/volume-maps"
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should not include "${HOME}/playground/my-repo:${HOME}/playground/my-repo"
+      The status should be success
+    End
+
+    It 'adds a mount for a volume-maps entry outside HOME/playground'
+      # shellcheck disable=SC2016 # literal $HOME written to the volume-maps
+      # file on purpose -- generate_volume_override()'s own eval expands it
+      # against the test's HOME at read time, mirroring real user input.
+      printf '%s\n' '$HOME/other-dir' > "${HOME}/.config/ai-sandbox/volume-maps"
+      When call generate_volume_override "${OUT}"
+      The contents of file "${OUT}" should include "${HOME}/other-dir:${HOME}/other-dir"
       The status should be success
     End
   End
