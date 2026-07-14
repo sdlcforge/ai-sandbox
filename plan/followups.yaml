@@ -245,3 +245,8 @@ items:
       date: "2026-07-14"
       tag: playground-isolation
       text: '[phase-01-playground-isolation/004-unit-tests.md] The design note asserts the ${HOME}/playground skip-guard was previously untested even for the marketplace path, but a marketplace-skip test already exists predating this plan (commit f223177) — not blocking, but the design note''s premise should probably be corrected for future readers.'
+    - title: The task doc file (004-unit-tests.md) ends wi
+      id: OF5q
+      date: "2026-07-14"
+      tag: playground-isolation
+      text: '[phase-01-playground-isolation/004-unit-tests.md] The task doc file (004-unit-tests.md) ends with a stray literal ''</content>'' line after ## References — pre-existing authoring artifact outside this task''s editable scope, noted for a possible cleanup follow-up.'
