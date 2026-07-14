@@ -108,4 +108,87 @@ architectural_impact: true
 - After `src/index.sh` config-JSON field, export, and the compose-file label.
 - After `src/utils.sh` restore + running_config_matches + comment updates.
 - After `make build` + `make lint`.
+
+## Status
+
+**Outcome: succeeded.** 2026-07-14.
+
+Implemented the `--static-playground` flag end-to-end through the
+config-persistence machinery (parts 4, 5 excluding `COMPOSE_FILES`/delete-
+cleanup, and 6 of the design note), as an inert 9th config-input dimension
+defaulting to `false`:
+
+- `src/options.sh`: `--static-playground` boolean flag (init, case, both
+  export lists, header doc comment).
+- `src/index.sh`: `static_playground` field in the config-JSON assembly
+  (`_config_static_playground_json` local, `--argjson`/key wiring, `version`
+  left at `1`), `STATIC_PLAYGROUND` added to the `export EFFECTIVE_PROXY
+  NO_ISOLATE_CONFIG` line, and updated the adjacent "eight config-input
+  dimensions" doc comment to nine.
+- `docker/docker-compose.yaml`: `ai.sandbox.static-playground:
+  "${STATIC_PLAYGROUND:-false}"` label immediately after
+  `ai.sandbox.no-isolate-config`; updated the adjacent `ai.sandbox.config`
+  doc comment's field list from eight to nine.
+- `src/utils.sh`: `restore_saved_config()` extracts `static_playground` with
+  the same null-guarded boolean pattern as `no_isolate_config` and assigns
+  `STATIC_PLAYGROUND` only when present; `running_config_matches()` adds the
+  `ai.sandbox.static-playground` label to the `docker inspect` go-template,
+  a `cur_static_playground` read field, and a comparison against
+  `${STATIC_PLAYGROUND:-false}`. Updated all "eight-dimension"/"eight
+  globals"/"eight-field" doc-comment language to nine throughout both
+  functions' comments (the two remaining "eighth" references, at
+  `src/utils.sh:460` and `src/index.sh:217`, are intentionally left as-is —
+  they correctly describe `allow_egress` as the 8th field, not a stale
+  dimension-total).
+
+Preserved exactly, as required: config-JSON `version: 1` (no bump), the
+`AI_SANDBOX_CONFIG_B64` base64 path, and existing `NO_ISOLATE_CONFIG`/
+marketplace/allow-egress behavior (untouched). Did not touch
+`COMPOSE_FILES` assembly or delete/clean volume cleanup (explicitly out of
+scope per this task's Requirements — reserved for Task 002).
+
+### Validation results
+
+- `make build` — succeeded.
+- `make lint` (shellcheck across `src/options.sh`, `src/index.sh`,
+  `src/utils.sh`, and the rest of the configured lint set) — passed, no
+  warnings.
+- `grep -n 'static-playground\|STATIC_PLAYGROUND\|static_playground' src/*.sh
+  docker/docker-compose.yaml` — confirmed present: the flag case + init +
+  both export lists in `options.sh`; the config-JSON field + export +
+  compose label in `index.sh`/`docker-compose.yaml`; the `restore_saved_config()`
+  extraction and `running_config_matches()` label/field/comparison in
+  `utils.sh`.
+- `grep -rn -i 'eight-dimension\|eight input\|eight globals\|eight config\|all eight\|the eight' src/utils.sh src/index.sh docker/docker-compose.yaml`
+  — no stale "eight-dimension-total" wording remains (the two literal
+  "eighth field" references that survive are historically accurate,
+  describing `allow_egress` specifically).
+- Manual round-trip check: with `STATIC_PLAYGROUND=true`, reproduced the
+  `AI_SANDBOX_CONFIG_JSON`/`AI_SANDBOX_CONFIG_B64` assembly logic verbatim in
+  an isolated shell, decoded the base64 through `jq`, and confirmed the
+  output contains `"static_playground": true` and `"version": 1` alongside
+  the other 8 fields, all defaulted.
+- `make test.unit` — 300 examples, 7 failures. All 7 failures are
+  pre-existing on the phase-start baseline commit (`921b6e8`, i.e. before
+  this task's changes): verified by building and running `make test.unit`
+  against a throwaway `git worktree` checked out at that commit, which
+  reproduces the identical 7 failures (same test names, same "expected ''
+  to include ..." symptom, indicating empty script output — a fixture/
+  environment issue unrelated to this task's additive, defaulted-`false`
+  change). No new failures were introduced by this task's diff.
+
+### Assumptions applied
+
+None beyond the task doc's own scope note (parts 4/5/6 only; `COMPOSE_FILES`
+assembly and delete/clean cleanup are Task 002's responsibility).
+
+### Notes for the manager
+
+- The `make test.unit` pre-existing-failure baseline check was done via a
+  disposable `git worktree` (removed after use); no artifacts from it remain.
+- Task 004 (per this task's own note at the top of `## Validation`) is
+  expected to add dedicated unit-test coverage for the new
+  `STATIC_PLAYGROUND` dimension (flag parsing, restore round-trip,
+  `running_config_matches()` match/mismatch) — none was added here, matching
+  the task doc's explicit scope.
 </content>
