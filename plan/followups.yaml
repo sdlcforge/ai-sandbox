@@ -235,3 +235,8 @@ items:
       date: "2026-07-14"
       tag: playground-isolation
       text: '[phase-01-playground-isolation/002-docker-overlay-mechanism.md] make test.integration (real Docker container boot) was not executed this session due to host side effects; Task 005 owns end-to-end validation of this mechanism.'
+    - title: 'make lint''s file-discovery glob doesn''t pick '
+      id: J55X
+      date: "2026-07-14"
+      tag: playground-isolation
+      text: '[phase-01-playground-isolation/002-docker-overlay-mechanism.md] make lint''s file-discovery glob doesn''t pick up extensionless cont-init.d scripts (pre-existing gap, not in this task''s scope) — worth a follow-up to cover them automatically.'
