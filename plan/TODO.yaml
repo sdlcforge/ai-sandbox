@@ -61,6 +61,7 @@ phases:
           path: phase-01-playground-isolation/005-integration-test.md
           done: false
           tier: sonnet-high
+          digest: Added test/integration/static_playground_spec.sh covering env-var visibility, overlay fstype, host read-through with no upfront copy, container-write host-invisibility, sandbox-volumes list row, and named-volume removal on delete. Lint clean, spec passes reliably in isolation. One transient failure under heavy concurrent full-suite load, not reproduced on retry, flagged as a monitoring item rather than a test defect. Host Docker state verified clean after every run.
           git:
             branch: phase-01-task-05-integration-test
             commit:
