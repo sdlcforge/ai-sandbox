@@ -255,3 +255,8 @@ items:
       date: "2026-07-14"
       tag: playground-isolation
       text: '[phase-01-playground-isolation/005-integration-test.md] One transient failure observed in the new spec''s overlay-fstype assertion during a single heavily-loaded full-suite make test.integration run; not reproduced in 3 isolated reruns before/after. Likely a rare race/resource-contention issue in Task 002''s 06-overlay-playground cont-init mount under heavy concurrent load, or sandbox-environment flakiness. Recommend treating as a follow-up monitoring item rather than a defect in the test.'
+    - title: 'Pre-existing gap: .gitignore only ignores .ai'
+      id: txyf
+      date: "2026-07-14"
+      tag: playground-isolation
+      text: '[phase-01-playground-isolation/005-integration-test.md] Pre-existing gap: .gitignore only ignores .ai-sandbox*.startup.log, not the .ai-sandbox.<name>.log files that named-instance integration tests write, which accumulate as untracked stray files. Noticed in passing, cleaned up manually during validation; not fixed since .gitignore is outside this task''s assigned files.'
