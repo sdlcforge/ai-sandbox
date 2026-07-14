@@ -230,3 +230,8 @@ items:
       date: "2026-07-14"
       tag: playground-isolation
       text: '[phase-01-playground-isolation/002-docker-overlay-mechanism.md] Per the task doc''s explicit instruction: edits to docker-compose.isolate-config.yaml and 02-overlay-config are required, mechanically forced by findings #2 and #3 respectively — narrow and covered by validation, flagged per the task doc''s own instruction to call it out explicitly.'
+    - title: 'make test.integration (real Docker container '
+      id: PjAl
+      date: "2026-07-14"
+      tag: playground-isolation
+      text: '[phase-01-playground-isolation/002-docker-overlay-mechanism.md] make test.integration (real Docker container boot) was not executed this session due to host side effects; Task 005 owns end-to-end validation of this mechanism.'
