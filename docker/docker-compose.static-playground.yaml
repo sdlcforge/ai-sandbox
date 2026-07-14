@@ -5,10 +5,10 @@
 # cont-init script stacks an overlayfs at ${HOST_HOME}/playground so writes
 # inside the container stay container-local and never touch the host.
 #
-# cap_add/security_opt are NOT declared here -- they live in the shared
-# docker-compose.overlay-privileges.yaml fragment (see its header comment),
-# included at most once by src/index.sh's COMPOSE_FILES assembly whenever
-# either this overlay or the ~/.config overlay is active.
+# This service's mount-capability grants are NOT declared here -- they live
+# in the shared docker-compose.overlay-privileges.yaml fragment (see its
+# header comment), included at most once by src/index.sh's COMPOSE_FILES
+# assembly whenever either this overlay or the ~/.config overlay is active.
 #
 # Deliberately re-declares the base playground mount below as a `:ro` bind at
 # the same target (${HOST_HOME}/playground): Compose replaces same-target

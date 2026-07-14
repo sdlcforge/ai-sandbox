@@ -5,11 +5,11 @@
 # writes inside the container stay container-local.
 services:
   ai-sandbox:
-    # cap_add: [SYS_ADMIN] / security_opt: [apparmor=unconfined] used to live
-    # here; both now live in docker-compose.overlay-privileges.yaml, shared
-    # with the ~/playground overlay so the pair is included at most once
-    # (duplicate security_opt entries across merged compose files is a hard
-    # `docker compose config` validation error). See that file's header
+    # The mount-capability grants this service used to declare directly here
+    # now live in docker-compose.overlay-privileges.yaml, shared with the
+    # ~/playground overlay so the pair is included at most once (one of the
+    # two grant kinds is a hard `docker compose config` validation error when
+    # duplicated across merged compose files). See that file's header
     # comment for the full rationale.
     volumes:
       # Host ~/.config as read-only lower. The overlay mounts at
