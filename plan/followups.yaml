@@ -240,3 +240,8 @@ items:
       date: "2026-07-14"
       tag: playground-isolation
       text: '[phase-01-playground-isolation/002-docker-overlay-mechanism.md] make lint''s file-discovery glob doesn''t pick up extensionless cont-init.d scripts (pre-existing gap, not in this task''s scope) — worth a follow-up to cover them automatically.'
+    - title: The design note asserts the ${HOME}/playgroun
+      id: Yn3J
+      date: "2026-07-14"
+      tag: playground-isolation
+      text: '[phase-01-playground-isolation/004-unit-tests.md] The design note asserts the ${HOME}/playground skip-guard was previously untested even for the marketplace path, but a marketplace-skip test already exists predating this plan (commit f223177) — not blocking, but the design note''s premise should probably be corrected for future readers.'
