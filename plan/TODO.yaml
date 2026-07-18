@@ -25,6 +25,7 @@ phases:
           path: phase-01-add-host-passthrough/002-thread-add-host-extra-hosts.md
           done: false
           tier: sonnet-high
+          digest: 'Threaded caller --add-host <name>:<ip> specs (CLI_ADD_HOST, from task 001) into GENERATED_COMPOSE''s extra_hosts: block for the ai-sandbox service in src/volume-override.sh, omitting the key entirely when there are no caller entries. Confirmed empirically that Compose appends rather than replaces extra_hosts across -f files, so only caller entries need emitting. Fixed an incidental set -u bug the new code exposed in existing unit tests, and added targeted unit coverage.'
           git:
             branch: phase-01-task-02-thread-add-host-entries-into-c
             commit:
