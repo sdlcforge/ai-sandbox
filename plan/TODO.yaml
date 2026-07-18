@@ -13,6 +13,7 @@ phases:
           path: phase-01-add-host-passthrough/001-add-host-flag-parsing.md
           done: false
           tier: sonnet-med
+          digest: Added a repeatable --add-host <name>:<ip> flag to ai-sandbox, modeled on --allow-egress. src/utils.sh gained is_valid_add_host_spec() reusing is_valid_ipv4_literal() and is_valid_egress_hostname(). src/options.sh gained a new case arm parsing/validating the spec, accumulating into CLI_ADD_HOST, exported alongside other CLI_* arrays. make lint and make build pass; manual smoke covers happy path and all failure modes.
           git:
             branch: phase-01-task-01-add-host-flag-parsing-and-vali
             commit:
