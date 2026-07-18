@@ -98,5 +98,32 @@ EOF
       The contents of file "$HOME/override.yaml" should include "${HOME}/.custom:/opt/custom"
       The contents of file "$HOME/override.yaml" should not include 'comment'
     End
+
+    It 'omits the extra_hosts key entirely when CLI_ADD_HOST is unset (nounset-safe)'
+      # Deliberately do not set CLI_ADD_HOST: exercises the same call shape
+      # as every other test in this Describe block, which invoke
+      # generate_volume_override() directly rather than through
+      # parse_options() (src/options.sh) -- confirms the function tolerates
+      # running under `set -u` without CLI_ADD_HOST ever being declared.
+      When call generate_volume_override "$HOME/override.yaml"
+      The status should be success
+      The contents of file "$HOME/override.yaml" should not include 'extra_hosts'
+    End
+
+    It 'omits the extra_hosts key entirely when CLI_ADD_HOST is a declared-empty array'
+      CLI_ADD_HOST=()
+      When call generate_volume_override "$HOME/override.yaml"
+      The status should be success
+      The contents of file "$HOME/override.yaml" should not include 'extra_hosts'
+    End
+
+    It 'emits an extra_hosts entry for each CLI_ADD_HOST spec'
+      CLI_ADD_HOST=("myhost:192.168.65.254" "other:10.1.2.3")
+      When call generate_volume_override "$HOME/override.yaml"
+      The status should be success
+      The contents of file "$HOME/override.yaml" should include 'extra_hosts:'
+      The contents of file "$HOME/override.yaml" should include '- myhost:192.168.65.254'
+      The contents of file "$HOME/override.yaml" should include '- other:10.1.2.3'
+    End
   End
 End
