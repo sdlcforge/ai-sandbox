@@ -59,7 +59,7 @@ phases:
           slug: add-host-tests
           title: Test Add-Host Flag, Persistence, And Visibility
           path: phase-01-add-host-passthrough/005-add-host-tests.md
-          done: false
+          done: true
           tier: sonnet-med
           digest: 'Added ShellSpec coverage for the add-host feature landed by phase-01 tasks 001-004: 34 new unit examples (predicate tests, --add-host parsing/validation, restore_saved_config() round-trip, running_config_matches() add-host and yS0R drift detection), and a new test/integration/add_host_spec.sh mirroring allow_egress_spec.sh, run successfully against a real Docker boot. Lint clean, unit suite shows same 7 pre-existing failures before and after, no new failures.'
           git:
