@@ -50,7 +50,7 @@ phases:
           done: false
           tier: sonnet-high
           git:
-            branch: null
+            branch: phase-01-task-04-surface-host-access-resolution
             commit: []
             merge: null
         - number: 5
