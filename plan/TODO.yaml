@@ -5,4 +5,14 @@ phases:
     - number: 1
       slug: add-host-passthrough
       title: Add-Host Pass-Through Flag
-      tasks: []
+      tasks:
+        - number: 1
+          slug: add-host-flag-parsing
+          title: Add-Host Flag Parsing And Validation
+          path: phase-01-add-host-passthrough/001-add-host-flag-parsing.md
+          done: false
+          tier: sonnet-med
+          git:
+            branch: null
+            commit: []
+            merge: null
