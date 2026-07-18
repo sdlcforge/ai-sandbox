@@ -63,7 +63,8 @@ phases:
           tier: sonnet-med
           git:
             branch: phase-01-task-05-test-add-host-flag-persistence
-            commit: []
+            commit:
+                - 7f4aa21
             merge: null
     - number: 2
       slug: doc-updates
