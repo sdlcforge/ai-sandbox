@@ -401,6 +401,30 @@ function is_valid_allow_egress_spec() {
     is_valid_egress_host "${host}"
 }
 
+# --- --add-host spec validation ------------------------------------------
+# Shared by src/options.sh's --add-host flag parser (fresh CLI input,
+# per-failure-mode error messages) and restore_saved_config()'s
+# defense-in-depth re-validation of a restored ai.sandbox.config label (task
+# 003) so both sites apply byte-for-byte the same rules -- same sharing
+# pattern as the --allow-egress block above.
+
+# Return 0 if $1 is a fully valid --add-host spec (<name>:<ip>): exactly one
+# ':' separating a valid hostname (is_valid_egress_hostname()) from a valid
+# IPv4 literal (is_valid_ipv4_literal()). Unlike --allow-egress's host part,
+# --add-host's ip part must be a bare IPv4 literal specifically -- no CIDR,
+# no hostname -- since it is placed verbatim into the container's /etc/hosts
+# (or equivalent), so is_valid_ipv4_literal() is used directly rather than
+# the more permissive is_valid_egress_host().
+function is_valid_add_host_spec() {
+    local spec="$1" colon_count name ip
+    colon_count="$(grep -o ':' <<< "${spec}" | wc -l | tr -d ' ')"
+    [ "${colon_count}" -eq 1 ] || return 1
+    name="${spec%%:*}"
+    ip="${spec##*:}"
+    is_valid_egress_hostname "${name}" || return 1
+    is_valid_ipv4_literal "${ip}"
+}
+
 # Compute the host's primary LAN CIDR on macOS: the default-route
 # interface's IP/netmask (via `route get default` + `ipconfig`), converted
 # to network/prefixlen notation (e.g. "192.168.1.0/24"). Echoes the CIDR on

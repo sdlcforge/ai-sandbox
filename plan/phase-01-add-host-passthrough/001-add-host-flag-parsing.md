@@ -96,4 +96,36 @@ architectural_impact: true
   `is_valid_allow_egress_spec()`).
 - [investigation findings](../notes/investigation-findings.md) — why a
   caller-pinned literal (not a detected/resolved value) is the robust contract.
+
+## Status
+
+- Outcome: **succeeded**
+- Date: 2026-07-18
+- Implementation:
+  - `src/utils.sh`: added `is_valid_add_host_spec()` (mirrors
+    `is_valid_allow_egress_spec()`), reusing the pre-existing standalone
+    `is_valid_ipv4_literal()` predicate (already present at ~line 312, so no
+    new IPv4-literal helper needed) and `is_valid_egress_hostname()`.
+  - `src/options.sh`: added a `--add-host` case arm (modeled on
+    `--allow-egress`) that requires exactly one `:`, validates the name part
+    with `is_valid_egress_hostname()` and the ip part with
+    `is_valid_ipv4_literal()`, appends to `CLI_ADD_HOST`, and sets
+    `CONFIG_FLAGS_PROVIDED=true`. Initialized `CLI_ADD_HOST=()` alongside the
+    other `CLI_*` arrays, added it to both export lists (`--help` early
+    return and the final export), and documented it in the globals comment
+    block.
+  - Ran `make build` to regenerate `bin/ai-sandbox.sh` (gitignored build
+    artifact; no manual edits).
+- Validation summary:
+  - `make lint`: passed, shellcheck clean, no new disables needed.
+  - `make build`: passed, rollup regenerated cleanly.
+  - Manual smoke checks (`parse_options` sourced directly): happy path with
+    two `--add-host` specs accumulates both into `CLI_ADD_HOST`; missing
+    argument, missing colon, extra colon, non-hostname name, and
+    non-IPv4 ip (hostname/CIDR/malformed octet) each produced a distinct
+    stderr message and exited 1 — all passed.
+- Notes: the pre-existing `is_valid_egress_hostname()` regex permits a
+  leading `-` in the name part (followup `sakY`); per the task doc, this was
+  left unchanged (verified via manual check — leading-hyphen names are still
+  accepted, not regressed, not fixed).
 </content>
