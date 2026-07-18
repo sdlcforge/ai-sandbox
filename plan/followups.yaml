@@ -275,3 +275,8 @@ items:
       date: "2026-07-18"
       tag: add-host-passthrough
       text: '[phase-01-add-host-passthrough/002-thread-add-host-extra-hosts.md] Duplicate-host.docker.internal precedence unresolved under append semantics; task doc guidance assumed Compose-replace semantics which doesn''t apply. A !override YAML merge tag would give deterministic caller-wins precedence but wasn''t in this task''s scope — needs manager decision, contingent on documenting the project''s minimum required Compose version.'
+    - title: 7 pre-existing make test.unit failures (ai_sa
+      id: BV5P
+      date: "2026-07-18"
+      tag: add-host-passthrough
+      text: '[phase-01-add-host-passthrough/002-thread-add-host-extra-hosts.md] 7 pre-existing make test.unit failures (ai_sandbox_spec.sh lines 3181,3190,3199,3273,3283,3293,3392 — teardown/dropped-profile/fix-ssh dispatch regressions) confirmed present on baseline, unrelated to this task.'
