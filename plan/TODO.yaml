@@ -27,7 +27,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-02-thread-add-host-entries-into-c
-            commit: []
+            commit:
+                - "1176048"
             merge: null
         - number: 3
           slug: config-persistence-triad
