@@ -321,6 +321,102 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'is_valid_ipv4_literal()'
+    # Direct pure-function coverage for the predicate --add-host's ip part
+    # relies on (src/utils.sh) -- see is_valid_add_host_spec()/is_valid_egress_host()
+    # below for the higher-level specs that reuse this.
+    It 'accepts a well-formed dotted-quad IPv4 literal'
+      When call is_valid_ipv4_literal 192.168.1.1
+      The status should be success
+    End
+
+    It 'accepts the all-zeros boundary literal'
+      When call is_valid_ipv4_literal 0.0.0.0
+      The status should be success
+    End
+
+    It 'accepts the all-255s boundary literal'
+      When call is_valid_ipv4_literal 255.255.255.255
+      The status should be success
+    End
+
+    It 'rejects a hostname'
+      When call is_valid_ipv4_literal api.example.com
+      The status should be failure
+    End
+
+    It 'rejects a CIDR (IPv4 literal with a /prefix suffix)'
+      When call is_valid_ipv4_literal 10.0.0.0/8
+      The status should be failure
+    End
+
+    It 'rejects an out-of-range octet'
+      When call is_valid_ipv4_literal 999.1.1.1
+      The status should be failure
+    End
+
+    It 'rejects a wrong-octet-count address'
+      When call is_valid_ipv4_literal 1.2.3
+      The status should be failure
+    End
+
+    It 'rejects a trailing-dot address (bash read -a would silently drop the empty trailing field)'
+      When call is_valid_ipv4_literal 1.2.3.4.
+      The status should be failure
+    End
+
+    It 'rejects a non-numeric octet'
+      When call is_valid_ipv4_literal 1.2.3.abc
+      The status should be failure
+    End
+  End
+
+  Describe 'is_valid_add_host_spec()'
+    # Direct pure-function coverage for the --add-host spec wrapper
+    # (src/utils.sh), which is the single source of truth reused by both
+    # src/options.sh's --add-host parser and restore_saved_config()'s
+    # defense-in-depth re-validation (task 003).
+    It 'accepts a well-formed name:ip spec'
+      When call is_valid_add_host_spec myhost:192.168.65.254
+      The status should be success
+    End
+
+    It 'accepts a hostname with dots and hyphens'
+      When call is_valid_add_host_spec host.docker.internal:10.0.0.5
+      The status should be success
+    End
+
+    It 'rejects a spec with no colon'
+      When call is_valid_add_host_spec myhost192.168.65.254
+      The status should be failure
+    End
+
+    It 'rejects a spec with more than one colon'
+      When call is_valid_add_host_spec myhost:192.168.65.254:extra
+      The status should be failure
+    End
+
+    It 'rejects when the ip part is a hostname, not an IPv4 literal'
+      When call is_valid_add_host_spec myhost:api.example.com
+      The status should be failure
+    End
+
+    It 'rejects when the ip part is a CIDR, not a bare IPv4 literal'
+      When call is_valid_add_host_spec myhost:10.0.0.0/8
+      The status should be failure
+    End
+
+    It 'rejects when the ip part has a malformed (out-of-range) octet'
+      When call is_valid_add_host_spec myhost:999.1.1.1
+      The status should be failure
+    End
+
+    It 'rejects when the name part is not a valid hostname (disallowed character)'
+      When call is_valid_add_host_spec 'bad host!:192.168.65.254'
+      The status should be failure
+    End
+  End
+
   Describe 'ensure_image()'
     setup() {
       export TOOL_CACHE_DIR="$(mktemp -d)"
@@ -779,6 +875,61 @@ Describe 'ai-sandbox.sh'
       The stderr should include '1.2.3.4:70000'
     End
 
+    It 'restores CLI_ADD_HOST from a mocked ai.sandbox.config label (phase-01/003 add_host field)'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      CLI_ADD_HOST=()
+      config_b64="$(encode_config '{"version":1,"add_host":["myhost:192.168.65.254","other:10.0.0.5"]}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable "CLI_ADD_HOST[*]" should eq 'myhost:192.168.65.254 other:10.0.0.5'
+    End
+
+    It 'drops a restored --add-host spec that fails validation, keeping well-formed entries (mirrors --add-host parse-time validation)'
+      # src/options.sh's --add-host parser rejects a spec that doesn't
+      # validate (see the parse_options() --add-host tests above). A
+      # restored value arrives via a persisted docker label rather than this
+      # run's CLI args, so it must be independently re-validated rather than
+      # trusted verbatim.
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      CLI_ADD_HOST=()
+      config_b64="$(encode_config '{"version":1,"add_host":["myhost:not-an-ip","other:10.0.0.5"]}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable "CLI_ADD_HOST[*]" should eq 'other:10.0.0.5'
+      The stderr should include 'dropping restored --add-host spec'
+      The stderr should include 'myhost:not-an-ip'
+    End
+
     It 'restores NO_ISOLATE_CONFIG=true specifically (regression: previously silently dropped, causing a false-positive recreate prompt)'
       SANDBOX_NAME="test"
       CONFIG_FLAGS_PROVIDED=false
@@ -1080,17 +1231,20 @@ Describe 'ai-sandbox.sh'
     # call in running_config_matches() now expects (followup 4DzF: 9
     # separate single-field calls collapsed into 1 multi-field call, later
     # extended to 10 fields for allow-egress, then to 11 for
-    # static-playground). Field order matches the function's own `read`:
-    # image hash mode no_isolate proxy clean marketplaces plugins enable_all
-    # allow_egress static_playground. Uses the same ASCII Unit Separator
-    # (0x1F) as the implementation, not tab/pipe -- see the implementation
-    # comment for why. Existing callers that still pass only 9 or 10
-    # positional args are unaffected: printf leaves an unset trailing %s
-    # empty, which read()s into an empty trailing field -- the same default
-    # AI_SANDBOX_ALLOW_EGRESS/STATIC_PLAYGROUND has when a test doesn't set
-    # it.
+    # static-playground, then to 14 for add-host/lan-cidr/host-listen-ports
+    # -- phase-01/003's add-host triad wiring and yS0R gap closure). Field
+    # order matches the function's own `read`: image hash mode no_isolate
+    # proxy clean marketplaces plugins enable_all allow_egress
+    # static_playground add_host lan_cidr host_ports. Uses the same ASCII
+    # Unit Separator (0x1F) as the implementation, not tab/pipe -- see the
+    # implementation comment for why. Existing callers that still pass fewer
+    # than 14 positional args are unaffected: printf leaves an unset
+    # trailing %s empty, which read()s into an empty trailing field -- the
+    # same default AI_SANDBOX_ALLOW_EGRESS/STATIC_PLAYGROUND/
+    # AI_SANDBOX_ADD_HOST/AI_SANDBOX_LAN_CIDR/AI_SANDBOX_HOST_LISTEN_PORTS
+    # has when a test doesn't set it.
     mock_inspect_line() {
-      printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$@"
+      printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$@"
     }
 
     It 'returns 2 when no container is running'
@@ -1390,6 +1544,182 @@ Describe 'ai-sandbox.sh'
       }
       When call running_config_matches
       The status should eq 1
+    End
+
+    It 'returns success when the add-host label matches AI_SANDBOX_ADD_HOST (phase-01/003 triad wiring)'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      STATIC_PLAYGROUND=false
+      AI_SANDBOX_ADD_HOST="myhost:192.168.65.254|other:10.0.0.5"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" \
+              "" "" "false" "" "false" "myhost:192.168.65.254|other:10.0.0.5"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 0
+    End
+
+    It 'returns failure when the add-host label disagrees with AI_SANDBOX_ADD_HOST (e.g. enter --add-host NEW on a container created without it)'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      STATIC_PLAYGROUND=false
+      AI_SANDBOX_ADD_HOST="myhost:192.168.65.254"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" \
+              "" "" "false" "" "false" ""
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 1
+    End
+
+    It 'returns success when the lan-cidr and host-listen-ports labels match the recomputed host-detected values (followup yS0R closure)'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      STATIC_PLAYGROUND=false
+      AI_SANDBOX_ADD_HOST=""
+      AI_SANDBOX_LAN_CIDR="192.168.1.0/24"
+      AI_SANDBOX_HOST_LISTEN_PORTS="22,80"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" \
+              "" "" "false" "" "false" "" "192.168.1.0/24" "22,80"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 0
+    End
+
+    It 'returns failure when the lan-cidr label disagrees with the recomputed AI_SANDBOX_LAN_CIDR (host-state drift -- a WiFi switch between two start invocations; followup yS0R, previously an undetected silent recreate)'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      STATIC_PLAYGROUND=false
+      AI_SANDBOX_ADD_HOST=""
+      AI_SANDBOX_LAN_CIDR="10.0.0.0/24"
+      AI_SANDBOX_HOST_LISTEN_PORTS="22,80"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" \
+              "" "" "false" "" "false" "" "192.168.1.0/24" "22,80"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 1
+    End
+
+    It 'returns failure when the host-listen-ports label disagrees with the recomputed AI_SANDBOX_HOST_LISTEN_PORTS (host-state drift -- a background process opening a port between two start invocations; followup yS0R, previously an undetected silent recreate)'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      STATIC_PLAYGROUND=false
+      AI_SANDBOX_ADD_HOST=""
+      AI_SANDBOX_LAN_CIDR="192.168.1.0/24"
+      AI_SANDBOX_HOST_LISTEN_PORTS="22,80,8080"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" \
+              "" "" "false" "" "false" "" "192.168.1.0/24" "22,80"
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 1
+    End
+
+    It 'returns success for the capability-inactive empty case (no lan-cidr/host-listen-ports label, no lan-access/host-access -- the comparison is a no-op "" = "")'
+      SANDBOX_NAME="test"
+      AI_SANDBOX_IMAGE_TAG="ai-sandbox:profile-abc"
+      PROFILE_COMPOSITION_HASH="abc"
+      EFFECTIVE_MODE=mirror
+      NO_ISOLATE_CONFIG=false
+      EFFECTIVE_PROXY=false
+      AI_SANDBOX_CLEAN_SLATE=false
+      AI_SANDBOX_MARKETPLACES=""
+      AI_SANDBOX_PLUGINS=""
+      AI_SANDBOX_ENABLE_ALL_PLUGINS=false
+      STATIC_PLAYGROUND=false
+      AI_SANDBOX_ADD_HOST=""
+      AI_SANDBOX_LAN_CIDR=""
+      AI_SANDBOX_HOST_LISTEN_PORTS=""
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *".State.Status"* ]]; then
+            echo "running"
+          else
+            mock_inspect_line "ai-sandbox:profile-abc" "abc" "mirror" "false" "false" "false" \
+              "" "" "false" "" "false" "" "" ""
+          fi
+          return 0
+        fi
+      }
+      When call running_config_matches
+      The status should eq 0
     End
   End
 
@@ -1727,6 +2057,61 @@ Describe 'ai-sandbox.sh'
         --allow-egress 1.2.3.4:443 \
         --allow-egress api.example.com:8080
       The variable "CLI_ALLOW_EGRESS[*]" should eq '1.2.3.4:443 api.example.com:8080'
+    End
+
+    It 'accepts --add-host with a valid name:ip spec'
+      When call parse_options instances create mybox --add-host myhost:192.168.65.254
+      The variable "CLI_ADD_HOST[*]" should eq 'myhost:192.168.65.254'
+      The variable CONFIG_FLAGS_PROVIDED should eq true
+    End
+
+    It 'errors when --add-host is given no spec'
+      When run parse_options instances create mybox --add-host
+      The status should be failure
+      The stderr should include '--add-host requires'
+    End
+
+    It 'rejects --add-host with no colon'
+      When run parse_options instances create mybox --add-host myhost192.168.65.254
+      The status should be failure
+      The stderr should include 'exactly one'
+    End
+
+    It 'rejects --add-host with more than one colon'
+      When run parse_options instances create mybox --add-host myhost:192.168.65.254:extra
+      The status should be failure
+      The stderr should include 'exactly one'
+    End
+
+    It 'rejects --add-host with a malformed name part'
+      When run parse_options instances create mybox --add-host 'bad host!:192.168.65.254'
+      The status should be failure
+      The stderr should include 'name part must be'
+    End
+
+    It 'rejects --add-host with a hostname ip part (not a bare IPv4 literal)'
+      When run parse_options instances create mybox --add-host myhost:api.example.com
+      The status should be failure
+      The stderr should include 'ip part must be'
+    End
+
+    It 'rejects --add-host with a CIDR ip part (not a bare IPv4 literal)'
+      When run parse_options instances create mybox --add-host myhost:10.0.0.0/8
+      The status should be failure
+      The stderr should include 'ip part must be'
+    End
+
+    It 'rejects --add-host with an out-of-range IPv4 octet in the ip part'
+      When run parse_options instances create mybox --add-host myhost:999.1.1.1
+      The status should be failure
+      The stderr should include 'ip part must be'
+    End
+
+    It 'accumulates repeated --add-host specs in order'
+      When call parse_options instances create mybox \
+        --add-host myhost:192.168.65.254 \
+        --add-host other:10.0.0.5
+      The variable "CLI_ADD_HOST[*]" should eq 'myhost:192.168.65.254 other:10.0.0.5'
     End
 
     It 'accepts --enable-plugin and sets CLI_PLUGINS'
