@@ -16,3 +16,13 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 2
+          slug: thread-add-host-extra-hosts
+          title: Thread Add-Host Entries Into Container extra_hosts
+          path: phase-01-add-host-passthrough/002-thread-add-host-extra-hosts.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
