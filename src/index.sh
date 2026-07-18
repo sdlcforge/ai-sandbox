@@ -201,6 +201,15 @@ if [ "${#CLI_ALLOW_EGRESS[@]}" -gt 0 ]; then
 else
   _cli_allow_egress_json='[]'
 fi
+# _cli_add_host_json follows the same computed-once rationale as
+# _cli_allow_egress_json above -- --add-host is also CLI-only (no
+# profile-level equivalent to merge), so this is reused by both the
+# config-persistence block and the AI_SANDBOX_ADD_HOST derivation below.
+if [ "${#CLI_ADD_HOST[@]}" -gt 0 ]; then
+  _cli_add_host_json="$(printf '%s\n' "${CLI_ADD_HOST[@]}" | jq -R . | jq -s .)"
+else
+  _cli_add_host_json='[]'
+fi
 if [ "${#CLI_MARKETPLACES[@]}" -gt 0 ] || [ "${#CLI_PLUGINS[@]}" -gt 0 ] || [ "${CLI_ENABLE_ALL}" = "true" ]; then
   PROFILE_JSON="$(printf '%s\n' "${PROFILE_JSON}" | jq \
       --argjson cm "${_cli_marketplaces_json}" \
@@ -213,29 +222,31 @@ fi
 export PROFILE_JSON
 
 # --- Phase: assemble the full config-input record for persistence ---
-# Capture all nine config-input dimensions (see
+# Capture all ten config-input dimensions (see
 # plan/notes/config-persistence-design.md; allow_egress is the eighth,
-# added alongside the original seven, and static_playground is the ninth,
-# added alongside allow_egress) as a single JSON record, then
-# base64-encode it single-line -- mirroring src/credentials.sh's
+# added alongside the original seven, static_playground is the ninth, added
+# alongside allow_egress, and add_host is the tenth, added alongside
+# static_playground) as a single JSON record, then base64-encode it
+# single-line -- mirroring src/credentials.sh's
 # AI_SANDBOX_CREDENTIALS_JSON_B64 pattern -- for safe embedding in the
 # ai.sandbox.config Docker label (docker/docker-compose.yaml).
-# restore_saved_config() decodes this label to rehydrate all nine inputs on
+# restore_saved_config() decodes this label to rehydrate all ten inputs on
 # every per-instance command except create (see should_restore_config(),
 # src/utils.sh) -- broadened from the original bare-start/enter-only trigger,
 # since every other per-instance command also acts on an already-created
 # instance and needs its compose-file assembly to reflect that instance's
 # actual persisted composition. Persist CLI_MARKETPLACES/CLI_PLUGINS/
-# CLI_ENABLE_ALL/CLI_ALLOW_EGRESS (the CLI deltas), not the profile-merged
-# PROFILE_JSON set: profile-contributed entries are reproduced for free by
-# re-running profile-installer.js on restore, so only the CLI additions need
-# to round-trip through the label (allow_egress has no profile-level
-# equivalent at all, so its persisted value is simply the CLI array itself).
+# CLI_ENABLE_ALL/CLI_ALLOW_EGRESS/CLI_ADD_HOST (the CLI deltas), not the
+# profile-merged PROFILE_JSON set: profile-contributed entries are
+# reproduced for free by re-running profile-installer.js on restore, so only
+# the CLI additions need to round-trip through the label (allow_egress and
+# add_host both have no profile-level equivalent at all, so their persisted
+# values are simply the CLI arrays themselves).
 # Reuses _cli_marketplaces_json/_cli_plugins_json/_cli_enable_all_json/
-# _cli_allow_egress_json computed by the CLI-merge block above (same
-# CLI_MARKETPLACES/CLI_PLUGINS/CLI_ALLOW_EGRESS arrays) instead of
-# recomputing the same jq -R . | jq -s . conversion a second time -- see
-# followup 85Na.
+# _cli_allow_egress_json/_cli_add_host_json computed by the CLI-merge block
+# above (same CLI_MARKETPLACES/CLI_PLUGINS/CLI_ALLOW_EGRESS/CLI_ADD_HOST
+# arrays) instead of recomputing the same jq -R . | jq -s . conversion a
+# second time -- see followup 85Na.
 if [ "${#PROFILES[@]}" -gt 0 ]; then
   _config_profiles_json="$(printf '%s\n' "${PROFILES[@]}" | jq -R . | jq -s .)"
 else
@@ -248,11 +259,11 @@ _config_clean_slate_json=false
 _config_static_playground_json=false
 [ "${STATIC_PLAYGROUND:-false}" = "true" ] && _config_static_playground_json=true
 
-# version stays 1: allow_egress (8th field) and static_playground (9th
-# field) are both additive optional fields, same reasoning already applied
-# elsewhere in this project's own schema conventions (task doc Requirement
-# 4/Assumptions) -- no code branches on `version` today, so an additive
-# field doesn't warrant a bump.
+# version stays 1: allow_egress (8th field), static_playground (9th field),
+# and add_host (10th field) are all additive optional fields, same reasoning
+# already applied elsewhere in this project's own schema conventions (task
+# doc Requirement 4/Assumptions) -- no code branches on `version` today, so
+# an additive field doesn't warrant a bump.
 AI_SANDBOX_CONFIG_JSON="$(jq -n \
     --argjson profiles "${_config_profiles_json}" \
     --arg mode "${MODE_OVERRIDE}" \
@@ -263,12 +274,14 @@ AI_SANDBOX_CONFIG_JSON="$(jq -n \
     --argjson enable_all_plugins "${_cli_enable_all_json}" \
     --argjson allow_egress "${_cli_allow_egress_json}" \
     --argjson static_playground "${_config_static_playground_json}" \
+    --argjson add_host "${_cli_add_host_json}" \
     '{version: 1, profiles: $profiles, mode: $mode,
       no_isolate_config: $no_isolate_config, clean_slate: $clean_slate,
       marketplaces: $marketplaces, plugins: $plugins,
       enable_all_plugins: $enable_all_plugins,
       allow_egress: $allow_egress,
-      static_playground: $static_playground}')"
+      static_playground: $static_playground,
+      add_host: $add_host}')"
 # macOS base64 may line-wrap; tr -d '\n' guarantees a single-line label value.
 AI_SANDBOX_CONFIG_B64="$(printf '%s' "${AI_SANDBOX_CONFIG_JSON}" | base64 | tr -d '\n')"
 export AI_SANDBOX_CONFIG_B64
@@ -380,8 +393,15 @@ AI_SANDBOX_NETWORK_ALLOW="$(printf '%s\n' "${PROFILE_JSON}" \
 # second time (same rationale as followup 85Na for marketplaces/plugins).
 AI_SANDBOX_ALLOW_EGRESS="$(printf '%s\n' "${_cli_allow_egress_json}" \
   | jq -r 'join("|")')"
+# --add-host specs (task doc Requirement 1, this task): CLI-only, no
+# profile-level merge equivalent, same rationale as AI_SANDBOX_ALLOW_EGRESS
+# immediately above. Reuses _cli_add_host_json computed by the CLI-merge
+# block above instead of recomputing the same array->JSON conversion a
+# second time (same rationale as followup 85Na).
+AI_SANDBOX_ADD_HOST="$(printf '%s\n' "${_cli_add_host_json}" \
+  | jq -r 'join("|")')"
 export AI_SANDBOX_MARKETPLACES AI_SANDBOX_PLUGINS AI_SANDBOX_ENABLE_ALL_PLUGINS \
-  AI_SANDBOX_NETWORK_ALLOW AI_SANDBOX_ALLOW_EGRESS
+  AI_SANDBOX_NETWORK_ALLOW AI_SANDBOX_ALLOW_EGRESS AI_SANDBOX_ADD_HOST
 
 # lan-access capability: host-side LAN CIDR detection (macOS `route get
 # default` + `ipconfig`, see src/utils.sh's compute_lan_cidr()), consumed by
