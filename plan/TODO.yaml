@@ -51,7 +51,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-04-surface-host-access-resolution
-            commit: []
+            commit:
+                - 4d8df07
             merge: null
         - number: 5
           slug: add-host-tests
