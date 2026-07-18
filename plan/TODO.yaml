@@ -39,7 +39,8 @@ phases:
           tier: sonnet-high
           git:
             branch: phase-01-task-03-wire-add-host-into-config-pers
-            commit: []
+            commit:
+                - 341b48c
             merge: null
         - number: 4
           slug: host-access-visibility
