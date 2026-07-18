@@ -42,7 +42,7 @@ phases:
             branch: phase-01-task-03-wire-add-host-into-config-pers
             commit:
                 - 341b48c
-            merge: null
+            merge: e2a6776
         - number: 4
           slug: host-access-visibility
           title: Surface host-access Resolution Failure In Status Output
