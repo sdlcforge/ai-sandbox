@@ -2231,6 +2231,134 @@ Describe 'ai-sandbox.sh'
     End
   End
 
+  Describe 'do_status() — host-access resolution-failure marker (phase-01/004)'
+    # Helper: the marker content docker/init-firewall.sh's host-access `else`
+    # branch writes (timestamp + reason), mirroring the real script's format.
+    marker_content() {
+      echo "2026-07-18T00:00:00Z host-access: host.docker.internal did not resolve to an IPv4 address; host-access allow-list not applied"
+    }
+
+    setup() {
+      SANDBOX_NAME="test"
+      STATUS_JSON=false
+      STATUS_TEST_CHECK=false
+      AI_SANDBOX_SKIP_PLUGIN_CHECK=1
+    }
+    Before 'setup'
+
+    It 'omits the Warnings: section (human output) when there is no marker'
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          [[ "$*" == *"State.Status"* ]] && echo "running"
+          return 0
+        elif [ "$1" = "exec" ]; then
+          # `cat` on a missing marker file fails -- mirrors the real
+          # docker-exec-into-container behavior when host-access-unresolved
+          # is absent (resolution succeeded, or host-access is inactive).
+          return 1
+        fi
+        return 0
+      }
+      When call do_status
+      The output should not include 'Warnings:'
+      The output should not include 'host-access'
+    End
+
+    It 'renders a labeled Warnings: line (human output) when the marker is present'
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          [[ "$*" == *"State.Status"* ]] && echo "running"
+          return 0
+        elif [ "$1" = "exec" ]; then
+          marker_content
+          return 0
+        fi
+        return 0
+      }
+      When call do_status
+      The output should include 'Warnings:'
+      The output should include 'host-access: host.docker.internal did not resolve to an IPv4 address; no host ports allow-listed'
+    End
+
+    It 'reads the marker as root ("docker exec -u root"): the marker directory is chmod 700 root-owned but the container default exec user is non-root'
+      # _status_gather_host_access() is invoked via command substitution
+      # ($(...)), which runs it (and the mocked docker() it calls) in a
+      # subshell -- a plain variable assignment inside docker() below would
+      # not be visible after `When call do_status` returns, so capture the
+      # invocation args to a file instead (subshell-safe), matching this
+      # spec file's own "The contents of file" pattern used elsewhere (see
+      # generate_volume_override() tests below).
+      exec_args_file="$(mktemp)"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          [[ "$*" == *"State.Status"* ]] && echo "running"
+          return 0
+        elif [ "$1" = "exec" ]; then
+          echo "$*" > "${exec_args_file}"
+          marker_content
+          return 0
+        fi
+        return 0
+      }
+      When call do_status
+      The output should include 'Warnings:'
+      The contents of file "${exec_args_file}" should include '-u root'
+    End
+
+    It 'does not read the marker (no docker exec) when the container is not running'
+      docker_exec_called=false
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          [[ "$*" == *"State.Status"* ]] && echo "exited"
+          return 0
+        elif [ "$1" = "exec" ]; then
+          # shellcheck disable=SC2317 # only reachable if the implementation regresses
+          docker_exec_called=true
+          # shellcheck disable=SC2317 # only reachable if the implementation regresses
+          marker_content
+          # shellcheck disable=SC2317 # only reachable if the implementation regresses
+          return 0
+        fi
+        return 0
+      }
+      When call do_status
+      The variable docker_exec_called should eq false
+      The output should not include 'Warnings:'
+    End
+
+    It 'includes host_access.resolved: true in --json output when there is no marker'
+      STATUS_JSON=true
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          [[ "$*" == *"State.Status"* ]] && echo "running"
+          return 0
+        elif [ "$1" = "exec" ]; then
+          return 1
+        fi
+        return 0
+      }
+      When call do_status
+      The output should include '"resolved": true'
+    End
+
+    It 'includes host_access.resolved: false and a reason in --json output when the marker is present'
+      STATUS_JSON=true
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          [[ "$*" == *"State.Status"* ]] && echo "running"
+          return 0
+        elif [ "$1" = "exec" ]; then
+          marker_content
+          return 0
+        fi
+        return 0
+      }
+      When call do_status
+      The output should include '"resolved": false'
+      The output should include '"reason"'
+    End
+  End
+
   Describe 'generate_volume_override() clean-slate mode' unit
     setup() {
       export TMPDIR_VO="$(mktemp -d)"
