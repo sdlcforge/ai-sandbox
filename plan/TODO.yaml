@@ -26,3 +26,13 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 3
+          slug: config-persistence-triad
+          title: Wire Add-Host Into Config-Persistence Triad And Close LAN/Host-Ports Gap
+          path: phase-01-add-host-passthrough/003-config-persistence-triad.md
+          done: false
+          tier: sonnet-high
+          git:
+            branch: null
+            commit: []
+            merge: null
