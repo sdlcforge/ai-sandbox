@@ -5,6 +5,7 @@ phases:
     - number: 1
       slug: add-host-passthrough
       title: Add-Host Pass-Through Flag
+      diff_base: 7dd0229f170cc4a1fdb7e6de96482ea987add511
       tasks:
         - number: 1
           slug: add-host-flag-parsing
