@@ -200,11 +200,6 @@ items:
       date: "2026-07-11"
       tag: network-capabilities
       text: '[phase-02-network-capabilities/007-fix-capability-ifs-word-splitting.md] CRITICAL, previously-unknown finding discovered during this task''s fail-open verification (out of this task''s file scope to fix): S6_BEHAVIOUR_IF_STAGE2_FAILS is unset everywhere in this project. Empirically confirmed via a real s6-overlay v3.2.0.2 container repro that with it unset, a cont-init.d script exiting nonzero -- including docker/rootfs/etc/cont-init.d/03-init-firewall''s own exit 1 after its 60s wait for the firewall-init sidecar times out -- does NOT halt the container; all later cont-init.d stages still run and the container reports started successfully. This means the ''wait-then-fail-loud'' mechanism the Phase 1 code comments describe does not actually function as documented under this project''s current, unmodified configuration: ANY future failure of the firewall-init sidecar (not just the IFS bug this task fixes) would let ai-sandbox start with an unrestricted default-ACCEPT OUTPUT policy. This undermines the fail-closed guarantee the entire Phase 1 security fix depends on. Confirmed the fix direction empirically: with S6_BEHAVIOUR_IF_STAGE2_FAILS=2 explicitly set, the container DOES correctly halt -- but only after every cont-init.d script in the directory has already run to completion (pass/fail is decided once, at the end, not per-script), so pairing this setting alone may still leave a window unless combined with earlier-ordered guarding. Needs a dedicated, high-priority follow-up task.'
-    - title: Stale comment in src/status.sh (~line 48) say
-      id: WjsY
-      date: "2026-07-11"
-      tag: allow-egress-flag
-      text: '[phase-03-allow-egress-flag/001-add-allow-egress-flag-parsing.md] Stale comment in src/status.sh (~line 48) says "seven-field config record", should say "eight-field" now that allow_egress exists. Not fixed (out of this task''s file scope) - purely a comment, no functional impact.'
     - title: 'Full make test.integration run not completed '
       id: Icw2
       date: "2026-07-11"
