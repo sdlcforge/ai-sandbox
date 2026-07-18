@@ -62,7 +62,7 @@ phases:
           done: false
           tier: sonnet-med
           git:
-            branch: null
+            branch: phase-01-task-05-test-add-host-flag-persistence
             commit: []
             merge: null
     - number: 2
