@@ -47,7 +47,7 @@ phases:
           slug: host-access-visibility
           title: Surface host-access Resolution Failure In Status Output
           path: phase-01-add-host-passthrough/004-host-access-visibility.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: 'Added a durable, fail-soft-preserving visibility signal for docker/init-firewall.sh''s host-access resolution-failure path: a timestamped marker on the shared firewall-handshake volume on failure, cleared on success. src/status.sh gained _status_gather_host_access(), wired into do_status(), reading the marker via docker exec -u root (root override required and was a real bug fixed during implementation). Human output gets a Warnings: line only when unresolved; JSON gets explicit host_access.resolved boolean. Verified via scripted harness against the real init-firewall.sh plus 5 new unit tests. make lint and unit suite clean relative to baseline.'
           git:
