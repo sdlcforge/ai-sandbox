@@ -54,7 +54,7 @@ phases:
             branch: phase-01-task-04-surface-host-access-resolution
             commit:
                 - 4d8df07
-            merge: null
+            merge: 5cacf9e
         - number: 5
           slug: add-host-tests
           title: Test Add-Host Flag, Persistence, And Visibility
