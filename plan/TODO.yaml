@@ -46,3 +46,13 @@ phases:
             branch: null
             commit: []
             merge: null
+        - number: 5
+          slug: add-host-tests
+          title: Test Add-Host Flag, Persistence, And Visibility
+          path: phase-01-add-host-passthrough/005-add-host-tests.md
+          done: false
+          tier: sonnet-med
+          git:
+            branch: null
+            commit: []
+            merge: null
