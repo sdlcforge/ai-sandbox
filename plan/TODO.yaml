@@ -35,7 +35,7 @@ phases:
           slug: config-persistence-triad
           title: Wire Add-Host Into Config-Persistence Triad And Close LAN/Host-Ports Gap
           path: phase-01-add-host-passthrough/003-config-persistence-triad.md
-          done: false
+          done: true
           tier: sonnet-high
           digest: Wired --add-host through the full config-persistence triad exactly like --allow-egress (JSON conversion, config-input record field, compose env var on both services, ai.sandbox.add-host label, restore_saved_config() rehydration with is_valid_add_host_spec() re-validation, running_config_matches() comparison), and closed the pre-existing yS0R gap by adding ai.sandbox.lan-cidr/ai.sandbox.host-listen-ports labels and comparisons so host-state drift on a lan-access/host-access container now triggers the existing consent prompt instead of a silent recreate. Also fixed the stale WjsY field-count comment in src/status.sh. make lint/make build green, no regressions vs baseline.
           git:
