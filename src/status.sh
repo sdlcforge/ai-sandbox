@@ -61,6 +61,37 @@ function _status_gather_config() {
     printf '%s' "${config_json}"
 }
 
+# Read the host-access resolution-failure marker (phase-01/004-host-access-
+# visibility) via `docker exec`, host-side, when the container is running.
+# `docker/init-firewall.sh`'s host-access `else` branch writes
+# host-access-unresolved onto the shared firewall-handshake volume,
+# best-effort, whenever the host-access capability is active but
+# `getent ahostsv4 host.docker.internal` returned no IPv4 -- and removes it on
+# its own success path -- so the marker's mere presence is an accurate
+# current-lifecycle signal, not a leftover. A plain `docker exec` (not routed
+# through the container's own network stack) is unaffected by the egress
+# firewall that same script builds, so this read works even when host-access
+# itself is the very capability that failed to resolve. Same
+# AI_SANDBOX_FIREWALL_MARKER_DIR default as docker/init-firewall.sh,
+# docker/init-firewall-sidecar.sh, and
+# docker/rootfs/etc/cont-init.d/03-init-firewall. `-u root`: the marker
+# directory is chmod 700, root-owned (init-firewall-sidecar.sh, security-005)
+# -- only root-run processes can even traverse it -- but this container's own
+# default exec user is the non-root ${HOST_USER} (docker/Dockerfile.base's
+# final `USER`), so a plain `docker exec` would hit EACCES on the directory
+# traversal alone and silently look identical to "no marker" without this
+# override. Prints the marker's raw content on stdout when present; prints
+# nothing (and returns 0) when the container isn't running, host-access
+# wasn't active, or resolution succeeded -- all three collapse to "no warning
+# to show", not an error.
+function _status_gather_host_access() {
+    local state="$1" ctr_name marker_dir
+    [ "${state}" = "running" ] || return 0
+    ctr_name="$(sandbox_container_name)"
+    marker_dir="${AI_SANDBOX_FIREWALL_MARKER_DIR:-/var/lib/ai-sandbox-firewall}"
+    docker exec -u root "${ctr_name}" cat "${marker_dir}/host-access-unresolved" 2>/dev/null || true
+}
+
 # Emit tab-separated rows describing each built ai-sandbox image:
 #   tag<TAB>created<TAB>chromium<TAB>docker<TAB>stale
 # Empty output means no built images.
@@ -106,7 +137,7 @@ function _render_config_section() {
 }
 
 function _render_status_human() {
-    local state="$1" images="$2" conflicts_claude="$3" conflicts_workers="$4" config_json="$5"
+    local state="$1" images="$2" conflicts_claude="$3" conflicts_workers="$4" config_json="$5" host_access_marker="$6"
 
     echo "Container: ${state}"
     echo
@@ -147,6 +178,15 @@ function _render_status_human() {
         fi
     fi
 
+    # Omit the Warnings section entirely (not an error, no placeholder) when
+    # there is no marker -- covers "not running", "host-access inactive", and
+    # "resolved fine" alike (see _status_gather_host_access()).
+    if [ -n "${host_access_marker}" ]; then
+        echo
+        echo "Warnings:"
+        echo "  host-access: host.docker.internal did not resolve to an IPv4 address; no host ports allow-listed"
+    fi
+
     # Omit the Configuration section entirely (not an error, no placeholder)
     # when the label is absent -- expected for any container with no
     # ai.sandbox.config label. Uses an if/fi (not `[ ... ] && ...`) so the
@@ -159,7 +199,7 @@ function _render_status_human() {
 }
 
 function _render_status_json() {
-    local state="$1" images="$2" conflicts_claude="$3" conflicts_workers="$4" config_json="$5"
+    local state="$1" images="$2" conflicts_claude="$3" conflicts_workers="$4" config_json="$5" host_access_marker="$6"
 
     local images_json='[]'
     if [ -n "${images}" ]; then
@@ -196,22 +236,40 @@ function _render_status_json() {
     local config_arg='null'
     [ -n "${config_json}" ] && config_arg="${config_json}"
 
+    # {resolved:true} when there is no host-access-unresolved marker to
+    # report -- covers "not running", "host-access inactive", and "resolved
+    # fine" alike, none of which are distinguishable from this field alone
+    # and none of which need to be: there's simply nothing to flag, so
+    # `resolved` reads unambiguously true for an automated consumer rather
+    # than requiring it to special-case a null/absent field the way `config`
+    # above does. {resolved:false, reason:...} only when
+    # docker/init-firewall.sh's host-access fail-soft path actually wrote the
+    # marker (see _status_gather_host_access()).
+    local host_access_arg
+    if [ -n "${host_access_marker}" ]; then
+        host_access_arg=$(jq -n --arg reason "${host_access_marker}" '{resolved:false, reason:$reason}')
+    else
+        host_access_arg='{"resolved":true}'
+    fi
+
     jq -n \
         --arg state "${state}" \
         --argjson images "${images_json}" \
         --argjson runnable "${runnable}" \
         --argjson blockers "${blockers_json}" \
         --argjson config "${config_arg}" \
-        '{container:{state:$state}, images:$images, runnable:$runnable, blockers:$blockers, config:$config}'
+        --argjson host_access "${host_access_arg}" \
+        '{container:{state:$state}, images:$images, runnable:$runnable, blockers:$blockers, config:$config, host_access:$host_access}'
 }
 
 # Main entry point for `ai-sandbox detail` (the CLI-facing command word; this
 # file/function name is unchanged from when the word was called `status`).
 function do_status() {
-    local state images config_json
+    local state images config_json host_access_marker
     state="$(_status_container_state)"
     images="$(_status_gather_images)"
     config_json="$(_status_gather_config)"
+    host_access_marker="$(_status_gather_host_access "${state}")"
 
     # Populate _PLUGIN_CONFLICTS_* unless explicitly skipped.
     if [ "${AI_SANDBOX_SKIP_PLUGIN_CHECK:-0}" = "1" ]; then
@@ -228,9 +286,9 @@ function do_status() {
     fi
 
     if [ "${STATUS_JSON}" = "true" ]; then
-        _render_status_json "${state}" "${images}" "${c_claude}" "${c_workers}" "${config_json}"
+        _render_status_json "${state}" "${images}" "${c_claude}" "${c_workers}" "${config_json}" "${host_access_marker}"
     else
         echo "Sandbox: ${SANDBOX_NAME}"
-        _render_status_human "${state}" "${images}" "${c_claude}" "${c_workers}" "${config_json}"
+        _render_status_human "${state}" "${images}" "${c_claude}" "${c_workers}" "${config_json}" "${host_access_marker}"
     fi
 }
