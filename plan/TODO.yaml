@@ -30,7 +30,7 @@ phases:
             branch: phase-01-task-02-thread-add-host-entries-into-c
             commit:
                 - "1176048"
-            merge: null
+            merge: 19bfef7
         - number: 3
           slug: config-persistence-triad
           title: Wire Add-Host Into Config-Persistence Triad And Close LAN/Host-Ports Gap
