@@ -280,3 +280,8 @@ items:
       date: "2026-07-18"
       tag: add-host-passthrough
       text: '[phase-01-add-host-passthrough/002-thread-add-host-extra-hosts.md] 7 pre-existing make test.unit failures (ai_sandbox_spec.sh lines 3181,3190,3199,3273,3283,3293,3392 — teardown/dropped-profile/fix-ssh dispatch regressions) confirmed present on baseline, unrelated to this task.'
+    - title: Observed ./bin/ai-sandbox.sh start <name> pro
+      id: UoDr
+      date: "2026-07-18"
+      tag: add-host-passthrough
+      text: '[phase-01-add-host-passthrough/002-thread-add-host-extra-hosts.md] Observed ./bin/ai-sandbox.sh start <name> producing a container named ''ai-sandbox-'' with empty sandbox-name component and garbled instances ls listing, reproduced with and without --add-host so unrelated to this task''s diff; unverified against a clean environment, flagged as an observation only.'
