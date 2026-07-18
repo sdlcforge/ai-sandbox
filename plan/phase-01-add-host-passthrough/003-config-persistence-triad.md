@@ -158,4 +158,58 @@ consent-gate behavior in `docs/architecture.md`.)
   (stale field-count comment) in `plan/followups.yaml`.
 - `docs/architecture.md` §"Config persistence and restore" (~524-634) and the
   host-env-passthrough section (~315-330) — background, updated by doc-updates.
+
+## Status
+
+**Outcome:** succeeded (2026-07-18).
+
+**Part A (`--add-host` triad wiring):** `_cli_add_host_json`/`AI_SANDBOX_ADD_HOST`
+mirror `_cli_allow_egress_json`/`AI_SANDBOX_ALLOW_EGRESS` in `src/index.sh`;
+`add_host` is now the tenth field in the `AI_SANDBOX_CONFIG_JSON` record
+(`version` unchanged at 1, additive field). `docker/docker-compose.yaml` carries
+`AI_SANDBOX_ADD_HOST` in both the `ai-sandbox` and `firewall-init` `environment:`
+blocks and an `ai.sandbox.add-host` label. `restore_saved_config()`
+(`src/utils.sh`) decodes `saved_add_host`, re-validates each restored spec
+against `is_valid_add_host_spec()` (task 001), and rehydrates `CLI_ADD_HOST`,
+dropping (with a warning) any entry that fails validation.
+`running_config_matches()` adds `ai.sandbox.add-host` to the multi-field
+`docker inspect` format string and compares `AI_SANDBOX_ADD_HOST` the same way
+as `AI_SANDBOX_ALLOW_EGRESS`.
+
+**Part B (`yS0R` gap closure):** `ai.sandbox.lan-cidr` and
+`ai.sandbox.host-listen-ports` labels added to `docker/docker-compose.yaml`
+(the `environment:` entries already existed). Neither is added to the
+config-input JSON record or rehydrated by `restore_saved_config()` — both are
+host-detected state recomputed every invocation, per the task's design.
+`running_config_matches()` compares both labels against the freshly
+recomputed `AI_SANDBOX_LAN_CIDR`/`AI_SANDBOX_HOST_LISTEN_PORTS`; a code
+comment on the function documents that a mismatch-triggered recreate here is
+the intended behavior (closing `yS0R`), not a bug.
+
+**Part C (`WjsY`):** `src/status.sh`'s stale "seven-field config record"
+comment reworded to "config record" (no hardcoded count) to avoid the
+comment going stale again as more fields are added.
+
+**Validation:** `make lint` and `make build` both pass. `docker compose
+... config` (rendered with representative env values) shows all three new
+labels (`ai.sandbox.add-host`, `ai.sandbox.lan-cidr`,
+`ai.sandbox.host-listen-ports`) on both services. The full `--add-host`
+round-trip, drift-detection (`--add-host` mismatch), and `yS0R` drift
+scenarios (LAN CIDR mismatch, host-listen-ports mismatch, and the
+empty/capability-inactive no-op case) from this task's `## Validation`
+section were exercised directly against `restore_saved_config()`/
+`running_config_matches()` with mocked `docker inspect` output (ad hoc
+scripts in the scratchpad, not committed) and all produced the specified
+exit codes. `shellspec test/unit/ai_sandbox_spec.sh` shows the same 272
+examples / 7 failures as the pre-existing baseline (verified via `git
+stash`) — the 7 failures are unrelated `dispatchtest` end-to-end dispatch
+cases that fail identically with and without this task's changes; none of
+the `running_config_matches()`/`restore_saved_config()`-specific examples
+regressed.
+
+**Note:** did not add new shellspec coverage for `--add-host`/`yS0R` in
+`test/unit/ai_sandbox_spec.sh` — task 005 (`add-host-tests`) owns automated
+test coverage for this flag per the plan's task breakdown; this task's
+`## Validation` explicitly labels the round-trip/drift checks
+"manual or task-005 automated".
 </content>

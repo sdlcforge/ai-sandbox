@@ -45,9 +45,8 @@ function _status_gather_config() {
 
     # Defense-in-depth size bound (followup qVbA), mirroring
     # restore_saved_config() in src/utils.sh: 16KB is generously larger than
-    # any real seven-field config record could ever be. An oversized value is
-    # treated the same as an absent label (nothing to display) rather than
-    # erroring.
+    # any real config record could ever be. An oversized value is treated the
+    # same as an absent label (nothing to display) rather than erroring.
     max_config_b64_len=16384
     [ "${#label_b64}" -le "${max_config_b64_len}" ] || return 0
 

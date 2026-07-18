@@ -74,6 +74,23 @@ services:
       # enable-all -- so this is simply the CLI_ALLOW_EGRESS array itself.
       # Read by running_config_matches() the same way as the labels above.
       ai.sandbox.allow-egress: "${AI_SANDBOX_ALLOW_EGRESS:-}"
+      # --add-host specs (see AI_SANDBOX_ADD_HOST below). CLI-only -- no
+      # profile-level equivalent to merge, same shape as
+      # ai.sandbox.allow-egress above -- so this is simply the CLI_ADD_HOST
+      # array itself. Read by running_config_matches() the same way as the
+      # labels above.
+      ai.sandbox.add-host: "${AI_SANDBOX_ADD_HOST:-}"
+      # Host-detected state captured at create/start time, not a CLI input --
+      # recomputed from live host state every invocation (src/index.sh) so
+      # these have no config-input JSON record entry and are never restored
+      # by restore_saved_config(); they exist here purely so
+      # running_config_matches() can detect host-state drift (a WiFi switch,
+      # a background process opening a port) between two `start` invocations
+      # and prompt for consent before silently recreating a running
+      # lan-access/host-access container (followup yS0R). Empty when the
+      # corresponding capability is inactive.
+      ai.sandbox.lan-cidr: "${AI_SANDBOX_LAN_CIDR:-}"
+      ai.sandbox.host-listen-ports: "${AI_SANDBOX_HOST_LISTEN_PORTS:-}"
       # Multi-instance management labels. ai.sandbox.managed marks containers
       # created by this tool (for `list`). ai.sandbox.instance records the
       # instance name for filtering. ai.sandbox.profiles records the comma-
@@ -82,10 +99,10 @@ services:
       ai.sandbox.managed: "true"
       ai.sandbox.instance: "${SANDBOX_NAME}"
       ai.sandbox.profiles: "${SANDBOX_PROFILES:-}"
-      # Canonical config-input record: base64-encoded JSON capturing all nine
+      # Canonical config-input record: base64-encoded JSON capturing all ten
       # config-changing CLI inputs (profiles, mode, no-isolate-config,
       # clean-slate, marketplaces, plugins, enable-all-plugins, allow-egress,
-      # static-playground).
+      # static-playground, add-host).
       # Sole source restore_saved_config() reads to rehydrate a bare
       # start/enter; see plan/notes/config-persistence-design.md.
       ai.sandbox.config: "${AI_SANDBOX_CONFIG_B64:-}"
@@ -130,6 +147,13 @@ services:
       # for consistency with AI_SANDBOX_NETWORK_ALLOW/AI_SANDBOX_CAPABILITIES
       # below, which follow the same "declared on both services" shape.
       - AI_SANDBOX_ALLOW_EGRESS=${AI_SANDBOX_ALLOW_EGRESS:-}
+      # --add-host specs (see the ai.sandbox.add-host label above and
+      # AI_SANDBOX_ADD_HOST in src/index.sh). Whether the firewall-init
+      # sidecar's copy below (docker/init-firewall.sh) actually consumes this
+      # depends on phase-01/004; kept in sync on both services regardless, per
+      # the same "declared on both services" shape as
+      # AI_SANDBOX_NETWORK_ALLOW/AI_SANDBOX_CAPABILITIES below.
+      - AI_SANDBOX_ADD_HOST=${AI_SANDBOX_ADD_HOST:-}
       # Profile `network.allow` entries (hostnames/CIDRs); read by
       # docker/init-firewall.sh at container init to extend the egress
       # allow-list. See AI_SANDBOX_NETWORK_ALLOW in src/index.sh.
@@ -205,6 +229,10 @@ services:
       # init-firewall.sh only ever runs here, in the sidecar (same rationale
       # as AI_SANDBOX_NETWORK_ALLOW/AI_SANDBOX_CAPABILITIES below).
       - AI_SANDBOX_ALLOW_EGRESS=${AI_SANDBOX_ALLOW_EGRESS:-}
+      # --add-host specs -- kept in sync with ai-sandbox's environment block
+      # above (see that copy's comment). Whether init-firewall.sh actually
+      # consumes this depends on phase-01/004.
+      - AI_SANDBOX_ADD_HOST=${AI_SANDBOX_ADD_HOST:-}
       # Same capability-dispatch rationale as ai-sandbox's environment block
       # above -- init-firewall.sh itself runs here, in the sidecar, so this
       # is the copy that actually matters for capability-driven rule
