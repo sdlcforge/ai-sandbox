@@ -15,7 +15,8 @@ phases:
           tier: sonnet-med
           git:
             branch: phase-01-task-01-add-host-flag-parsing-and-vali
-            commit: []
+            commit:
+                - 29a0df6
             merge: null
         - number: 2
           slug: thread-add-host-extra-hosts
