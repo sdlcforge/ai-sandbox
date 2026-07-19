@@ -223,3 +223,25 @@ Tagged `add-host-passthrough` (added 2026-07-18) or `doc-updates` (added
   `host.docker.internal`-reserved-name rejection. Plan notes are outside
   `docs/*` scope and are informational only — no action needed; plan notes
   are cleaned up at plan close-out.
+
+## Final Task State
+
+# TODO
+
+## Purpose and scope
+
+Tracking document for the active plan.
+
+## Tasks
+
+### Phase 01 — Add-Host Pass-Through Flag
+
+- [x] [001-add-host-flag-parsing.md](./phase-01-add-host-passthrough/001-add-host-flag-parsing.md) — tier `sonnet-med` · branch `phase-01-task-01-add-host-flag-parsing-and-vali` · commit `29a0df6` · merge `f6733c6`
+- [x] [002-thread-add-host-extra-hosts.md](./phase-01-add-host-passthrough/002-thread-add-host-extra-hosts.md) — tier `sonnet-high` · branch `phase-01-task-02-thread-add-host-entries-into-c` · commit `1176048` · merge `19bfef7`
+- [x] [003-config-persistence-triad.md](./phase-01-add-host-passthrough/003-config-persistence-triad.md) — tier `sonnet-high` · branch `phase-01-task-03-wire-add-host-into-config-pers` · commit `341b48c` · merge `e2a6776`
+- [x] [004-host-access-visibility.md](./phase-01-add-host-passthrough/004-host-access-visibility.md) — tier `sonnet-high` · branch `phase-01-task-04-surface-host-access-resolution` · commit `4d8df07` · merge `5cacf9e`
+- [x] [005-add-host-tests.md](./phase-01-add-host-passthrough/005-add-host-tests.md) — tier `sonnet-med` · branch `phase-01-task-05-test-add-host-flag-persistence` · commit `7f4aa21` · merge `1f00377`
+
+### Phase 02 — Documentation Updates
+
+- [x] [001-update-architecture-docs.md](./phase-02-doc-updates/001-update-architecture-docs.md) — tier `sonnet-high` · branch `phase-02-task-01-update-architecture-docs` · commit `a1451a0` · merge `6164555`
