@@ -336,9 +336,12 @@ override, consumed directly by Docker Compose at container-create time (see
 [Caller-pinned host reachability: `--add-host`](#caller-pinned-host-reachability---add-host)
 below). The `ai-sandbox`-side env var exists purely for label-substitution
 symmetry with the other `CLI_*`-derived vars in this block, and to feed
-`running_config_matches()`/`restore_saved_config()` via the
-`ai.sandbox.add-host` label (see
+`running_config_matches()` via the `ai.sandbox.add-host` label (see
 [Config persistence and restore](#config-persistence-and-restore) below).
+`restore_saved_config()` does not read this env var at all — it rehydrates
+`CLI_ADD_HOST` directly from the separate `ai.sandbox.config` label's
+`add_host` field, independent of `AI_SANDBOX_ADD_HOST` (see "Why restore and
+matches don't read the same labels" in that same section).
 
 **host-access resolution-failure visibility.** `host-access`'s fail-soft
 behavior — log-and-skip when `getent ahostsv4 host.docker.internal` returns
@@ -401,10 +404,12 @@ source of truth reused by `restore_saved_config()`'s defense-in-depth
 re-validation of a restored `ai.sandbox.config` label (see
 [Config persistence and restore](#config-persistence-and-restore) below).
 
-**Reserved name.** `host.docker.internal` is rejected outright at both parse
-time and restore time (`is_reserved_add_host_name()`, `src/utils.sh`): the
-base compose file already statically maps that exact name to the
-container's host-gateway IP via its own
+**Reserved name.** `host.docker.internal` is rejected outright,
+case-insensitively, at both parse time and restore time
+(`is_reserved_add_host_name()`, `src/utils.sh`, which lowercases the
+supplied name via `tr` before comparing, so `HOST.DOCKER.INTERNAL` is
+rejected too): the base compose file already statically maps that exact
+name to the container's host-gateway IP via its own
 `extra_hosts: ["host.docker.internal:host-gateway"]` entry, and Docker
 Compose's `extra_hosts` lists **append** across `-f` files rather than
 replace (empirically confirmed — see the extra_hosts threading paragraph

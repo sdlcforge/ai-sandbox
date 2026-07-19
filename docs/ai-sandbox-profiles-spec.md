@@ -507,7 +507,7 @@ multiple entries in one invocation.
 
 | Part | Rule |
 |------|------|
-| `<name>` | Must be a valid hostname. Cannot be `host.docker.internal` — that name is reserved (see below). |
+| `<name>` | Must be a valid hostname. Cannot be `host.docker.internal` (case-insensitively) — that name is reserved (see below). |
 | `<ip>` | Must be a bare IPv4 literal (e.g. `192.168.65.254`). No CIDR and no hostname form — unlike `--allow-egress`'s host part, which accepts either. |
 
 A spec with anything other than exactly one `:` separating `<name>` from
@@ -517,8 +517,9 @@ is applied.
 
 **`host.docker.internal` is reserved.** ai-sandbox already statically maps
 this exact name to the container's host-gateway IP. Supplying
-`--add-host host.docker.internal:<ip>` is rejected outright — both at parse
-time and when restoring a previously-saved value — rather than
+`--add-host host.docker.internal:<ip>` is rejected outright,
+case-insensitively (so `HOST.DOCKER.INTERNAL` is rejected too) — both at
+parse time and when restoring a previously-saved value — rather than
 accepted-then-warned: it would create a second, conflicting `/etc/hosts`
 entry for the same name with no reliably-controllable resolution precedence,
 and could indeterminately retarget which IP the `host-access` capability's
