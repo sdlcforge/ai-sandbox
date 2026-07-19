@@ -78,6 +78,7 @@ phases:
           path: phase-02-doc-updates/001-update-architecture-docs.md
           done: false
           tier: sonnet-high
+          digest: 'Updated docs/architecture.md and docs/ai-sandbox-profiles-spec.md to document the as-built Phase 1 work: the --add-host flag (parsing/validation, host.docker.internal-reserved-name rejection, extra_hosts threading, Compose append-not-replace semantics), its full config-persistence triad participation as the tenth config-input field, the yS0R gap closure, and host-access resolution-failure visibility. Grounded in the actual merged code. No new top-level sections added.'
           git:
             branch: phase-02-task-01-update-architecture-docs
             commit:
