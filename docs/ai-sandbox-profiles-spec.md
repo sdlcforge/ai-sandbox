@@ -254,6 +254,8 @@ Capabilities are named features that extend the base image. They are declared in
 
 **Absence:** When `host-access` is not in `capabilities`, the container cannot reach any host-side listening port beyond what the default allow-list or another active capability already permits.
 
+**Resolution-failure visibility.** `host-access` resolves `host.docker.internal` itself (via `getent ahostsv4`, in the firewall-init sidecar) to build its allow-list rule. If that resolution yields no IPv4 address, the capability fails soft — it logs and skips, the container still starts, but no host ports get allow-listed. This failure is durably surfaced rather than left as a container-init log line: `ai-sandbox detail` shows a `Warnings:` line (`host-access: host.docker.internal did not resolve to an IPv4 address; no host ports allow-listed`) and `--json` output carries a `host_access.resolved: false` field with a `reason`, whenever the container is running and the failure occurred on its current lifecycle. Absent a failure, `--json` reports `host_access.resolved: true` and human output shows no warning. A subsequent successful resolution (e.g. after recreating the container) clears the signal. See [`docs/architecture.md`'s "host-access resolution-failure visibility"](architecture.md#capability-driven-dynamic-firewall-rules) for the marker mechanism.
+
 **Dockerfile fragment:** `docker/capabilities/host-access.dockerfile` (no-op)
 
 ### `lan-access`
@@ -485,6 +487,97 @@ Multiple `--profile` flags are merged left to right according to the composition
 ```sh
 ai-sandbox start --profile base --mode static
 ```
+
+### `--add-host`: pinning a stable host IPv4
+
+```sh
+ai-sandbox start --add-host myhost:192.168.65.254
+```
+
+`--add-host <name>:<ip>` is a repeatable, public CLI flag — independent of
+the profile system — that pins a caller-supplied hostname to a literal IPv4
+address inside the container's `/etc/hosts`. It exists because Docker
+Desktop's `host.docker.internal` resolution has proven not to be uniformly
+IPv4 across otherwise-identical installs; rather than have ai-sandbox try to
+detect or resolve a host IPv4 itself, the caller supplies the IP it wants and
+ai-sandbox threads it into the container verbatim. Repeat the flag to pin
+multiple entries in one invocation.
+
+**Validation contract.**
+
+| Part | Rule |
+|------|------|
+| `<name>` | Must be a valid hostname. Cannot be `host.docker.internal` (case-insensitively) — that name is reserved (see below). |
+| `<ip>` | Must be a bare IPv4 literal (e.g. `192.168.65.254`). No CIDR and no hostname form — unlike `--allow-egress`'s host part, which accepts either. |
+
+A spec with anything other than exactly one `:` separating `<name>` from
+`<ip>`, or that fails either check above, is rejected at parse time with a
+distinct error message per failure mode and a nonzero exit; nothing partial
+is applied.
+
+**`host.docker.internal` is reserved.** ai-sandbox already statically maps
+this exact name to the container's host-gateway IP. Supplying
+`--add-host host.docker.internal:<ip>` is rejected outright,
+case-insensitively (so `HOST.DOCKER.INTERNAL` is rejected too) — both at
+parse time and when restoring a previously-saved value — rather than
+accepted-then-warned: it would create a second, conflicting `/etc/hosts`
+entry for the same name with no reliably-controllable resolution precedence,
+and could indeterminately retarget which IP the `host-access` capability's
+firewall rule (which resolves that same name) actually allow-lists. See
+[`docs/architecture.md`'s "Caller-pinned host reachability: `--add-host`"](architecture.md#caller-pinned-host-reachability---add-host)
+for the full mechanism.
+
+**Persistence.** `--add-host` is CLI-only — there is no profile-level
+equivalent to compose it with — so, like `--allow-egress`, its full
+effective value is persisted verbatim across `start`/restore and compared on
+every explicit invocation, prompting for consent before a value change would
+otherwise silently recreate a running container. See
+[`docs/architecture.md`'s "Config persistence and restore"](architecture.md#config-persistence-and-restore).
+
+#### Downstream-automation-consumer contract
+
+`--add-host` is the stable, documented mechanism for an automation caller to
+pin a host-side service's IPv4 for a container created via
+`ai-sandbox instances create` (or the normal `create`/`start` path
+generally), independent of Docker Desktop's variable `host.docker.internal`
+resolution. The motivating consumer is Flow's flow-run-optimizer, which
+needs its in-container process to report OpenTelemetry data to a host-side
+collector.
+
+**Pinning a name only makes it *resolvable* — reaching it under the
+default-deny firewall additionally requires an egress allowance.** The two
+composition paths:
+
+- **`host.docker.internal` itself is not pinnable via `--add-host`** (it is
+  reserved — see above). Reaching it stays governed entirely by the
+  `host-access` capability (`capabilities: [host-access]`; see
+  [Capabilities reference](#capabilities-reference) above): `host-access`
+  independently resolves `host.docker.internal` and allow-lists its IPv4 on
+  the host's currently-LISTENing TCP ports, with a resolution-failure signal
+  now surfaced in `ai-sandbox detail`/`--json` output if that resolution
+  fails (see the [`host-access`](#host-access) entry above). A caller whose
+  host reliably resolves `host.docker.internal` needs nothing from
+  `--add-host` for this case.
+- **Any other name is the `--add-host` path.** A caller that cannot rely on
+  `host.docker.internal` resolving as expected — or that simply wants a
+  stable, self-controlled endpoint entirely immune to Docker Desktop's
+  resolution variance — pins a name it chooses (e.g. `otel-collector`) to a
+  host IPv4 it has determined by its own means (ai-sandbox does not detect
+  or validate host-side reachability of the pinned IP; that determination is
+  the caller's responsibility): `--add-host otel-collector:192.168.65.254`.
+  This makes the name *resolvable* inside the container. To make it
+  *reachable*, the caller must also pass
+  `--allow-egress 192.168.65.254:4318` (the pinned IP and target port) —
+  `host-access`'s firewall rule is hardcoded to `host.docker.internal` and
+  does not cover any other name. The caller's application then targets the
+  pinned name (`otel-collector:4318`), not `host.docker.internal`,
+  sidestepping the resolution question entirely.
+
+`--add-host` does not fix `host.docker.internal` resolution itself — no
+host-side IPv4 auto-detection ships in ai-sandbox. It gives a caller a
+name/IP mapping it fully controls, composed with an explicit egress grant,
+as the documented alternative to depending on Docker Desktop's resolution
+behavior.
 
 ### Removed flags
 

@@ -53,6 +53,18 @@
 #                   directly for per-failure-mode error messages). CLI-only --
 #                   there is no profile-level equivalent to merge, unlike
 #                   CLI_MARKETPLACES/CLI_PLUGINS.
+#   CLI_ADD_HOST  — array of --add-host specs (<name>:<ip>), syntactically
+#                   validated at parse time (see the --add-host case below,
+#                   which calls src/utils.sh's
+#                   is_valid_egress_hostname()/is_valid_ipv4_literal()
+#                   directly for per-failure-mode error messages, plus
+#                   is_reserved_add_host_name() to reject the reserved name
+#                   "host.docker.internal"). CLI-only --
+#                   there is no profile-level equivalent to merge, matching
+#                   CLI_ALLOW_EGRESS. Like the other CLI_* arrays, it is a
+#                   bash array serialized across the sourced-options boundary
+#                   the same way CLI_ALLOW_EGRESS is (see the comment near the
+#                   final export statement below).
 # Also exports AI_SANDBOX_SKIP_PLUGIN_CHECK when --force is passed.
 
 # Validate a sandbox name against Docker Compose's project-name constraint.
@@ -163,6 +175,7 @@ function parse_options() {
     CLI_ENABLE_ALL=false
     CLEAN_SLATE=false
     CLI_ALLOW_EGRESS=()
+    CLI_ADD_HOST=()
 
     # Global command words — first non-flag arg matching one of these is a global command.
     # "create" and "list" are no longer free-standing global words: they are
@@ -236,7 +249,7 @@ function parse_options() {
         export SANDBOX_NAME SANDBOX_NAME_KIND SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
                NO_ISOLATE_CONFIG STATIC_PLAYGROUND CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
                STATUS_JSON STATUS_TEST_CHECK QUIET \
-               CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE CLI_ALLOW_EGRESS
+               CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE CLI_ALLOW_EGRESS CLI_ADD_HOST
         if [ -z "${QUIET}" ]; then
             QUIET=1
         fi
@@ -537,6 +550,55 @@ function parse_options() {
                 CLI_ALLOW_EGRESS+=("${_spec}")
                 CONFIG_FLAGS_PROVIDED=true
                 ;;
+            --add-host)
+                i=$(( i + 1 ))
+                if [ "${i}" -ge "${#all_remaining[@]}" ]; then
+                    echo "Error: --add-host requires a spec (<name>:<ip>)" 1>&2
+                    exit 1
+                fi
+                _spec="${all_remaining[${i}]}"
+                # Reject anything but exactly one ':' up front, matching the
+                # --allow-egress colon-count guard above.
+                _colon_count="$(grep -o ':' <<< "${_spec}" | wc -l | tr -d ' ')"
+                if [ "${_colon_count}" -ne 1 ]; then
+                    echo "Error: --add-host spec must contain exactly one ':' separating name from ip (got '${_spec}')" 1>&2
+                    exit 1
+                fi
+                _add_host_name="${_spec%%:*}"
+                _add_host_ip="${_spec##*:}"
+                # is_valid_egress_hostname()/is_valid_ipv4_literal()
+                # (src/utils.sh) are the single source of truth for these
+                # checks -- also reused by is_valid_add_host_spec(), which
+                # restore_saved_config()'s defense-in-depth re-validation of a
+                # restored ai.sandbox.config label (task 003) calls, so both
+                # sites apply byte-for-byte the same rules.
+                if ! is_valid_egress_hostname "${_add_host_name}"; then
+                    echo "Error: --add-host name part must be a valid hostname (got '${_add_host_name}' in '${_spec}')" 1>&2
+                    exit 1
+                fi
+                # host.docker.internal is reserved: it is already the
+                # container's static host-gateway alias
+                # (docker/docker-compose.yaml's extra_hosts entry), and
+                # Compose's extra_hosts lists APPEND rather than replace
+                # across -f files, so a caller-supplied mapping for this
+                # exact name would collide with it (nondeterministic
+                # /etc/hosts resolution order) and could indeterminately
+                # retarget which IP the host-access capability's firewall
+                # rule opens (docker/init-firewall.sh resolves this same
+                # name). See is_reserved_add_host_name() (src/utils.sh) for
+                # the full rationale; also enforced on restore of a
+                # previously-saved config via is_valid_add_host_spec().
+                if is_reserved_add_host_name "${_add_host_name}"; then
+                    echo "Error: --add-host name part 'host.docker.internal' is reserved -- it is already the container's static host-gateway alias and cannot be overridden via --add-host (got '${_spec}')" 1>&2
+                    exit 1
+                fi
+                if ! is_valid_ipv4_literal "${_add_host_ip}"; then
+                    echo "Error: --add-host ip part must be an IPv4 address (got '${_add_host_ip}' in '${_spec}')" 1>&2
+                    exit 1
+                fi
+                CLI_ADD_HOST+=("${_spec}")
+                CONFIG_FLAGS_PROVIDED=true
+                ;;
             --clean)
                 CLEAN_SLATE=true
                 CONFIG_FLAGS_PROVIDED=true
@@ -637,12 +699,12 @@ function parse_options() {
         fi
     fi
 
-    # Note: CLI_MARKETPLACES, CLI_PLUGINS, and CLI_ALLOW_EGRESS are bash
-    # arrays; bash cannot export arrays across process boundaries. They are
-    # consumed within the same shell session by index.sh before any
+    # Note: CLI_MARKETPLACES, CLI_PLUGINS, CLI_ALLOW_EGRESS, and CLI_ADD_HOST
+    # are bash arrays; bash cannot export arrays across process boundaries.
+    # They are consumed within the same shell session by index.sh before any
     # subprocess boundary is crossed — same pattern as PROFILES.
     export SANDBOX_NAME SANDBOX_NAME_KIND SANDBOX_PROFILES CMD ARGS PROFILES MODE_OVERRIDE \
            NO_ISOLATE_CONFIG STATIC_PLAYGROUND CONFIG_FLAGS_PROVIDED AUTO_YES ENTER_AFTER_CREATE \
            STATUS_JSON STATUS_TEST_CHECK QUIET \
-           CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE CLI_ALLOW_EGRESS
+           CLI_MARKETPLACES CLI_PLUGINS CLI_ENABLE_ALL CLEAN_SLATE CLI_ALLOW_EGRESS CLI_ADD_HOST
 }

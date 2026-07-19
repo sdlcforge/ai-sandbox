@@ -185,6 +185,35 @@ fi
 # `IFS=' ' read -ra` idiom the marketplace/network.allow blocks above use for
 # their '|'-delimited values, so this loop doesn't depend on the file-wide IFS.
 IFS=' ' read -ra _capability_entries <<< "${AI_SANDBOX_CAPABILITIES:-}"
+
+# Stale-marker guard (phase-01-review-fixes/002): the host-access-unresolved
+# marker (written by the host-access case arm below, on the shared
+# firewall-handshake volume that persists across container delete/recreate --
+# see AI_SANDBOX_FIREWALL_MARKER_DIR's comment further down) is otherwise
+# only ever cleared from inside that same case arm's own resolution-success
+# branch. If a container is later recreated WITHOUT host-access in its
+# capability set (e.g. switching profiles), that case arm never runs at all,
+# so a marker left over from an earlier boot would survive indefinitely and
+# src/status.sh's _status_gather_host_access() would keep reporting a false
+# "host-access did not resolve" warning even though host-access is no longer
+# active. Clear it here, unconditionally and independent of the
+# per-capability dispatch loop below, whenever host-access is absent from
+# this boot's capability list -- making the marker track "host-access is
+# currently active AND currently unresolved" rather than "host-access was
+# ever unresolved at some point in this volume's history". Best-effort
+# (`|| true`), matching this whole script's fail-soft posture for marker I/O
+# elsewhere (e.g. the host-access case arm's own `rm -f ... || true` below).
+_host_access_requested=false
+for _cap in "${_capability_entries[@]}"; do
+    if [ "${_cap}" = "host-access" ]; then
+        _host_access_requested=true
+        break
+    fi
+done
+if [ "${_host_access_requested}" = false ]; then
+    rm -f "${AI_SANDBOX_FIREWALL_MARKER_DIR:-/var/lib/ai-sandbox-firewall}/host-access-unresolved" 2>/dev/null || true
+fi
+
 for _cap in "${_capability_entries[@]}"; do
     case "${_cap}" in
         web-search)
@@ -246,7 +275,35 @@ for _cap in "${_capability_entries[@]}"; do
             # hostname-resolution call in this script (GitHub/marketplace/
             # network.allow blocks above).
             _host_access_ip="$(getent ahostsv4 host.docker.internal 2>/dev/null | awk '{print $1}' | head -n1 || true)"
+            # Durable operator-visible signal (phase-01/004-host-access-visibility)
+            # for this capability's own resolution-failure fail-soft path below,
+            # distinct from AI_SANDBOX_FIREWALL_MARKER_DIR's existing
+            # applied/applied-ipv6 handshake markers (init-firewall-sidecar.sh):
+            # this marker records *this specific* capability's resolve-vs-skip
+            # outcome, not the firewall-init handshake's overall completion.
+            # This script (docker/init-firewall.sh) only ever runs inside the
+            # firewall-init sidecar -- see docker/docker-compose.yaml's
+            # firewall-init service (network_mode: service:ai-sandbox, the
+            # firewall-handshake volume, AI_SANDBOX_FIREWALL_MARKER_DIR) and
+            # init-firewall-sidecar.sh's invocation of
+            # /usr/local/bin/init-firewall.sh below its token wait -- so the
+            # marker directory is already mounted and writable by the time
+            # this branch runs (the sidecar's own mkdir -p/chmod 700 happen
+            # before it invokes this script). No coordination with the
+            # sidecar script is needed; this script writes the marker
+            # directly.
+            _host_access_marker_dir="${AI_SANDBOX_FIREWALL_MARKER_DIR:-/var/lib/ai-sandbox-firewall}"
+            _host_access_marker="${_host_access_marker_dir}/host-access-unresolved"
             if [ -n "${_host_access_ip}" ]; then
+                # Clear any stale marker from a previous container lifecycle
+                # now that resolution has succeeded, so the marker's mere
+                # presence is an accurate *current*-state signal rather than a
+                # leftover from an earlier failed boot. Best-effort (`|| true`)
+                # -- matching this whole capability's fail-soft posture --
+                # so a transient permission/mount hiccup here can never abort
+                # firewall application.
+                rm -f "${_host_access_marker}" 2>/dev/null || true
+
                 # Dedicated chain, mirroring web-search's shape: the chain's
                 # own ACCEPT rules are unconditional (one per listening
                 # port); the OUTPUT jump rule below is the actual gate and
@@ -279,6 +336,22 @@ for _cap in "${_capability_entries[@]}"; do
                 # blocks above): log and continue rather than aborting the
                 # whole script under `set -e`.
                 echo "init-firewall.sh: host-access capability active but host.docker.internal did not resolve to an IPv4 address; skipping"
+                # Durable marker (phase-01/004-host-access-visibility): the
+                # stderr line above only reaches whoever happens to be
+                # watching container-init logs at the moment it prints --
+                # make the fail-soft skip discoverable after the fact too, via
+                # `ai-sandbox detail`/status (src/status.sh's
+                # _status_gather_host_access(), which reads this file with
+                # `docker exec`, unaffected by the very egress firewall this
+                # script builds since it runs host-side against the
+                # container's process namespace, not through its network
+                # stack). Best-effort end to end (`mkdir -p ... || true`,
+                # `|| true` on the write): this is a visibility aid layered on
+                # top of the fail-soft contract, never a reason to abort
+                # container startup on its own.
+                mkdir -p "${_host_access_marker_dir}" 2>/dev/null || true
+                printf '%s host-access: host.docker.internal did not resolve to an IPv4 address; host-access allow-list not applied\n' \
+                    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${_host_access_marker}" 2>/dev/null || true
             fi
             ;;
         lan-access)

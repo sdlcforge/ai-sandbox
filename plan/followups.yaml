@@ -170,11 +170,6 @@ items:
       date: "2026-07-11"
       tag: network-capabilities
       text: '[phase-02-network-capabilities, task 001] profiles/README.md''s "Available profiles" table lists docker/chromium/mirror/static but not the new web-search profile (and will need host-access/lan-access added too as those land). This file is separate from docs/ai-sandbox-profiles-spec.md and isn''t explicitly in Phase 4''s doc-updates task scope (README.md, docs/architecture.md, docs/ai-sandbox-profiles-spec.md). Update profiles/README.md''s table for all three new network-capability profiles.'
-    - title: LAN/host values missing from config-persist
-      id: yS0R
-      date: "2026-07-11"
-      tag: network-capabilities
-      text: '[phase-review, phase-02-network-capabilities, arch-review-002] AI_SANDBOX_LAN_CIDR and AI_SANDBOX_HOST_LISTEN_PORTS are recomputed from live host state on every invocation and interpolated into docker-compose.yaml''s environment blocks, but neither participates in running_config_matches()''s comparison set (the codebase''s sole gate for prompting before docker compose up -d recreates a running container) or gets an ai.sandbox.* label, unlike the established AI_SANDBOX_MARKETPLACES/PLUGINS precedent. Two unresolved readings, needs empirical verification: (a) if Compose recreates on env-var-only drift, an ordinary host-state change (switching WiFi networks, a background process opening a port) between two `ai-sandbox <name> start` calls could silently recreate a --profile lan-access/host-access container with no consent prompt - contradicts the project''s own "no silent recreate without consent" principle (see docs/architecture.md SSH section); (b) if Compose does NOT recreate on plain env-var drift, then Tasks 003/005''s own stated remediation ("start again to refresh") doesn''t actually work, and there''s no documented way to refresh these values short of delete+recreate. Needs a decision before Phase 3 (--allow-egress) extends the same env-passthrough pattern further: either extend running_config_matches()/labels to cover these two values (routing through the existing consent gate), or add a warn_if_ssh_mount_stale-style staleness warning with a working documented remediation path.'
     - title: web-search missing some IANA ranges
       id: cMtS
       date: "2026-07-11"
@@ -205,11 +200,6 @@ items:
       date: "2026-07-11"
       tag: network-capabilities
       text: '[phase-02-network-capabilities/007-fix-capability-ifs-word-splitting.md] CRITICAL, previously-unknown finding discovered during this task''s fail-open verification (out of this task''s file scope to fix): S6_BEHAVIOUR_IF_STAGE2_FAILS is unset everywhere in this project. Empirically confirmed via a real s6-overlay v3.2.0.2 container repro that with it unset, a cont-init.d script exiting nonzero -- including docker/rootfs/etc/cont-init.d/03-init-firewall''s own exit 1 after its 60s wait for the firewall-init sidecar times out -- does NOT halt the container; all later cont-init.d stages still run and the container reports started successfully. This means the ''wait-then-fail-loud'' mechanism the Phase 1 code comments describe does not actually function as documented under this project''s current, unmodified configuration: ANY future failure of the firewall-init sidecar (not just the IFS bug this task fixes) would let ai-sandbox start with an unrestricted default-ACCEPT OUTPUT policy. This undermines the fail-closed guarantee the entire Phase 1 security fix depends on. Confirmed the fix direction empirically: with S6_BEHAVIOUR_IF_STAGE2_FAILS=2 explicitly set, the container DOES correctly halt -- but only after every cont-init.d script in the directory has already run to completion (pass/fail is decided once, at the end, not per-script), so pairing this setting alone may still leave a window unless combined with earlier-ordered guarding. Needs a dedicated, high-priority follow-up task.'
-    - title: Stale comment in src/status.sh (~line 48) say
-      id: WjsY
-      date: "2026-07-11"
-      tag: allow-egress-flag
-      text: '[phase-03-allow-egress-flag/001-add-allow-egress-flag-parsing.md] Stale comment in src/status.sh (~line 48) says "seven-field config record", should say "eight-field" now that allow_egress exists. Not fixed (out of this task''s file scope) - purely a comment, no functional impact.'
     - title: 'Full make test.integration run not completed '
       id: Icw2
       date: "2026-07-11"
@@ -270,3 +260,38 @@ items:
       date: "2026-07-14"
       tag: doc-updates
       text: '[phase-02-doc-updates/001-update-architecture-docs.md] Minor process note: the task doc''s own Metadata lines named role_doc: architect-cloud.md and task-procedure: update-architecture-docs/SKILL.md, differing from the architect-backend.md role and implement-task-only skill chain actually dispatched. The agent additionally consulted the task-doc-named update-architecture-docs/SKILL.md procedure on its own initiative since the task doc''s own Purpose and scope named it. No impact on output quality, but worth checking whether task-doc authoring and dispatch role-derivation are drifting apart for this task type.'
+    - title: 7 pre-existing make test.unit failures (ai_sa
+      id: BV5P
+      date: "2026-07-18"
+      tag: add-host-passthrough
+      text: '[phase-01-add-host-passthrough/002-thread-add-host-extra-hosts.md] 7 pre-existing make test.unit failures (ai_sandbox_spec.sh lines 3181,3190,3199,3273,3283,3293,3392 — teardown/dropped-profile/fix-ssh dispatch regressions) confirmed present on baseline, unrelated to this task.'
+    - title: Observed ./bin/ai-sandbox.sh start <name> pro
+      id: UoDr
+      date: "2026-07-18"
+      tag: add-host-passthrough
+      text: '[phase-01-add-host-passthrough/002-thread-add-host-extra-hosts.md] Observed ./bin/ai-sandbox.sh start <name> producing a container named ''ai-sandbox-'' with empty sandbox-name component and garbled instances ls listing, reproduced with and without --add-host so unrelated to this task''s diff; unverified against a clean environment, flagged as an observation only.'
+    - title: The -u root fix is a correctness fix required
+      id: Dd3N
+      date: "2026-07-18"
+      tag: add-host-passthrough
+      text: '[phase-01-add-host-passthrough/004-host-access-visibility.md] The -u root fix is a correctness fix required for Requirement 2 to function, not optional hardening — worth confirming no other docker-exec-based diagnostic read in this codebase makes the same non-root-default assumption against a root-owned path on the firewall-handshake volume.'
+    - title: Positional-field risk in config-match fmt
+      id: uZmo
+      date: "2026-07-18"
+      tag: add-host-passthrough
+      text: '[phase-review, phase-01-add-host-passthrough, arch-review-003] running_config_matches() (src/utils.sh ~697-770) relies on a hand-maintained, positionally-ordered docker-inspect format string (fmt) and matching IFS read field list, now at 14 fields (grew from 9 to 11 to 14 across three phases). A single misordered insertion or forgotten local declaration would silently misalign every field after it, with no compiler/structural check to catch it — only test coverage. Not blocking, not introduced by this diff (pre-existing pattern, compounded by it). Worth a future followup to consider a self-describing comparison (e.g. decode the same jq-parseable structure the ai.sandbox.config input record already uses) instead of continuing to extend a fixed-position delimited string, now that the field count is large enough for ordinal-alignment risk to be real. No concrete alternative mandated — flagging for awareness.'
+    - title: Possible dead AI_SANDBOX_ADD_HOST env var
+      id: 9gvY
+      date: "2026-07-18"
+      tag: add-host-passthrough
+      text: '[phase-1 review-fix task, follow-on from arch-review-002] While removing the dead AI_SANDBOX_ADD_HOST declaration from the firewall-init sidecar''s environment: block, found that the remaining copy on the ai-sandbox service''s environment: block may itself be unconsumed in-container -- src/volume-override.sh only ever reads the pre-join bash array CLI_ADD_HOST, never the AI_SANDBOX_ADD_HOST env var/label. Could not find any in-container reader of this environment: block copy. Left untouched (out of the review-fix task''s scope), but worth investigating whether it''s dead code too and can be removed, or whether some consumer was missed.'
+    - title: 'README.md''s Network access section documents '
+      id: t1on
+      date: "2026-07-19"
+      tag: doc-updates
+      text: '[phase-02-doc-updates/001-update-architecture-docs.md] README.md''s Network access section documents --allow-egress in prose but has no equivalent coverage for --add-host (pre-existing convention gap, not a regression) — candidate follow-up doc task, out of this task''s scope (docs/architecture.md and docs/ai-sandbox-profiles-spec.md only).'
+    - title: plan/notes/investigation-findings.md's Firewa
+      id: C8NT
+      date: "2026-07-19"
+      tag: doc-updates
+      text: '[phase-02-doc-updates/001-update-architecture-docs.md] plan/notes/investigation-findings.md''s Firewall-interaction subtlety section is now stale against the as-built host.docker.internal-reserved-name rejection — plan notes are outside docs/* scope, informational only, no action needed (plan notes are cleaned up at plan close-out).'
