@@ -290,3 +290,8 @@ items:
       date: "2026-07-19"
       tag: doc-updates
       text: '[phase-02-doc-updates/001-update-architecture-docs.md] README.md''s Network access section documents --allow-egress in prose but has no equivalent coverage for --add-host (pre-existing convention gap, not a regression) — candidate follow-up doc task, out of this task''s scope (docs/architecture.md and docs/ai-sandbox-profiles-spec.md only).'
+    - title: plan/notes/investigation-findings.md's Firewa
+      id: C8NT
+      date: "2026-07-19"
+      tag: doc-updates
+      text: '[phase-02-doc-updates/001-update-architecture-docs.md] plan/notes/investigation-findings.md''s Firewall-interaction subtlety section is now stale against the as-built host.docker.internal-reserved-name rejection — plan notes are outside docs/* scope, informational only, no action needed (plan notes are cleaned up at plan close-out).'
