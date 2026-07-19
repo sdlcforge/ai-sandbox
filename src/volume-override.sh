@@ -39,16 +39,18 @@
 # (docker/docker-compose.yaml) always survives unmodified from the base file
 # and must not be re-emitted here.
 #
-# Duplicate-name caveat: if a caller passes `--add-host
-# host.docker.internal:<ip>` (syntactically legal -- src/options.sh's
-# --add-host parsing does not special-case this name), both the base's
-# host-gateway mapping and the caller's mapping land in /etc/hosts as separate
-# lines for the same name; which one a given resolver treats as primary is not
-# reliably controlled by this override (observed /etc/hosts ordering did not
-# match simple base-then-override file concatenation order). Forcing a
-# specific precedence would require a different merge mechanism (e.g. the
-# compose-spec `!override` YAML merge tag) that is out of scope for this task
-# -- see the task document's Status section.
+# Duplicate-name caveat (historical -- now prevented at the source): a caller
+# passing `--add-host host.docker.internal:<ip>` would have landed as a
+# second /etc/hosts line for the same name as the base's static host-gateway
+# mapping, with the effective precedence not reliably controlled by this
+# override (observed /etc/hosts ordering did not match simple
+# base-then-override file concatenation order) -- and, more seriously, could
+# indeterminately retarget which IP the host-access capability's firewall
+# rule opens, since docker/init-firewall.sh resolves that same name. This is
+# now rejected outright at --add-host parse time
+# (is_reserved_add_host_name(), src/utils.sh), so CLI_ADD_HOST can never
+# contain an entry for this name by the time this function runs; this
+# function does not re-check it.
 function generate_volume_override() {
     local out="$1"
     local user_maps="${HOME}/.config/ai-sandbox/volume-maps"

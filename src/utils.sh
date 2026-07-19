@@ -408,13 +408,45 @@ function is_valid_allow_egress_spec() {
 # 003) so both sites apply byte-for-byte the same rules -- same sharing
 # pattern as the --allow-egress block above.
 
+# Return 0 if $1 (a --add-host name part, already syntactically validated by
+# is_valid_egress_hostname()) is the reserved name "host.docker.internal",
+# case-insensitively (DNS names are case-insensitive, and the collision this
+# guards against is resolver-level, not string-level).
+#
+# docker/docker-compose.yaml's base file already statically maps this exact
+# name to the container's host-gateway IP via its own
+# `extra_hosts: - "host.docker.internal:host-gateway"` entry. A caller
+# supplying `--add-host host.docker.internal:<ip>` would land as a *second*,
+# conflicting /etc/hosts line for the same name once merged with the
+# generated override -- Compose's extra_hosts lists APPEND across `-f` files
+# rather than replace (empirically confirmed -- see src/volume-override.sh's
+# file-header comment), and which line a given resolver treats as primary is
+# not reliably controlled (observed /etc/hosts ordering did not match simple
+# base-then-override concatenation order). Worse, the host-access
+# capability's firewall ACCEPT-chain (docker/init-firewall.sh) is built by
+# resolving that exact same name (`getent ahostsv4 host.docker.internal`, in
+# the shared network namespace with this container's firewall-init sidecar),
+# so the collision can indeterminately retarget which IP host-access's
+# firewall rule opens. Rejected outright at parse/restore time (see callers)
+# rather than accepted-then-warned, since there is no safe way to reconcile
+# the collision after the fact.
+#
+# `tr` rather than bash 4's `${var,,}` lowercasing -- this project targets
+# macOS's stock bash 3.2 (see CLAUDE.md: "macOS-first bash CLI").
+function is_reserved_add_host_name() {
+    local name_lc
+    name_lc="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    [ "${name_lc}" = "host.docker.internal" ]
+}
+
 # Return 0 if $1 is a fully valid --add-host spec (<name>:<ip>): exactly one
-# ':' separating a valid hostname (is_valid_egress_hostname()) from a valid
-# IPv4 literal (is_valid_ipv4_literal()). Unlike --allow-egress's host part,
-# --add-host's ip part must be a bare IPv4 literal specifically -- no CIDR,
-# no hostname -- since it is placed verbatim into the container's /etc/hosts
-# (or equivalent), so is_valid_ipv4_literal() is used directly rather than
-# the more permissive is_valid_egress_host().
+# ':' separating a valid hostname (is_valid_egress_hostname()) that is not
+# the reserved name (is_reserved_add_host_name()) from a valid IPv4 literal
+# (is_valid_ipv4_literal()). Unlike --allow-egress's host part, --add-host's
+# ip part must be a bare IPv4 literal specifically -- no CIDR, no hostname --
+# since it is placed verbatim into the container's /etc/hosts (or
+# equivalent), so is_valid_ipv4_literal() is used directly rather than the
+# more permissive is_valid_egress_host().
 function is_valid_add_host_spec() {
     local spec="$1" colon_count name ip
     colon_count="$(grep -o ':' <<< "${spec}" | wc -l | tr -d ' ')"
@@ -422,6 +454,7 @@ function is_valid_add_host_spec() {
     name="${spec%%:*}"
     ip="${spec##*:}"
     is_valid_egress_hostname "${name}" || return 1
+    is_reserved_add_host_name "${name}" && return 1
     is_valid_ipv4_literal "${ip}"
 }
 

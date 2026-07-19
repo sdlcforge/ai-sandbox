@@ -381,9 +381,19 @@ Describe 'ai-sandbox.sh'
       The status should be success
     End
 
-    It 'accepts a hostname with dots and hyphens'
-      When call is_valid_add_host_spec host.docker.internal:10.0.0.5
+    It 'accepts a hostname with dots and hyphens (not the reserved name)'
+      When call is_valid_add_host_spec my-host.example.com:10.0.0.5
       The status should be success
+    End
+
+    It 'rejects the reserved name host.docker.internal (phase-01-review-fixes/001: collides with the base compose file''s static host-gateway entry)'
+      When call is_valid_add_host_spec host.docker.internal:10.0.0.5
+      The status should be failure
+    End
+
+    It 'rejects the reserved name host.docker.internal case-insensitively'
+      When call is_valid_add_host_spec Host.Docker.Internal:10.0.0.5
+      The status should be failure
     End
 
     It 'rejects a spec with no colon'
@@ -413,6 +423,32 @@ Describe 'ai-sandbox.sh'
 
     It 'rejects when the name part is not a valid hostname (disallowed character)'
       When call is_valid_add_host_spec 'bad host!:192.168.65.254'
+      The status should be failure
+    End
+  End
+
+  Describe 'is_reserved_add_host_name()'
+    # Direct pure-function coverage for the reserved-name guard
+    # (src/utils.sh, phase-01-review-fixes/001) shared by
+    # is_valid_add_host_spec() (restore-path re-validation) and
+    # src/options.sh's --add-host parser (parse-time rejection).
+    It 'matches the reserved name exactly'
+      When call is_reserved_add_host_name host.docker.internal
+      The status should be success
+    End
+
+    It 'matches the reserved name case-insensitively'
+      When call is_reserved_add_host_name HOST.DOCKER.INTERNAL
+      The status should be success
+    End
+
+    It 'does not match an unrelated hostname'
+      When call is_reserved_add_host_name myhost
+      The status should be failure
+    End
+
+    It 'does not match a hostname that merely contains the reserved name as a substring'
+      When call is_reserved_add_host_name not-host.docker.internal
       The status should be failure
     End
   End
@@ -928,6 +964,32 @@ Describe 'ai-sandbox.sh'
       The variable "CLI_ADD_HOST[*]" should eq 'other:10.0.0.5'
       The stderr should include 'dropping restored --add-host spec'
       The stderr should include 'myhost:not-an-ip'
+    End
+
+    It 'drops a restored --add-host spec for the reserved name host.docker.internal, keeping well-formed entries (phase-01-review-fixes/001: a previously-saved config predating the parse-time rejection must not resurrect the collision on restore)'
+      SANDBOX_NAME="test"
+      CONFIG_FLAGS_PROVIDED=false
+      PROFILES=()
+      MODE_OVERRIDE=""
+      NO_ISOLATE_CONFIG=false
+      CLEAN_SLATE=false
+      CLI_MARKETPLACES=()
+      CLI_PLUGINS=()
+      CLI_ENABLE_ALL=false
+      CLI_ADD_HOST=()
+      config_b64="$(encode_config '{"version":1,"add_host":["host.docker.internal:10.0.0.5","other:10.0.0.5"]}')"
+      docker() {
+        if [ "$1" = "inspect" ]; then
+          if [[ "$*" == *"ai.sandbox.config"* ]]; then
+            echo "${config_b64}"
+          fi
+          return 0
+        fi
+      }
+      When call restore_saved_config
+      The variable "CLI_ADD_HOST[*]" should eq 'other:10.0.0.5'
+      The stderr should include 'dropping restored --add-host spec'
+      The stderr should include 'host.docker.internal:10.0.0.5'
     End
 
     It 'restores NO_ISOLATE_CONFIG=true specifically (regression: previously silently dropped, causing a false-positive recreate prompt)'
@@ -2105,6 +2167,18 @@ Describe 'ai-sandbox.sh'
       When run parse_options instances create mybox --add-host myhost:999.1.1.1
       The status should be failure
       The stderr should include 'ip part must be'
+    End
+
+    It 'rejects --add-host host.docker.internal:<ip> (phase-01-review-fixes/001: collides with the base compose file''s static host-gateway entry, which the host-access capability firewall rule also resolves)'
+      When run parse_options instances create mybox --add-host host.docker.internal:10.0.0.5
+      The status should be failure
+      The stderr should include 'reserved'
+    End
+
+    It 'rejects --add-host Host.Docker.Internal:<ip> case-insensitively'
+      When run parse_options instances create mybox --add-host Host.Docker.Internal:10.0.0.5
+      The status should be failure
+      The stderr should include 'reserved'
     End
 
     It 'accumulates repeated --add-host specs in order'
