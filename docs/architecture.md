@@ -326,6 +326,45 @@ on *both* the `ai-sandbox` and `firewall-init` services in
 `docker/docker-compose.yaml`, but only the `firewall-init` copies are load-
 bearing — `docker/init-firewall.sh` only ever runs inside that sidecar.
 
+`AI_SANDBOX_ADD_HOST` (the `--add-host` flag's specs, `|`-joined) is a
+deliberate exception to that "declared on both services" shape: it's set
+only on the `ai-sandbox` service, not `firewall-init`, because
+`docker/init-firewall.sh` — the only script that ever runs in that sidecar —
+never reads it. `--add-host`'s actual container-side effect flows through a
+different channel entirely: an `extra_hosts:` block in the generated compose
+override, consumed directly by Docker Compose at container-create time (see
+[Caller-pinned host reachability: `--add-host`](#caller-pinned-host-reachability---add-host)
+below). The `ai-sandbox`-side env var exists purely for label-substitution
+symmetry with the other `CLI_*`-derived vars in this block, and to feed
+`running_config_matches()`/`restore_saved_config()` via the
+`ai.sandbox.add-host` label (see
+[Config persistence and restore](#config-persistence-and-restore) below).
+
+**host-access resolution-failure visibility.** `host-access`'s fail-soft
+behavior — log-and-skip when `getent ahostsv4 host.docker.internal` returns
+no IPv4 — is unchanged, but the failure is no longer only a stderr line
+inside container-init logs. On the resolution-failure path,
+`docker/init-firewall.sh` writes a `host-access-unresolved` marker file
+(UTC timestamp plus a one-line reason) to the shared `firewall-handshake`
+volume, at `AI_SANDBOX_FIREWALL_MARKER_DIR` (default
+`/var/lib/ai-sandbox-firewall`) — the same volume the firewall-init/
+`03-init-firewall` handshake token above already uses, though this marker is
+an independent file, not part of that handshake. The marker is cleared
+(`rm -f ... || true`) both on the resolution-success path and whenever
+`host-access` is absent from the current boot's capability list entirely, so
+a container later recreated without `host-access` never keeps reporting a
+stale warning from an earlier lifecycle. `src/status.sh`'s
+`_status_gather_host_access()` reads the marker host-side, when the
+container is running, via `docker exec -u root <container> cat
+<marker-path>` — the `-u root` override is load-bearing, since the marker
+directory is `chmod 700` root-owned but the container's default `docker
+exec` user is the non-root `${HOST_USER}`. `ai-sandbox detail` surfaces the
+result: a `Warnings:` section in human output, and a `host_access` object in
+`--json` output (`{"resolved": false, "reason": "..."}` when the marker is
+present, `{"resolved": true}` otherwise, including "not running" and
+"host-access inactive" — none of those need a warning, so they're not
+distinguished).
+
 **Resolve-once, no TTL.** Name-form entries — `network.allow`/marketplace
 hostnames and `--allow-egress` hostnames — are DNS-resolved once at
 container-init time (via `getent ahostsv4`, using the container's own
@@ -336,6 +375,75 @@ hostname rules, not a new limitation this layer introduces — but it also
 isn't solved here: a DNS answer that changes after container-init (including
 a hostile DNS-rebinding attempt) leaves the allow-listed IP stale until the
 container is recreated. Flagged as a follow-up rather than addressed in V1.
+
+### Caller-pinned host reachability: `--add-host`
+
+Docker Desktop's `host.docker.internal` resolution has proven not to be
+uniformly IPv4 across otherwise-identical installs — `host-access` above
+already has to tolerate that resolution failing outright. A caller that
+needs to reach a specific host-side service (the motivating case: Flow's
+flow-run-optimizer reporting OpenTelemetry data to a host-side collector)
+cannot depend on that resolution succeeding. `--add-host <name>:<ip>` (a
+new, repeatable, public CLI flag) sidesteps the problem: the caller pins the
+IPv4 it wants, and ai-sandbox threads it into the container verbatim,
+without ever trying to detect or resolve it host-side.
+
+**Parsing and validation.** `src/options.sh`'s option loop parses each
+`--add-host <name>:<ip>` occurrence (modeled on the pre-existing
+`--allow-egress` flag) into the `CLI_ADD_HOST` array. `<name>` must be a
+valid hostname (`is_valid_egress_hostname()`, `src/utils.sh`, shared with
+`--allow-egress`'s host-part check); `<ip>` must be a bare IPv4 literal —
+`is_valid_ipv4_literal()`, deliberately narrower than `--allow-egress`'s
+host check, since `--add-host`'s ip part is placed verbatim into
+`/etc/hosts` and admits no CIDR or hostname form.
+`is_valid_add_host_spec()` (`src/utils.sh`) wraps both checks as the single
+source of truth reused by `restore_saved_config()`'s defense-in-depth
+re-validation of a restored `ai.sandbox.config` label (see
+[Config persistence and restore](#config-persistence-and-restore) below).
+
+**Reserved name.** `host.docker.internal` is rejected outright at both parse
+time and restore time (`is_reserved_add_host_name()`, `src/utils.sh`): the
+base compose file already statically maps that exact name to the
+container's host-gateway IP via its own
+`extra_hosts: ["host.docker.internal:host-gateway"]` entry, and Docker
+Compose's `extra_hosts` lists **append** across `-f` files rather than
+replace (empirically confirmed — see the extra_hosts threading paragraph
+below), so a caller-supplied second mapping for the same name would produce
+a second, conflicting `/etc/hosts` line whose resolution precedence is not
+reliably controllable. Worse, `host-access` above resolves that exact same
+name to build its firewall allow-list rule, so the collision could
+indeterminately retarget which IP `host-access` actually opens. Rejecting it
+outright, rather than accepting-then-warning, avoids having to reconcile
+that collision after the fact.
+
+**Threading into `extra_hosts`.** `CLI_ADD_HOST` entries are emitted into
+the per-instance generated compose override (`GENERATED_COMPOSE`, written by
+`generate_volume_override()` in `src/volume-override.sh`) as an
+`extra_hosts:` block on the `ai-sandbox` service — the key is omitted
+entirely when `CLI_ADD_HOST` is empty, since an empty `extra_hosts:` key is
+invalid Compose YAML. Only the `ai-sandbox` service needs it: `firewall-init`
+shares `ai-sandbox`'s network namespace
+(`network_mode: "service:ai-sandbox"`), so it inherits the same `/etc/hosts`
+resolution without declaring its own entries. Because Compose appends rather
+than replaces, the base file's static `host.docker.internal:host-gateway`
+entry always survives unmodified alongside any caller-supplied entries.
+
+**Resolution vs. egress — a coupling callers must know.** `--add-host` only
+changes name *resolution* inside the container; under the default-deny
+egress firewall, adding a host entry does not by itself grant *egress* to
+that IP. Pinning `host.docker.internal` composes cleanly with `host-access`
+(which allow-lists whatever `getent ahostsv4 host.docker.internal` resolves
+to, on the host's listening TCP ports); pinning any other name needs
+`--allow-egress <ip>:<port>` instead, since `host-access`'s firewall rule is
+hardcoded to that one name. The full downstream-consumer contract — how a
+caller like Flow's flow-run-optimizer composes `--add-host` with either
+capability to actually reach a pinned host service — is documented in
+[`docs/ai-sandbox-profiles-spec.md`](ai-sandbox-profiles-spec.md#--add-host-pinning-a-stable-host-ipv4).
+
+**Persistence.** `--add-host` participates fully in the config-persistence
+triad described in
+[Config persistence and restore](#config-persistence-and-restore) below,
+mirroring `--allow-egress` exactly.
 
 ### `~/.config` is copy-on-write by default
 
@@ -522,24 +630,28 @@ git@github.com` looking for `successfully authenticated`.
 `ai.sandbox.config`, capturing every config-changing CLI input as
 base64-encoded JSON: `profiles`, `mode`, `no_isolate_config`, `clean_slate`,
 `marketplaces`, `plugins`, `enable_all_plugins`, `allow_egress`,
-`static_playground`, plus a `version` field (currently always `1`, present
-for future extensibility — no code branches on it today; `allow_egress` was
-added as an additive eighth field, and `static_playground` as an additive
-ninth field, neither bumping `version`). `src/index.sh` assembles this JSON
-after the CLI-merge phase (once `PROFILES`/`MODE_OVERRIDE`/`NO_ISOLATE_CONFIG`/
+`static_playground`, `add_host`, plus a `version` field (currently always
+`1`, present for future extensibility — no code branches on it today;
+`allow_egress` was added as an additive eighth field, `static_playground` as
+an additive ninth field, and `add_host` as an additive tenth field, none of
+them bumping `version`). `src/index.sh` assembles this JSON after the
+CLI-merge phase (once `PROFILES`/`MODE_OVERRIDE`/`NO_ISOLATE_CONFIG`/
 `CLEAN_SLATE`/`CLI_MARKETPLACES`/`CLI_PLUGINS`/`CLI_ENABLE_ALL`/
-`CLI_ALLOW_EGRESS`/`STATIC_PLAYGROUND` are all final) and exports it as
-`AI_SANDBOX_CONFIG_B64`, mirroring the `AI_SANDBOX_CREDENTIALS_JSON_B64`
-pattern already used for clean-slate credentials (`src/credentials.sh`).
-Marketplaces, plugins, and allow-egress specs are persisted as the **CLI
-deltas** (`CLI_MARKETPLACES`/`CLI_PLUGINS`/`CLI_ALLOW_EGRESS`), not a
-profile-merged effective set — for marketplaces/plugins, the
-profile-contributed entries are reproduced for free by re-running
-`profile-installer.js` on restore, so only the CLI additions need to
-round-trip through the label; `--allow-egress` has no profile-level
-equivalent at all (it's CLI-only), so its persisted value *is* the full
-effective value. `static_playground` is simpler still: a plain boolean with
-no profile-level composition or CLI-merge step of its own (see the
+`CLI_ALLOW_EGRESS`/`STATIC_PLAYGROUND`/`CLI_ADD_HOST` are all final) and
+exports it as `AI_SANDBOX_CONFIG_B64`, mirroring the
+`AI_SANDBOX_CREDENTIALS_JSON_B64` pattern already used for clean-slate
+credentials (`src/credentials.sh`). Marketplaces, plugins, and allow-egress
+specs are persisted as the **CLI deltas** (`CLI_MARKETPLACES`/`CLI_PLUGINS`/
+`CLI_ALLOW_EGRESS`), not a profile-merged effective set — for
+marketplaces/plugins, the profile-contributed entries are reproduced for
+free by re-running `profile-installer.js` on restore, so only the CLI
+additions need to round-trip through the label; `--allow-egress` has no
+profile-level equivalent at all (it's CLI-only), so its persisted value *is*
+the full effective value — the same is true of `--add-host`, persisted as
+the full `CLI_ADD_HOST` array (see
+[Caller-pinned host reachability: `--add-host`](#caller-pinned-host-reachability---add-host)
+above). `static_playground` is simpler still: a plain boolean with no
+profile-level composition or CLI-merge step of its own (see the
 `~/playground` copy-on-write overlay described earlier in this document),
 persisted as the raw `STATIC_PLAYGROUND` global.
 
@@ -568,7 +680,7 @@ passed this invocation (the existing `CONFIG_FLAGS_PROVIDED != true` gate)
 and a container (running or stopped) already exists for `SANDBOX_NAME`.
 
 When triggered, this reads only the `ai.sandbox.config` label, base64-decodes
-and extracts each field via `jq`, and rehydrates all nine input globals.
+and extracts each field via `jq`, and rehydrates all ten input globals.
 Each field is only assigned when present, so a missing or empty label is a
 natural no-op. **There is no fallback of any kind** — a container with no
 `ai.sandbox.config` label (including any container created before this label
@@ -589,29 +701,39 @@ for per-failure-mode error messages; `restore_saved_config()`
 (`src/utils.sh`) calls `is_valid_allow_egress_spec()`, a convenience wrapper
 around those same two predicates — both routes enforce byte-for-byte
 identical rules — a diverging restore-time check here would let an invalid
-egress spec reach the container-init-time firewall-rule application.
+egress spec reach the container-init-time firewall-rule application. Restored
+`--add-host` specs go through the identical pattern: `restore_saved_config()`
+re-validates each one with `is_valid_add_host_spec()` (`src/utils.sh`, also
+the parser's own single source of truth — see
+[Caller-pinned host reachability: `--add-host`](#caller-pinned-host-reachability---add-host)
+above), which additionally rejects the reserved `host.docker.internal` name,
+dropping (with a warning) any entry that fails.
 
 **Matches (`running_config_matches`, `src/utils.sh`).** Compares the running
 container's labels against the current invocation's freshly-resolved
 effective values across the full derived-config dimension set: image tag,
 `ai.sandbox.profile-hash`, `ai.sandbox.mode`, `ai.sandbox.no-isolate-config`,
-`ai.sandbox.docker-proxy`, `ai.sandbox.clean-slate`, and five additional
+`ai.sandbox.docker-proxy`, `ai.sandbox.clean-slate`, and eight additional
 derived labels — `ai.sandbox.marketplaces`, `ai.sandbox.plugins`,
 `ai.sandbox.enable-all-plugins`, `ai.sandbox.allow-egress`,
-`ai.sandbox.static-playground` — compared against the effective
+`ai.sandbox.static-playground`, `ai.sandbox.add-host`, `ai.sandbox.lan-cidr`,
+`ai.sandbox.host-listen-ports` — compared against the effective
 `AI_SANDBOX_MARKETPLACES`/`AI_SANDBOX_PLUGINS`/`AI_SANDBOX_ENABLE_ALL_PLUGINS`/
-`AI_SANDBOX_ALLOW_EGRESS`/`STATIC_PLAYGROUND` values (the first three are the
-same values the container's `10-plugin-setup` init consumes;
-`AI_SANDBOX_ALLOW_EGRESS` is simply `CLI_ALLOW_EGRESS` joined with `|`, since
-`--allow-egress` is CLI-only with no profile-level value to merge in;
-`ai.sandbox.static-playground` skips that derived-env-var indirection
-entirely and compares directly against the plain `STATIC_PLAYGROUND` global,
-since the flag has no profile-level or CLI-merge step of its own). An
-explicit invocation that changes any of these (e.g. `enter --add-marketplace
-NEW`, `enter --allow-egress 1.2.3.4:443`, or `enter --static-playground` on a
-container created without it) is now correctly detected as a config change
-and triggers the stop-and-recreate prompt instead of silently never
-applying. This is the
+`AI_SANDBOX_ALLOW_EGRESS`/`STATIC_PLAYGROUND`/`AI_SANDBOX_ADD_HOST`/
+`AI_SANDBOX_LAN_CIDR`/`AI_SANDBOX_HOST_LISTEN_PORTS` values (the first three
+are the same values the container's `10-plugin-setup` init consumes;
+`AI_SANDBOX_ALLOW_EGRESS` and `AI_SANDBOX_ADD_HOST` are simply
+`CLI_ALLOW_EGRESS`/`CLI_ADD_HOST` joined with `|`, since neither flag has a
+profile-level value to merge in; `ai.sandbox.static-playground` skips that
+derived-env-var indirection entirely and compares directly against the
+plain `STATIC_PLAYGROUND` global, since the flag has no profile-level or
+CLI-merge step of its own; `ai.sandbox.lan-cidr`/`ai.sandbox.host-listen-ports`
+are covered separately below). An explicit invocation that changes any of
+these (e.g. `enter --add-marketplace NEW`, `enter --allow-egress
+1.2.3.4:443`, `enter --add-host myhost:10.0.0.5`, or `enter
+--static-playground` on a container created without it) is now correctly
+detected as a config change and triggers the stop-and-recreate prompt
+instead of silently never applying. This is the
 "explicit invocation always wins" invariant: whatever this invocation itself
 explicitly asked for takes effect, even over what's already persisted. The
 `EFFECTIVE_PROXY` label fallback described under
@@ -623,19 +745,43 @@ direction — it deliberately stops short of overriding an explicit
 changes composition, including dropping the `docker` capability, is never
 silently reverted by the persisted `ai.sandbox.docker-proxy` label.
 
+**Host-detected labels close a config-persistence gap (followup `yS0R`).**
+`ai.sandbox.lan-cidr` and `ai.sandbox.host-listen-ports` participate in
+`running_config_matches()` too, but asymmetrically from every label above:
+neither is a CLI input, so neither has a field in the `ai.sandbox.config`
+JSON record and neither is rehydrated by `restore_saved_config()` — both are
+recomputed fresh from live host state on every invocation
+(`AI_SANDBOX_LAN_CIDR`/`AI_SANDBOX_HOST_LISTEN_PORTS` in `src/index.sh`,
+feeding the `lan-access`/`host-access` capabilities respectively) and
+compared directly against the label captured at the container's last
+create/start. Before this, host-state drift between two `start` invocations
+— a WiFi network switch, a background process opening a new listening port
+— could silently recreate a running `lan-access`/`host-access` container
+with no consent prompt: the exact violation of the "no silent recreate
+without consent" principle every CLI-input dimension above already avoided.
+Routing both through the same label-plus-comparison shape used everywhere
+else closes that gap — a drift-triggered mismatch now surfaces through the
+ordinary stop-and-recreate consent prompt instead of a silent replace. Both
+comparisons are a no-op `"" = ""` when the corresponding capability is
+inactive.
+
 **Why restore and matches don't read the same labels.** They operate at
 different pipeline stages, not out of inconsistency: restore runs *before*
 `profile-installer.js` re-resolves anything, so it must seed the raw input
 globals; matches runs *after* resolution, comparing the freshly re-derived
 effective values against what's already baked into the running container.
 The reconciliation that matters is that both sides now cover the complete
-dimension set — restore reconstructs every input, so after a restore (any
-per-instance `CMD` except `create` that triggers it, not just `start`/`enter`)
-`running_config_matches` returns true by construction and never
-false-prompts; matches compares every derived dimension an explicit
-invocation could change, so a real config change is never silently dropped.
-Future maintainers should not try to "unify" the two into reading one literal
-label set — their differing pipeline stages make that impossible by design.
+dimension set — restore reconstructs every *CLI* input, so after a restore
+(any per-instance `CMD` except `create` that triggers it, not just
+`start`/`enter`) `running_config_matches` returns true by construction and
+never false-prompts on those dimensions; matches compares every derived
+dimension an explicit invocation or host-state change could affect
+(`ai.sandbox.lan-cidr`/`ai.sandbox.host-listen-ports` are the two exceptions
+that are never part of restore at all, being host-detected rather than CLI
+input — see the `yS0R` paragraph above), so a real config change or a
+host-state drift is never silently dropped. Future maintainers should not
+try to "unify" the two into reading one literal label set — their differing
+pipeline stages make that impossible by design.
 
 **Why base64.** Plain JSON in a label works technically (Compose interpolates
 already-parsed YAML scalars), but a literal `$` in a value — a marketplace
