@@ -280,3 +280,8 @@ items:
       date: "2026-07-18"
       tag: add-host-passthrough
       text: '[phase-01-add-host-passthrough/004-host-access-visibility.md] The -u root fix is a correctness fix required for Requirement 2 to function, not optional hardening — worth confirming no other docker-exec-based diagnostic read in this codebase makes the same non-root-default assumption against a root-owned path on the firewall-handshake volume.'
+    - title: Positional-field risk in config-match fmt
+      id: uZmo
+      date: "2026-07-18"
+      tag: add-host-passthrough
+      text: '[phase-review, phase-01-add-host-passthrough, arch-review-003] running_config_matches() (src/utils.sh ~697-770) relies on a hand-maintained, positionally-ordered docker-inspect format string (fmt) and matching IFS read field list, now at 14 fields (grew from 9 to 11 to 14 across three phases). A single misordered insertion or forgotten local declaration would silently misalign every field after it, with no compiler/structural check to catch it — only test coverage. Not blocking, not introduced by this diff (pre-existing pattern, compounded by it). Worth a future followup to consider a self-describing comparison (e.g. decode the same jq-parseable structure the ai.sandbox.config input record already uses) instead of continuing to extend a fixed-position delimited string, now that the field count is large enough for ordinal-alignment risk to be real. No concrete alternative mandated — flagging for awareness.'
