@@ -185,6 +185,35 @@ fi
 # `IFS=' ' read -ra` idiom the marketplace/network.allow blocks above use for
 # their '|'-delimited values, so this loop doesn't depend on the file-wide IFS.
 IFS=' ' read -ra _capability_entries <<< "${AI_SANDBOX_CAPABILITIES:-}"
+
+# Stale-marker guard (phase-01-review-fixes/002): the host-access-unresolved
+# marker (written by the host-access case arm below, on the shared
+# firewall-handshake volume that persists across container delete/recreate --
+# see AI_SANDBOX_FIREWALL_MARKER_DIR's comment further down) is otherwise
+# only ever cleared from inside that same case arm's own resolution-success
+# branch. If a container is later recreated WITHOUT host-access in its
+# capability set (e.g. switching profiles), that case arm never runs at all,
+# so a marker left over from an earlier boot would survive indefinitely and
+# src/status.sh's _status_gather_host_access() would keep reporting a false
+# "host-access did not resolve" warning even though host-access is no longer
+# active. Clear it here, unconditionally and independent of the
+# per-capability dispatch loop below, whenever host-access is absent from
+# this boot's capability list -- making the marker track "host-access is
+# currently active AND currently unresolved" rather than "host-access was
+# ever unresolved at some point in this volume's history". Best-effort
+# (`|| true`), matching this whole script's fail-soft posture for marker I/O
+# elsewhere (e.g. the host-access case arm's own `rm -f ... || true` below).
+_host_access_requested=false
+for _cap in "${_capability_entries[@]}"; do
+    if [ "${_cap}" = "host-access" ]; then
+        _host_access_requested=true
+        break
+    fi
+done
+if [ "${_host_access_requested}" = false ]; then
+    rm -f "${AI_SANDBOX_FIREWALL_MARKER_DIR:-/var/lib/ai-sandbox-firewall}/host-access-unresolved" 2>/dev/null || true
+fi
+
 for _cap in "${_capability_entries[@]}"; do
     case "${_cap}" in
         web-search)

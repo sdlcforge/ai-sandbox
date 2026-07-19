@@ -148,11 +148,18 @@ services:
       # below, which follow the same "declared on both services" shape.
       - AI_SANDBOX_ALLOW_EGRESS=${AI_SANDBOX_ALLOW_EGRESS:-}
       # --add-host specs (see the ai.sandbox.add-host label above and
-      # AI_SANDBOX_ADD_HOST in src/index.sh). Whether the firewall-init
-      # sidecar's copy below (docker/init-firewall.sh) actually consumes this
-      # depends on phase-01/004; kept in sync on both services regardless, per
-      # the same "declared on both services" shape as
-      # AI_SANDBOX_NETWORK_ALLOW/AI_SANDBOX_CAPABILITIES below.
+      # AI_SANDBOX_ADD_HOST in src/index.sh). docker/init-firewall.sh (the
+      # only script that runs in the firewall-init sidecar) does not consume
+      # this var, so it is not declared there (phase-01-review-fixes/003) --
+      # unlike AI_SANDBOX_ALLOW_EGRESS/AI_SANDBOX_NETWORK_ALLOW/
+      # AI_SANDBOX_CAPABILITIES above, this one does not follow the
+      # "declared on both services" shape. --add-host's actual host-side
+      # consumers are src/volume-override.sh's extra_hosts emission (reads
+      # the pre-join CLI_ADD_HOST array directly, not this env var) and
+      # running_config_matches()/restore_saved_config() (src/utils.sh, via
+      # the ai.sandbox.add-host label above, which shares this same host env
+      # var). Declared here for label-substitution symmetry with the other
+      # CLI_* vars in this block.
       - AI_SANDBOX_ADD_HOST=${AI_SANDBOX_ADD_HOST:-}
       # Profile `network.allow` entries (hostnames/CIDRs); read by
       # docker/init-firewall.sh at container init to extend the egress
@@ -229,10 +236,11 @@ services:
       # init-firewall.sh only ever runs here, in the sidecar (same rationale
       # as AI_SANDBOX_NETWORK_ALLOW/AI_SANDBOX_CAPABILITIES below).
       - AI_SANDBOX_ALLOW_EGRESS=${AI_SANDBOX_ALLOW_EGRESS:-}
-      # --add-host specs -- kept in sync with ai-sandbox's environment block
-      # above (see that copy's comment). Whether init-firewall.sh actually
-      # consumes this depends on phase-01/004.
-      - AI_SANDBOX_ADD_HOST=${AI_SANDBOX_ADD_HOST:-}
+      # No AI_SANDBOX_ADD_HOST here (phase-01-review-fixes/003): confirmed
+      # (two independent review passes) that docker/init-firewall.sh -- the
+      # only script that runs in this sidecar -- never reads it; see that
+      # var's comment on the ai-sandbox service above for its actual
+      # consumers.
       # Same capability-dispatch rationale as ai-sandbox's environment block
       # above -- init-firewall.sh itself runs here, in the sidecar, so this
       # is the copy that actually matters for capability-driven rule

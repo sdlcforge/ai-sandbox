@@ -57,7 +57,9 @@
 #                   validated at parse time (see the --add-host case below,
 #                   which calls src/utils.sh's
 #                   is_valid_egress_hostname()/is_valid_ipv4_literal()
-#                   directly for per-failure-mode error messages). CLI-only --
+#                   directly for per-failure-mode error messages, plus
+#                   is_reserved_add_host_name() to reject the reserved name
+#                   "host.docker.internal"). CLI-only --
 #                   there is no profile-level equivalent to merge, matching
 #                   CLI_ALLOW_EGRESS. Like the other CLI_* arrays, it is a
 #                   bash array serialized across the sourced-options boundary
@@ -572,6 +574,22 @@ function parse_options() {
                 # sites apply byte-for-byte the same rules.
                 if ! is_valid_egress_hostname "${_add_host_name}"; then
                     echo "Error: --add-host name part must be a valid hostname (got '${_add_host_name}' in '${_spec}')" 1>&2
+                    exit 1
+                fi
+                # host.docker.internal is reserved: it is already the
+                # container's static host-gateway alias
+                # (docker/docker-compose.yaml's extra_hosts entry), and
+                # Compose's extra_hosts lists APPEND rather than replace
+                # across -f files, so a caller-supplied mapping for this
+                # exact name would collide with it (nondeterministic
+                # /etc/hosts resolution order) and could indeterminately
+                # retarget which IP the host-access capability's firewall
+                # rule opens (docker/init-firewall.sh resolves this same
+                # name). See is_reserved_add_host_name() (src/utils.sh) for
+                # the full rationale; also enforced on restore of a
+                # previously-saved config via is_valid_add_host_spec().
+                if is_reserved_add_host_name "${_add_host_name}"; then
+                    echo "Error: --add-host name part 'host.docker.internal' is reserved -- it is already the container's static host-gateway alias and cannot be overridden via --add-host (got '${_spec}')" 1>&2
                     exit 1
                 fi
                 if ! is_valid_ipv4_literal "${_add_host_ip}"; then
