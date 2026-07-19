@@ -285,3 +285,8 @@ items:
       date: "2026-07-18"
       tag: add-host-passthrough
       text: '[phase-1 review-fix task, follow-on from arch-review-002] While removing the dead AI_SANDBOX_ADD_HOST declaration from the firewall-init sidecar''s environment: block, found that the remaining copy on the ai-sandbox service''s environment: block may itself be unconsumed in-container -- src/volume-override.sh only ever reads the pre-join bash array CLI_ADD_HOST, never the AI_SANDBOX_ADD_HOST env var/label. Could not find any in-container reader of this environment: block copy. Left untouched (out of the review-fix task''s scope), but worth investigating whether it''s dead code too and can be removed, or whether some consumer was missed.'
+    - title: 'README.md''s Network access section documents '
+      id: t1on
+      date: "2026-07-19"
+      tag: doc-updates
+      text: '[phase-02-doc-updates/001-update-architecture-docs.md] README.md''s Network access section documents --allow-egress in prose but has no equivalent coverage for --add-host (pre-existing convention gap, not a regression) — candidate follow-up doc task, out of this task''s scope (docs/architecture.md and docs/ai-sandbox-profiles-spec.md only).'
